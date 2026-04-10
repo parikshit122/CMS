@@ -1,0 +1,20 @@
+/*--------------------------- button ------------------------------*/
+.btn {
+    background: linear-gradient(90deg, #1e3a8a 0%, #0284c7 100%);
+    background-position: to bottom;
+    background-size: cover;
+    color: #ffffff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 19px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: 1s ease;
+}
+
+.btn:hover {
+    opacity: 0.9;
+    transform: scale(1.1);
+    cursor: pointer;
+}
