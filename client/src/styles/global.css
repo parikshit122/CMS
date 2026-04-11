@@ -4,7 +4,7 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  font-family: "Poppins", -apple-system,sans-serif;
+  font-family: "Poppins", -apple-system, sans-serif;
 }
 
 body {
@@ -22,6 +22,14 @@ body {
   .header {
     padding: 0 20px;
     padding-right: 60px;
+    width: 95vw;
+  }
+
+  .header .title{
+    font-size: 30px;
+    margin: 0 0 0 -30px;
+    font-style: italic;
+    font-weight: 800;
   }
 
   .menu-toggle {
@@ -31,8 +39,43 @@ body {
     margin-right: 0;
   }
 
+  .navbar {
+    display: none;
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 20px;
+    width: 260px;
+    margin: 0;
+    z-index: 1500;
+    justify-content: flex-start;
+  }
+
+  .navbar.active {
+    display: block !important;
+  }
+
+  .nav-links {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 14px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, .82);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, .35);
+    box-shadow: 0 12px 28px rgba(1, 2, 10, .25);
+  }
+
+  .nav-links a {
+    width: 100%;
+    display: block;
+    padding: 8px 0;
+  }
+
   .hero-section {
-    width: calc(100% - 32px);
+    width: calc(100% - 2px);
     margin: 0 0 40px 0;
     height: 300px;
   }
@@ -46,7 +89,7 @@ body {
   .header .logo {
     height: 120px;
     width: 130px;
-    margin-right: 45px;
+    margin-right: 15px;
     margin-top: 0px;
   }
 
@@ -60,13 +103,14 @@ body {
     margin-right: auto;
   }
 
-  .container h1{
+  .container h1 {
     font-size: 45px;
   }
 
   .container p {
     font-size: 18px;
   }
+
   .container1 {
     padding: 70px 16px 90px;
   }
@@ -94,6 +138,7 @@ body {
     padding: 50px 20px;
     height: auto;
     min-height: 340px;
+    width: calc(100% - 2px);
     border-radius: 32px;
   }
 
@@ -109,7 +154,6 @@ body {
     max-width: 850px;
   }
 
-  /* ===== FOOTER 1024px ===== */
   .footer {
     padding: 50px 30px 20px;
   }
@@ -178,7 +222,6 @@ body {
     font-size: 13px;
   }
 }
-
 
 @media (max-width: 768px) {
   .menu-toggle {
