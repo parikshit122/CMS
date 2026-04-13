@@ -1,20 +1,34 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-// import Header from "./components/layout/Header";
-// import Footer from "./components/layout/Footer";
-// import Home from "./pages/Home";
+import Header from "./components/layout/Header";
+import Footer from "./components/layout/Footer";
+import Home from "./pages/Home";
 import Login from "./pages/auth/LoginRegistration";
 import "./styles/global.css";
 
 function App() {
   return (
-    <Router>
-      {/* <Header /> */}
-      <Routes>
-        {/* <Route path="/" element={<Home />} /> */}
-        <Route path="/" element={<Login />} />
-      </Routes>
-      {/* <Footer /> */}
-    </Router>
+    <div className="App">        {/* ADD THIS WRAPPER */}
+      <Router>
+        <Routes>
+
+          {/* Home Page */}
+          <Route
+            path="/"
+            element={
+              <>
+                <Header />
+                <Home />
+                <Footer />
+              </>
+            }
+          />
+
+          {/* Login / Registration Page */}
+          <Route path="/auth" element={<Login />} />
+
+        </Routes>
+      </Router>
+    </div>
   );
 }
 
