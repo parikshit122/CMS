@@ -4,7 +4,101 @@ import Button from "../components/common/Button";
 function Home() {
   return (
     <main className="landing">
-      <div className="hero-section" />
+      
+      <div className="hero-section">
+        {/* Caurosel */}
+        <div
+          id="carouselExampleDark"
+          className="carousel carousel-dark slide"
+          data-bs-ride="carousel"
+        >
+          {/* Indicators */}
+          <div className="carousel-indicators">
+            <button
+              type="button"
+              data-bs-target="#carouselExampleDark"
+              data-bs-slide-to="0"
+              className="active"
+              aria-current="true"
+              aria-label="Slide 1"
+            ></button>
+
+            <button
+              type="button"
+              data-bs-target="#carouselExampleDark"
+              data-bs-slide-to="1"
+              aria-label="Slide 2"
+            ></button>
+
+            <button
+              type="button"
+              data-bs-target="#carouselExampleDark"
+              data-bs-slide-to="2"
+              aria-label="Slide 3"
+            ></button>
+          </div>
+
+          {/* Slides */}
+          <div className="carousel-inner">
+            <div className="carousel-item active" data-bs-interval="5000">
+              <img
+                src="https://picsum.photos/id/1018/1200/400"
+                className="d-block w-100"
+                alt="Slide 1"
+              />
+              <div className="carousel-caption d-none d-md-block">
+                <h5>First slide</h5>
+                <p>Example caption for first slide.</p>
+              </div>
+            </div>
+
+            <div className="carousel-item" data-bs-interval="5000">
+              <img
+                src="https://picsum.photos/id/1015/1200/400"
+                className="d-block w-100"
+                alt="Slide 2"
+              />
+              <div className="carousel-caption d-none d-md-block">
+                <h5>Second slide</h5>
+                <p>Example caption for second slide.</p>
+              </div>
+            </div>
+
+            <div className="carousel-item" data-bs-interval="5000">
+              <img
+                src="https://picsum.photos/id/1019/1200/400"
+                className="d-block w-100"
+                alt="Slide 3"
+              />
+              <div className="carousel-caption d-none d-md-block">
+                <h5>Third slide</h5>
+                <p>Example caption for third slide.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Controls */}
+          <button
+            className="carousel-control-prev"
+            type="button"
+            data-bs-target="#carouselExampleDark"
+            data-bs-slide="prev"
+          >
+            <span className="carousel-control-prev-icon" aria-hidden="true"></span>
+            <span className="visually-hidden">Previous</span>
+          </button>
+
+          <button
+            className="carousel-control-next"
+            type="button"
+            data-bs-target="#carouselExampleDark"
+            data-bs-slide="next"
+          >
+            <span className="carousel-control-next-icon" aria-hidden="true"></span>
+            <span className="visually-hidden">Next</span>
+          </button>
+        </div>
+      </div>
 
       <div className="section">
         <h4>Modern Complaint Management System</h4>
@@ -21,7 +115,7 @@ function Home() {
           user-friendly platform designed for organizations of all sizes.
         </p>
 
-        <div className="button">
+        <div className="Button">
           <Button className="btn-home register-btn">Get Started Free →</Button>
           <Button className="btn-home login-btn">Sign In</Button>
         </div>
@@ -109,7 +203,7 @@ function Home() {
             complaint management needs.
           </p>
 
-          <div className="button">
+          <div className="Button">
             <Button className="btn-home register-btn">Create Free Account →</Button>
             <Button className="btn-home login-btn">Sign In Now</Button>
           </div>

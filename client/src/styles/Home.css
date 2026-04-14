@@ -246,3 +246,25 @@
     border: 2px solid #fff8f8;
 }
 
+.hero-section {
+  width: 100%;
+  max-width: 1100px;
+  margin: auto;
+}
+
+.carousel {
+  border: 2px dashed #ccc;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.carousel-img {
+  height: 400px;
+  object-fit: cover;
+}
+
+.carousel-caption {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+  padding: 10px;
+}
