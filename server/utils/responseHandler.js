@@ -1,15 +1,16 @@
-﻿const sendResponse = (res, statusCode, message, data = null) => {
-  const response = { success: statusCode < 400, message };
-  if (data) response.data = data;
-  return res.status(statusCode).json(response);
+﻿const successResponse = (res, statusCode = 200, message, data = null) => {
+  return res.status(statusCode).json({
+    success: true,
+    message,
+    data,
+  });
 };
 
-const sendError = (res, statusCode, message, error = null) => {
-  const response = { success: false, message };
-  if (error && process.env.NODE_ENV === "development") {
-    response.error = error;
-  }
-  return res.status(statusCode).json(response);
+const errorResponse = (res, statusCode = 500, message) => {
+  return res.status(statusCode).json({
+    success: false,
+    message,
+  });
 };
 
-module.exports = { sendResponse, sendError };
+module.exports = { successResponse, errorResponse };

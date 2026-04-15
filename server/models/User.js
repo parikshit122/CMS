@@ -1,38 +1,42 @@
 const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
 
-const userSchema = new mongoose.Schema(
-  {
-    name: {
-      type: String,
-      required: [true, "Name is required"],
-      trim: true,
-    },
+const userSchema = new mongoose.Schema({
+  name: { type: String, required: true, trim: true },
+  email: { type: String, required: true, unique: true, lowercase: true },
+  phone: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  role: { type: String, enum: ["user", "admin"], default: "user" },
+  loginAttempts: { type: Number, default: 0 },
+  lockUntil: { type: Date },
+}, { timestamps: true });
 
-    email: {
-      type: String,
-      required: [true, "Email is required"],
-      unique: true,
-      trim: true,
-      lowercase: true,
-    },
+userSchema.virtual("isLocked").get(function () {
+  return this.lockUntil && this.lockUntil > Date.now();
+});
 
-    password: {
-      type: String,
-      required: [true, "Password is required"],
-      minlength: [8, "Password must be at least 8 characters"],
-    },
+// Mongoose 9 - pre save without next
+userSchema.pre("save", async function () {
+  if (!this.isModified("password")) return;
+  this.password = await bcrypt.hash(this.password, 12);
+});
 
-    role: {
-      type: String,
-      enum: ["user", "admin"],
-      default: "user",
-    },
-  },
-  {
-    timestamps: true,
+userSchema.methods.matchPassword = async function (enteredPassword) {
+  return await bcrypt.compare(enteredPassword, this.password);
+};
+
+userSchema.methods.incrementLoginAttempts = async function () {
+  if (this.loginAttempts >= 4) {
+    this.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
   }
-);
+  this.loginAttempts += 1;
+  await this.save();
+};
 
-const User = mongoose.model("User", userSchema);
+userSchema.methods.resetLoginAttempts = async function () {
+  this.loginAttempts = 0;
+  this.lockUntil = undefined;
+  await this.save();
+};
 
-module.exports = User;
+module.exports = mongoose.model("User", userSchema);

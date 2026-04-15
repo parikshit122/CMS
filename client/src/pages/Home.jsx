@@ -1,100 +1,65 @@
 import "../styles/Home.css";
 import Button from "../components/common/Button";
+import Image from "../assets/images/carousel/carousel1.png"
 
 function Home() {
   return (
-    <main className="landing">
-      
-      <div className="hero-section">
-        {/* Caurosel */}
+    <div className="landing">
+
+      <div className="hero-section w-100 overflow-hidden rounded-3">
         <div
           id="carouselExampleDark"
-          className="carousel carousel-dark slide"
+          className="carousel slide carousel-dark h-100"
           data-bs-ride="carousel"
         >
-          {/* Indicators */}
           <div className="carousel-indicators">
-            <button
-              type="button"
-              data-bs-target="#carouselExampleDark"
-              data-bs-slide-to="0"
-              className="active"
-              aria-current="true"
-              aria-label="Slide 1"
-            ></button>
-
-            <button
-              type="button"
-              data-bs-target="#carouselExampleDark"
-              data-bs-slide-to="1"
-              aria-label="Slide 2"
-            ></button>
-
-            <button
-              type="button"
-              data-bs-target="#carouselExampleDark"
-              data-bs-slide-to="2"
-              aria-label="Slide 3"
-            ></button>
+            <button type="button" data-bs-target="#carouselExampleDark" data-bs-slide-to="0"
+              className="active" aria-current="true" aria-label="Slide 1" />
+            <button type="button" data-bs-target="#carouselExampleDark" data-bs-slide-to="1"
+              aria-label="Slide 2" />
+            <button type="button" data-bs-target="#carouselExampleDark" data-bs-slide-to="2"
+              aria-label="Slide 3" />
           </div>
 
-          {/* Slides */}
-          <div className="carousel-inner">
-            <div className="carousel-item active" data-bs-interval="5000">
+          <div className="carousel-inner h-100">
+            <div className="carousel-item active h-100" data-bs-interval="5000">
               <img
-                src="https://picsum.photos/id/1018/1200/400"
-                className="d-block w-100"
+                src={Image}
+                className="d-block w-100 h-100"
                 alt="Slide 1"
+                style={{ objectFit: "fit", objectPosition: "center" }}
               />
-              <div className="carousel-caption d-none d-md-block">
-                <h5>First slide</h5>
-                <p>Example caption for first slide.</p>
-              </div>
             </div>
 
-            <div className="carousel-item" data-bs-interval="5000">
+            <div className="carousel-item h-100" data-bs-interval="5000">
               <img
                 src="https://picsum.photos/id/1015/1200/400"
-                className="d-block w-100"
+                className="d-block w-100 h-100"
                 alt="Slide 2"
+                style={{ objectFit: "cover", objectPosition: "center" }}
               />
-              <div className="carousel-caption d-none d-md-block">
-                <h5>Second slide</h5>
-                <p>Example caption for second slide.</p>
-              </div>
+
             </div>
 
-            <div className="carousel-item" data-bs-interval="5000">
+            <div className="carousel-item h-100" data-bs-interval="5000">
               <img
                 src="https://picsum.photos/id/1019/1200/400"
-                className="d-block w-100"
+                className="d-block w-100 h-100"
                 alt="Slide 3"
+                style={{ objectFit: "cover", objectPosition: "center" }}
               />
-              <div className="carousel-caption d-none d-md-block">
-                <h5>Third slide</h5>
-                <p>Example caption for third slide.</p>
-              </div>
             </div>
           </div>
 
-          {/* Controls */}
-          <button
-            className="carousel-control-prev"
-            type="button"
-            data-bs-target="#carouselExampleDark"
-            data-bs-slide="prev"
-          >
-            <span className="carousel-control-prev-icon" aria-hidden="true"></span>
+          <button className="carousel-control-prev" type="button"
+            data-bs-target="#carouselExampleDark" data-bs-slide="prev">
+            <span className="carousel-control-prev-icon" aria-hidden="true" />
             <span className="visually-hidden">Previous</span>
           </button>
 
-          <button
-            className="carousel-control-next"
-            type="button"
-            data-bs-target="#carouselExampleDark"
-            data-bs-slide="next"
-          >
-            <span className="carousel-control-next-icon" aria-hidden="true"></span>
+          <button className="carousel-control-next" type="button"
+            data-bs-target="#carouselExampleDark" data-bs-slide="next">
+            <span className="carousel-control-next-icon" aria-hidden="true" />
             <span className="visually-hidden">Next</span>
           </button>
         </div>
@@ -209,7 +174,7 @@ function Home() {
           </div>
         </div>
       </section>
-    </main>
+    </div>
   );
 }
 
