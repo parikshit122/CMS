@@ -3,10 +3,11 @@ const bcrypt = require("bcryptjs");
 
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
-  email: { type: String, required: true, unique: true, lowercase: true },
-  phone: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
+  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+  phone: { type: String, unique: true, sparse: true }, password: { type: String },
   role: { type: String, enum: ["user", "admin"], default: "user" },
+  provider: { type: String, enum: ["local", "google", "facebook", "twitter"], default: "local" },
+  avatar: { type: String },
   loginAttempts: { type: Number, default: 0 },
   lockUntil: { type: Date },
 }, { timestamps: true });
@@ -15,9 +16,8 @@ userSchema.virtual("isLocked").get(function () {
   return this.lockUntil && this.lockUntil > Date.now();
 });
 
-// Mongoose 9 - pre save without next
 userSchema.pre("save", async function () {
-  if (!this.isModified("password")) return;
+  if (!this.isModified("password") || !this.password) return;
   this.password = await bcrypt.hash(this.password, 12);
 });
 

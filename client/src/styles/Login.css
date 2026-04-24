@@ -159,10 +159,29 @@ form {
   border: 2px solid #ccc;
   border-radius: 8px;
   font-size: 27px;
+  background: transparent;
   color: #333;
   text-decoration: none;
   margin: 0 8px;
   transition: all .4s ease-in;
+}
+
+.social-btn{
+  display: inline-flex;
+  padding: 10px;
+  border: 2px solid #ccc;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 27px;
+  color: #333;
+  text-decoration: none;
+  margin: 0 8px;
+  transition: all .4s ease-in;
+}
+
+.social-btn:hover {
+  transform: translateY(-5px);
+  box-shadow: 8px 5px 5px rgba(0, 0, 0, 0.6);
 }
 
 /* Toggle Box */

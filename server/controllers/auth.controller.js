@@ -1,113 +1,182 @@
 const User = require("../models/User");
-const { generateToken, generateRefreshToken } = require("../utils/generateToken");
+const jwt = require("jsonwebtoken");
+const admin = require("../config/firebaseadmin");
 
-const register = async (req, res, next) => {
+const generateToken = (userId) => {
+  return jwt.sign(
+    { id: userId },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
+};
+
+const register = async (req, res) => {
   try {
     const { name, email, phone, password } = req.body;
 
-    const userExists = await User.findOne({ $or: [{ email }, { phone }] });
-    if (userExists) {
+    const exists = await User.findOne({ email });
+    if (exists) {
       return res.status(400).json({
         success: false,
-        message: userExists.email === email ? "Email already registered" : "Phone number already registered",
+        message: "Email already registered",
       });
     }
 
     const user = await User.create({ name, email, phone, password });
+    const token = generateToken(user._id);
 
-    return res.status(201).json({
+    // ✅ send user object
+    res.status(201).json({
       success: true,
-      message: "User registered successfully",
-      data: {
-        _id: user._id,
+      token,
+      user: {
+        id: user._id,
         name: user.name,
         email: user.email,
-        phone: user.phone,
         role: user.role,
-        token: generateToken(user._id),
-        refreshToken: generateRefreshToken(user._id),
+        avatar: user.avatar,
       },
     });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+
+  } catch (err) {
+    console.error("Register error:", err.message);
+    res.status(500).json({
+      success: false,
+      message: "Register failed",
+      error: err.message,
+    });
   }
 };
 
-const login = async (req, res, next) => {
+const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).select("+password");
     if (!user) {
-      return res.status(401).json({ success: false, message: "Invalid email or password" });
-    }
-
-    if (user.isLocked) {
-      return res.status(403).json({
+      return res.status(401).json({
         success: false,
-        message: "Account locked due to too many failed attempts. Try again after 15 minutes",
+        message: "Invalid credentials",
       });
     }
 
-    const isMatch = await user.matchPassword(password);
-    if (!isMatch) {
-      await user.incrementLoginAttempts();
-      return res.status(401).json({ success: false, message: "Invalid email or password" });
+    // ✅ use matchPassword not comparePassword
+    const match = await user.matchPassword(password);
+    if (!match) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials",
+      });
     }
 
-    await user.resetLoginAttempts();
+    const token = generateToken(user._id);
 
-    return res.json({
+    // ✅ send user object
+    res.json({
       success: true,
-      message: "Login successful",
-      data: {
-        _id: user._id,
+      token,
+      user: {
+        id: user._id,
         name: user.name,
         email: user.email,
-        phone: user.phone,
         role: user.role,
-        token: generateToken(user._id),
-        refreshToken: generateRefreshToken(user._id),
+        avatar: user.avatar,
       },
     });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+
+  } catch (err) {
+    console.error("Login error:", err.message);
+    res.status(500).json({
+      success: false,
+      message: "Login failed",
+      error: err.message,
+    });
   }
 };
 
-const refreshToken = async (req, res, next) => {
+const socialLogin = async (req, res) => {
   try {
-    const { refreshToken } = req.body;
+    const { idToken } = req.body;
 
-    if (!refreshToken) {
-      return res.status(401).json({ success: false, message: "Refresh token required" });
+    if (!idToken) {
+      return res.status(400).json({
+        success: false,
+        message: "No token provided",
+      });
     }
 
-    const jwt = require("jsonwebtoken");
-    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-    const user = await User.findById(decoded.id);
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    const firebaseUser = await admin.auth().getUser(decoded.uid);
+
+    const email = firebaseUser.email || `${decoded.uid}@social.local`;
+    const name = firebaseUser.displayName || decoded.name || "User";
+    const provider =
+      decoded.firebase?.sign_in_provider === "google.com"
+        ? "google"
+        : "local";
+
+    let user = await User.findOne({ email });
 
     if (!user) {
-      return res.status(401).json({ success: false, message: "User not found" });
+      const randomPassword =
+        "Social@" + Math.random().toString(36).slice(2, 10) + "1A";
+
+      user = await User.create({
+        name,
+        email,
+        provider,
+        password: randomPassword,
+        avatar: firebaseUser.photoURL || "",
+      });
     }
 
-    return res.json({ success: true, token: generateToken(user._id) });
-  } catch (error) {
-    return res.status(401).json({ success: false, message: "Invalid refresh token" });
+    const token = generateToken(user._id);
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        avatar: user.avatar,
+      },
+    });
+  } catch (err) {
+    console.error("Social login error:", err);
+    res.status(500).json({ success: false, message: "Social login failed" });
   }
 };
 
-const getMe = async (req, res, next) => {
-  return res.json({
-    success: true,
-    data: {
-      _id: req.user._id,
-      name: req.user.name,
-      email: req.user.email,
-      phone: req.user.phone,
-      role: req.user.role,
-    },
-  });
+const refreshToken = async (req, res) => {
+  try {
+    const { token } = req.body;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const newToken = generateToken(decoded.id);
+    res.json({ success: true, token: newToken });
+  } catch {
+    res.status(401).json({ success: false });
+  }
 };
 
-module.exports = { register, login, refreshToken, getMe };
+const getMe = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select("-password");
+    res.json({ success: true, user });
+  } catch (err) {
+    console.error("GetMe error:", err.message);
+    res.status(500).json({
+      success: false,
+      message: "Failed to get user",
+    });
+  }
+};
+
+module.exports = {
+  register,
+  login,
+  socialLogin,
+  refreshToken,
+  getMe,
+};

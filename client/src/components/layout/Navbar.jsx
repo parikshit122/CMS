@@ -1,9 +1,14 @@
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Button from "../common/Button";
+import "../../styles/Navbar.css"
 
 export default function Navbar({ menuOpen, setMenuOpen }) {
   const navigate = useNavigate();
+
+  const handleNavigation = (panel) => {
+    navigate("/auth", { state: { panel } });
+    setMenuOpen(false);
+  };
 
   return (
     <>
@@ -31,25 +36,18 @@ export default function Navbar({ menuOpen, setMenuOpen }) {
           </li>
 
           <li>
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                navigate("/auth");
-                setMenuOpen(false);
-              }}
+            <button
+              className="nav-link-btn"
+              onClick={() => handleNavigation("login")}
             >
               Login
-            </a>
+            </button>
           </li>
 
           <li>
             <Button
               className="register-btn"
-              onClick={() => {
-                navigate("/auth");
-                setMenuOpen(false);
-              }}
+              onClick={() => handleNavigation("register")}
             >
               Register
             </Button>

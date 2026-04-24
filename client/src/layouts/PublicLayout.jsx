@@ -1,12 +1,12 @@
-﻿import Header from "../components/layout/Header";
-import Footer from "../components/layout/Footer";
+﻿import AppHeader from "../components/layout/AppHeader";
 
-export default function PublicLayout({ children }) {
+const PublicLayout = ({ children }) => {
   return (
     <>
-      <Header />
-      <main>{children}</main>
-      <Footer />
+      <AppHeader variant="public" />
+      {children}
     </>
   );
-}
+};
+
+export default PublicLayout;

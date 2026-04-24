@@ -1,12 +1,30 @@
-﻿import { useNavigate } from "react-router-dom";
+﻿import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
-export default function NotFound() {
+function NotFound() {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      navigate(-1);
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [navigate]);
+
   return (
-    <div style={{ textAlign: "center", padding: "4rem" }}>
-      <h1 style={{ fontSize: "6rem", margin: 0 }}>404</h1>
-      <p style={{ fontSize: "1.5rem" }}>Page Not Found</p>
-      <button onClick={() => navigate("/")}>Go Home</button>
+    <div style={{
+      height: "100vh",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      flexDirection: "column"
+    }}>
+      <h1>404</h1>
+      <p>Page not found</p>
+      <p>Redirecting...</p>
     </div>
   );
 }
+
+export default NotFound;

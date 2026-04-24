@@ -1,17 +1,51 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
 
-#root {
-  width: 100%;
-  min-height: 100vh;
-  display: flex;          
-  flex-direction: column; 
+:root {
+  --bg-color: #f9fafb;
+  --surface-color: #ffffff;
+  --text-color: #111827;
+  --muted-text: #4b5563;
+  --border-color: #e5e7eb;
+  --active-bg: #eef2ff;
+  --primary-color: #2563eb;
+  --danger-color: #ef4444;
 }
 
-.App {
+html[data-bs-theme="light"] {
+  --bg-color: #f9fafb;
+  --surface-color: #ffffff;
+  --text-color: #111827;
+  --muted-text: #4b5563;
+  --border-color: #e5e7eb;
+  --active-bg: #eef2ff;
+  --primary-color: #2563eb;
+  --danger-color: #ef4444;
+}
+
+html[data-bs-theme="dark"] {
+  --bg-color: #111827;
+  --surface-color: #1f2937;
+  --text-color: #f9fafb;
+  --muted-text: #d1d5db;
+  --border-color: #374151;
+  --active-bg: #374151;
+  --primary-color: #60a5fa;
+  --danger-color: #f87171;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+body {
+  margin: 0;
   width: 100%;
   min-height: 100vh;
-  display: flex;          /* ADD THIS */
-  flex-direction: column; /* ADD THIS */
 }
 
 * {
@@ -21,10 +55,23 @@
   font-family: "Poppins", sans-serif;
 }
 
-body {
+.App {
   width: 100%;
   min-height: 100vh;
-  background: #fff;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.dashboard-layout,
+.dashboard-main,
+.dashboard-topbar,
+.dashboard-content {
+  background: var(--bg-color);
+  color: var(--text-color);
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
 
