@@ -16,6 +16,12 @@ import {
   facebookProvider,
 } from "../../firebase";
 
+const getRoleRedirect = (role) => {
+  if (role === "admin") return "/admin";
+  if (role === "staff") return "/staff";
+  return "/dashboard";
+};
+
 function Login() {
   const [isActive, setIsActive] = useState(false);
   const [loginData, setLoginData] = useState({ email: "", password: "" });
@@ -39,14 +45,7 @@ function Login() {
   useEffect(() => {
     const token = sessionStorage.getItem("token");
     const user = JSON.parse(sessionStorage.getItem("user") || "{}");
-
-    if (token) {
-      if (user.role === "admin") {
-        navigate("/admin", { replace: true });
-      } else {
-        navigate("/dashboard", { replace: true });
-      }
-    }
+    if (token) navigate(getRoleRedirect(user.role), { replace: true });
   }, []);
 
   const handleBack = () => navigate("/");
@@ -70,7 +69,6 @@ function Login() {
       setLoading(true);
       const result = await signInWithPopup(auth, provider);
       const idToken = await result.user.getIdToken(true);
-
       const response = await API.post("/auth/social-login", { idToken });
       const { token, user } = response.data;
 
@@ -78,13 +76,7 @@ function Login() {
       sessionStorage.setItem("user", JSON.stringify(user));
 
       alert.success("Login successful");
-      setTimeout(() => {
-        if (user.role === "admin") {
-          navigate("/admin");
-        } else {
-          navigate("/dashboard");
-        }
-      }, 800);
+      setTimeout(() => navigate(getRoleRedirect(user.role)), 800);
     } catch (err) {
       alert.error(err.response?.data?.message || "Social login failed");
     } finally {
@@ -95,28 +87,16 @@ function Login() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
-
     try {
       const response = await loginUser(loginData);
-
       if (response.success) {
         sessionStorage.setItem("token", response.token);
         sessionStorage.setItem("user", JSON.stringify(response.user));
-
         alert.success("Login successful!");
-
-        setTimeout(() => {
-          if (response.user.role === "admin") {
-            navigate("/admin");
-          } else {
-            navigate("/dashboard");
-          }
-        }, 800);
-
+        setTimeout(() => navigate(getRoleRedirect(response.user.role)), 800);
       } else {
         alert.error(response.message || "Login failed");
       }
-
     } catch (err) {
       alert.error(
         err.response?.data?.message ||
@@ -131,28 +111,16 @@ function Login() {
   const handleRegister = async (e) => {
     e.preventDefault();
     setLoading(true);
-
     try {
       const response = await registerUser(registerData);
-
       if (response.success) {
         sessionStorage.setItem("token", response.token);
         sessionStorage.setItem("user", JSON.stringify(response.user));
-
         alert.success("Registration successful!");
-
-        setTimeout(() => {
-          if (response.user.role === "admin") {
-            navigate("/admin");
-          } else {
-            navigate("/dashboard");
-          }
-        }, 800);
-
+        setTimeout(() => navigate(getRoleRedirect(response.user.role)), 800);
       } else {
         alert.error(response.message || "Registration failed");
       }
-
     } catch (err) {
       alert.error(
         err.response?.data?.message ||
@@ -173,7 +141,7 @@ function Login() {
         disabled={loading}
         aria-label="Continue with Facebook"
       >
-        <i className="bx bxl-facebook"></i>
+        <i className="bx bxl-facebook" />
       </button>
       <button
         type="button"
@@ -182,7 +150,7 @@ function Login() {
         disabled={loading}
         aria-label="Continue with Twitter"
       >
-        <i className="bx bxl-twitter"></i>
+        <i className="bx bxl-twitter" />
       </button>
       <button
         type="button"
@@ -191,7 +159,7 @@ function Login() {
         disabled={loading}
         aria-label="Continue with Google"
       >
-        <i className="bx bxl-google"></i>
+        <i className="bx bxl-google" />
       </button>
       <button
         type="button"
@@ -200,7 +168,7 @@ function Login() {
         disabled={loading}
         aria-label="Continue with GitHub"
       >
-        <i className="bx bxl-github"></i>
+        <i className="bx bxl-github" />
       </button>
     </div>
   );
@@ -208,20 +176,14 @@ function Login() {
   return (
     <div className="outer-container">
       <Button
-        style={{
-          position: "absolute",
-          top: "10px",
-          left: "10px",
-          zIndex: 9999,
-        }}
+        style={{ position: "absolute", top: "10px", left: "10px", zIndex: 9999 }}
         onClick={handleBack}
       >
-        <i className="bx bx-arrow-back"></i> Back
+        <i className="bx bx-arrow-back" /> Back
       </Button>
 
       <div className={`logincontainer ${isActive ? "active" : ""}`}>
 
-        {/* Login Form */}
         <div className="form-box login">
           <form onSubmit={handleLogin}>
             <h1>Login</h1>
@@ -234,7 +196,7 @@ function Login() {
                 value={loginData.email}
                 onChange={handleLoginChange}
               />
-              <i className="bx bxs-envelope"></i>
+              <i className="bx bxs-envelope" />
             </div>
             <div className="input-box">
               <input
@@ -245,7 +207,7 @@ function Login() {
                 value={loginData.password}
                 onChange={handleLoginChange}
               />
-              <i className="bx bxs-lock-alt"></i>
+              <i className="bx bxs-lock-alt" />
             </div>
             <div className="forgot-link">
               <a href="#">Forgot password?</a>
@@ -258,7 +220,6 @@ function Login() {
           </form>
         </div>
 
-        {/* Register Form */}
         <div className="form-box register">
           <form onSubmit={handleRegister}>
             <h1>Registration</h1>
@@ -271,7 +232,7 @@ function Login() {
                 value={registerData.name}
                 onChange={handleRegisterChange}
               />
-              <i className="bx bxs-user"></i>
+              <i className="bx bxs-user" />
             </div>
             <div className="input-box">
               <input
@@ -282,7 +243,7 @@ function Login() {
                 value={registerData.email}
                 onChange={handleRegisterChange}
               />
-              <i className="bx bxs-envelope"></i>
+              <i className="bx bxs-envelope" />
             </div>
             <div className="input-box">
               <input
@@ -293,7 +254,7 @@ function Login() {
                 value={registerData.phone}
                 onChange={handleRegisterChange}
               />
-              <i className="bx bxs-phone"></i>
+              <i className="bx bxs-phone" />
             </div>
             <div className="input-box">
               <input
@@ -304,13 +265,9 @@ function Login() {
                 value={registerData.password}
                 onChange={handleRegisterChange}
               />
-              <i className="bx bxs-lock-alt"></i>
+              <i className="bx bxs-lock-alt" />
             </div>
-            <Button
-              type="submit"
-              className="register-btn"
-              disabled={loading}
-            >
+            <Button type="submit" className="register-btn" disabled={loading}>
               {loading ? "Registering..." : "Register"}
             </Button>
             <p>Or Register with social platforms</p>
@@ -318,25 +275,18 @@ function Login() {
           </form>
         </div>
 
-        {/* Toggle Box */}
         <div className="toggle-box">
           <div className="toggle-panel toggle-left">
             <h1>Hello, Welcome!</h1>
             <p>Don't have an account?</p>
-            <Button
-              className="register-btn"
-              onClick={() => setIsActive(true)}
-            >
+            <Button className="register-btn" onClick={() => setIsActive(true)}>
               Register
             </Button>
           </div>
           <div className="toggle-panel toggle-right">
             <h1>Welcome Back!</h1>
             <p>Already have an account?</p>
-            <Button
-              className="login-btn"
-              onClick={() => setIsActive(false)}
-            >
+            <Button className="login-btn" onClick={() => setIsActive(false)}>
               Login
             </Button>
           </div>

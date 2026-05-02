@@ -6,6 +6,19 @@
   color: var(--text-color);
 }
 
+.layout-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.layout-content {
+  flex: 1;
+  padding: 30px;
+  background: #f9fafb;
+  overflow-y: auto;
+}
+
 /* ================= HEADER ================= */
 
 .layout-header {

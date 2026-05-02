@@ -1,0 +1,115 @@
+/* ============================================================
+   STUDENT LAYOUT
+   ============================================================ */
+
+/* Layout tokens — sidebar widths */
+:root {
+  --sidebar-width: 260px;
+  --sidebar-collapsed-width: 72px;
+  --topbar-height: 64px;
+}
+
+.student-layout {
+  display: flex;
+  width: 100%;
+  min-height: 100vh;
+  background: var(--bg-color);
+  color: var(--text-color);
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* ── Sidebar ── */
+.student-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  width: var(--sidebar-width);
+  z-index: 200;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--surface-color);
+  border-right: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.student-sidebar--collapsed {
+  width: var(--sidebar-collapsed-width);
+}
+
+/* ── Main ── */
+.student-layout__main {
+  flex: 1;
+  margin-left: var(--sidebar-width);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.student-layout--collapsed .student-layout__main {
+  margin-left: var(--sidebar-collapsed-width);
+}
+
+/* ── Topbar ── */
+.student-layout__topbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: var(--topbar-height);
+  background: var(--surface-color);
+  border-bottom: 1px solid var(--border-color);
+  transition: background 0.3s ease;
+}
+
+/* ── Content ── */
+.student-layout__content {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--bg-color);
+  transition: background 0.3s ease;
+}
+
+/* ── Overlay (mobile) ── */
+.student-layout__overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 199;
+  animation: overlayFade 200ms ease forwards;
+}
+
+@keyframes overlayFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 1024px) {
+  .student-sidebar {
+    transform: translateX(-100%);
+    width: var(--sidebar-width) !important;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
+  }
+
+  .student-sidebar--open {
+    transform: translateX(0);
+  }
+
+  .student-layout__main {
+    margin-left: 0 !important;
+  }
+
+  .student-layout__overlay {
+    display: block;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --topbar-height: 56px;
+  }
+}

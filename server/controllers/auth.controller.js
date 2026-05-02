@@ -3,11 +3,7 @@ const jwt = require("jsonwebtoken");
 const admin = require("../config/firebaseadmin");
 
 const generateToken = (userId) => {
-  return jwt.sign(
-    { id: userId },
-    process.env.JWT_SECRET,
-    { expiresIn: "7d" }
-  );
+  return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "7d" });
 };
 
 const register = async (req, res) => {
@@ -22,10 +18,25 @@ const register = async (req, res) => {
       });
     }
 
-    const user = await User.create({ name, email, phone, password });
+    let role = "user";
+
+    // ✅ Automatic role logic
+    if (email.endsWith("@staff.com")) {
+      role = "staff";
+    } else if (email.endsWith("@admin.com")) {
+      role = "admin";
+    }
+
+    const user = await User.create({
+      name,
+      email,
+      phone,
+      password,
+      role,
+    });
+
     const token = generateToken(user._id);
 
-    // ✅ send user object
     res.status(201).json({
       success: true,
       token,
@@ -37,9 +48,7 @@ const register = async (req, res) => {
         avatar: user.avatar,
       },
     });
-
   } catch (err) {
-    console.error("Register error:", err.message);
     res.status(500).json({
       success: false,
       message: "Register failed",
@@ -83,7 +92,6 @@ const login = async (req, res) => {
         avatar: user.avatar,
       },
     });
-
   } catch (err) {
     console.error("Login error:", err.message);
     res.status(500).json({
@@ -111,9 +119,7 @@ const socialLogin = async (req, res) => {
     const email = firebaseUser.email || `${decoded.uid}@social.local`;
     const name = firebaseUser.displayName || decoded.name || "User";
     const provider =
-      decoded.firebase?.sign_in_provider === "google.com"
-        ? "google"
-        : "local";
+      decoded.firebase?.sign_in_provider === "google.com" ? "google" : "local";
 
     let user = await User.findOne({ email });
 

@@ -12,8 +12,8 @@ const DashboardLayout = ({
   searchPlaceholder = "Search dashboard...",
   onSearch,
 }) => {
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 768);
+  const [isMobile, setIsMobile] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [searchValue, setSearchValue] = useState("");
 
   useEffect(() => {
@@ -31,16 +31,12 @@ const DashboardLayout = ({
   const handleSearchChange = (e) => {
     const value = e.target.value;
     setSearchValue(value);
-    if (onSearch) onSearch(value);
+    onSearch?.(value);
   };
 
   return (
     <div className="layout-container">
-
-      {/* ================= HEADER ================= */}
-
       <header className="layout-header">
-
         <div className="header-left">
           {isMobile && (
             <button
@@ -86,13 +82,9 @@ const DashboardLayout = ({
             </div>
           )}
         </div>
-
       </header>
 
-      {/* ================= BODY ================= */}
-
       <div className="layout-body">
-
         <Sidebar
           menuItems={menuItems}
           role={role}
@@ -100,12 +92,8 @@ const DashboardLayout = ({
           onClose={() => setIsSidebarOpen(false)}
         />
 
-        <main className="layout-content">
-          {children}
-        </main>
-
+        <main className="layout-content">{children}</main>
       </div>
-
     </div>
   );
 };
