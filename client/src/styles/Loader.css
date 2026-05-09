@@ -1,0 +1,84 @@
+/* ── Spinner ─────────────────────────────────────── */
+.cms-spinner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cms-spinner__ring {
+  border-radius: 50%;
+  border-style: solid;
+  border-color: var(--spinner-color, var(--primary-color))
+    transparent transparent transparent;
+  animation: cms-spin 0.75s linear infinite;
+}
+
+.cms-spinner--sm .cms-spinner__ring { width: 18px; height: 18px; border-width: 2px; }
+.cms-spinner--md .cms-spinner__ring { width: 28px; height: 28px; border-width: 3px; }
+.cms-spinner--lg .cms-spinner__ring { width: 44px; height: 44px; border-width: 4px; }
+
+@keyframes cms-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Skeleton ────────────────────────────────────── */
+.cms-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--border-color) 25%,
+    var(--active-bg)  50%,
+    var(--border-color) 75%
+  );
+  background-size: 200% 100%;
+  animation: cms-shimmer 1.4s ease infinite;
+  display: block;
+}
+
+@keyframes cms-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Skeleton Card ───────────────────────────────── */
+.cms-skeleton-card {
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cms-skeleton-card__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ── Skeleton Table Row ──────────────────────────── */
+.cms-skeleton-row td {
+  padding: 14px 16px;
+  vertical-align: middle;
+}
+
+/* ── Page Loader ─────────────────────────────────── */
+.cms-page-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 300px;
+  width: 100%;
+}
+
+.cms-page-loader__text {
+  font-size: 14px;
+  color: var(--muted-text);
+  margin: 0;
+}
+
+/* ── Utility spacing used inside skeleton cards ── */
+.mt-1 { margin-top: 4px; }
+.mt-2 { margin-top: 8px; }

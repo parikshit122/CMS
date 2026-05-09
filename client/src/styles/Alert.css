@@ -1,29 +1,34 @@
 .global-toast-container {
   position: fixed;
-  top: 20px;
-  right: 20px;
-  z-index: 99999;
+  top: 30px;
+  right: 30px;
+  z-index: 2147483647;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  pointer-events: none;
 }
 
+/* Main Toast */
 .global-toast-label {
   display: flex;
   align-items: center;
   gap: 14px;
   padding: 18px 22px;
-  border-radius: 10px;
-  min-width: 380px;
-  max-width: 480px;
+  border-radius: 14px;
+  min-width: 360px;
+  max-width: 460px;
   min-height: 80px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(6px);
   color: #fff;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-family: "Segoe UI", Tahoma, Verdana, sans-serif;
   position: relative;
   overflow: hidden;
+  pointer-events: auto;
 }
 
+/* Animations */
 .global-toast-label.slide-in {
   animation: slideIn 0.35s cubic-bezier(0.21, 1.02, 0.73, 1) forwards;
 }
@@ -35,25 +40,26 @@
 @keyframes slideIn {
   from {
     opacity: 0;
-    transform: translateX(100px);
+    transform: translateX(120px) scale(0.95);
   }
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: translateX(0) scale(1);
   }
 }
 
 @keyframes slideOut {
   from {
     opacity: 1;
-    transform: translateX(0);
+    transform: translateX(0) scale(1);
   }
   to {
     opacity: 0;
-    transform: translateX(100px);
+    transform: translateX(120px) scale(0.95);
   }
 }
 
+/* Icon */
 .global-toast-label-icon {
   width: 44px;
   height: 44px;
@@ -70,6 +76,7 @@
   color: #fff;
 }
 
+/* Text */
 .global-toast-label-body {
   display: flex;
   flex-direction: column;
@@ -78,21 +85,26 @@
 }
 
 .global-toast-label-title {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
   margin-bottom: 4px;
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
 .global-toast-label-message {
-  font-size: 13.5px;
-  opacity: 0.92;
-  line-height: 1.5;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
   word-break: break-word;
 }
 
+/* Close Button */
 .global-toast-label-close {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.25);
   border: none;
   color: #fff;
   border-radius: 6px;
@@ -109,43 +121,61 @@
 
 .global-toast-label-close i {
   font-size: 20px;
-  color: #fff;
 }
 
 .global-toast-label-close:hover {
-  background: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.4);
 }
 
+/* Progress Bar */
 .global-toast-label-progress {
   position: absolute;
   bottom: 0;
   left: 0;
   height: 4px;
   width: 100%;
-  background: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.7);
   transform-origin: left;
   animation: progressShrink linear forwards;
+  border-radius: 0 0 14px 14px;
 }
 
 @keyframes progressShrink {
-  from { transform: scaleX(1); }
-  to   { transform: scaleX(0); }
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
 }
 
-.global-toast-label.success { background: linear-gradient(135deg, #1db954, #1ed760); }
-.global-toast-label.error   { background: linear-gradient(135deg, #dc3545, #f45b69); }
-.global-toast-label.warning { background: linear-gradient(135deg, #e6a817, #f5c842); }
-.global-toast-label.info    { background: linear-gradient(135deg, #0d6efd, #4d94ff); }
+/* Background Variants */
+.global-toast-label.success {
+  background: linear-gradient(135deg, #1db954, #1ed760);
+}
 
+.global-toast-label.error {
+  background: linear-gradient(135deg, #c82333, #e53945);
+}
+
+.global-toast-label.warning {
+  background: linear-gradient(135deg, #d39e00, #f0ad4e);
+}
+
+.global-toast-label.info {
+  background: linear-gradient(135deg, #0d6efd, #4d94ff);
+}
+
+/* Mobile */
 @media (max-width: 480px) {
   .global-toast-container {
-    top: 10px;
-    right: 10px;
-    left: 10px;
+    top: 15px;
+    right: 15px;
+    left: 15px;
   }
+
   .global-toast-label {
     min-width: unset;
     max-width: unset;
-    min-height: unset;
   }
 }

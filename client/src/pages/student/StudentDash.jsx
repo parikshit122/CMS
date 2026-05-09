@@ -1,6 +1,8 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowUpRight, ArrowDownRight, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
+import API from "../../services/api";
+import StatCard from "../../components/common/StatCard";
 import "../../styles/StudentDash.css";
 import {
   LineChart,
@@ -17,42 +19,127 @@ import {
 
 export default function StudentDash() {
   const user = JSON.parse(sessionStorage.getItem("user") || "{}");
-  const userName = user?.name || "John Doe";
+  const userName = user?.name || "User";
+
+  const [complaints, setComplaints] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchComplaints = async () => {
+      try {
+        const response = await API.get("/complaints/my");
+        if (response.data.success) {
+          setComplaints(response.data.data);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchComplaints();
+  }, []);
+
+  if (loading) return <div className="student-container">Loading...</div>;
+
+  const total = complaints.length;
+  const pending = complaints.filter((c) => c.status === "pending").length;
+  const inProgress = complaints.filter((c) => c.status === "in-progress").length;
+  const resolved = complaints.filter((c) => c.status === "resolved").length;
+
+  const now = new Date();
+  const oneMonthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+  const oneWeekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+
+  const lastMonthTotal = complaints.filter(
+    (c) => new Date(c.createdAt) < oneMonthAgo
+  ).length;
+
+  const lastWeekPending = complaints.filter(
+    (c) => c.status === "pending" && new Date(c.createdAt) < oneWeekAgo
+  ).length;
+
+  const activeInProgress = complaints.filter(
+    (c) => c.status === "in-progress" && new Date(c.createdAt) >= oneWeekAgo
+  ).length;
+
+  const thisWeekResolved = complaints.filter(
+    (c) => c.status === "resolved" && new Date(c.createdAt) >= oneWeekAgo
+  ).length;
+
+  const calcTrend = (current, previous) => {
+    if (previous === 0) return current > 0 ? 100 : 0;
+    return Math.round(((current - previous) / previous) * 1000) / 10;
+  };
+
+  const totalChange = calcTrend(total, lastMonthTotal);
+  const pendingChange = calcTrend(pending, lastWeekPending);
+  const progressChange = calcTrend(inProgress, activeInProgress);
+  const resolvedChange = calcTrend(resolved, thisWeekResolved);
 
   const stats = [
-    { label: "Total Complaints", value: 12, change: "+16.7%", positive: true, note: "10 last month" },
-    { label: "Pending", value: 3, change: "-25%", positive: false, note: "4 last week" },
-    { label: "In Progress", value: 5, change: "+25%", positive: true, note: "4 active" },
-    { label: "Resolved", value: 4, change: "+100%", positive: true, note: "2 this week" },
+    {
+      title: "Total Complaints",
+      value: total,
+      trend: totalChange >= 0 ? "up" : "down",
+      trendValue: Math.abs(totalChange),
+      context: `${lastMonthTotal} last month`,
+    },
+    {
+      title: "Pending",
+      value: pending,
+      trend: pendingChange >= 0 ? "up" : "down",
+      trendValue: Math.abs(pendingChange),
+      context: `${lastWeekPending} last week`,
+    },
+    {
+      title: "In Progress",
+      value: inProgress,
+      trend: progressChange >= 0 ? "up" : "down",
+      trendValue: Math.abs(progressChange),
+      context: `${activeInProgress} active`,
+    },
+    {
+      title: "Resolved",
+      value: resolved,
+      trend: resolvedChange >= 0 ? "up" : "down",
+      trendValue: Math.abs(resolvedChange),
+      context: `${thisWeekResolved} this week`,
+    },
   ];
 
-  const trendData = [
-    { month: "Jan", value: 2 },
-    { month: "Feb", value: 4 },
-    { month: "Mar", value: 3 },
-    { month: "Apr", value: 6 },
-    { month: "May", value: 5 },
-    { month: "Jun", value: 8 },
-  ];
+  const trendMap = {};
+  complaints.forEach((c) => {
+    const month = new Date(c.createdAt).toLocaleString("default", { month: "short" });
+    trendMap[month] = (trendMap[month] || 0) + 1;
+  });
 
-  const categoryData = [
-    { name: "IT & Technical", value: 4, color: "#6C5CE7" },
-    { name: "Maintenance", value: 3, color: "#0984E3" },
-    { name: "Security", value: 2, color: "#00B894" },
-    { name: "Finance", value: 2, color: "#FDCB6E" },
-    { name: "Other", value: 1, color: "#B2BEC3" },
-  ];
+  const trendData = Object.keys(trendMap).map((month) => ({
+    month,
+    value: trendMap[month],
+  }));
 
-  const total = categoryData.reduce((a, b) => a + b.value, 0);
+  const categoryMap = {};
+  complaints.forEach((c) => {
+    categoryMap[c.category] = (categoryMap[c.category] || 0) + 1;
+  });
+
+  const colors = ["#6C5CE7", "#0984E3", "#00B894", "#FDCB6E", "#B2BEC3"];
+
+  const categoryData = Object.keys(categoryMap).map((key, index) => ({
+    name: key,
+    value: categoryMap[key],
+    color: colors[index % colors.length],
+  }));
+
+  const totalCategories = categoryData.reduce((a, b) => a + b.value, 0);
 
   return (
     <div className="student-container">
-
-      {/* HEADER */}
       <div className="student-header">
         <div>
           <h1>{userName}</h1>
-          <p>Last login: April 11, 2026 at 9:42 AM</p>
         </div>
 
         <Link to="/submit" className="submit-btn">
@@ -60,27 +147,16 @@ export default function StudentDash() {
         </Link>
       </div>
 
-      {/* STATS */}
       <div className="stats-grid">
         {stats.map((item, index) => (
-          <div key={index} className="stat-card">
-            <span className="stat-title">{item.label}</span>
-            <h2>{item.value}</h2>
-            <div className={`stat-change ${item.positive ? "positive" : "negative"}`}>
-              {item.positive ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-              {item.change}
-              <span>{item.note}</span>
-            </div>
-          </div>
+          <StatCard key={index} {...item} />
         ))}
       </div>
 
-      {/* CHARTS */}
       <div className="chart-section">
-
         <div className="chart-card large">
           <h3>Complaint Trend</h3>
-          <p>Monthly submissions over the last 4 months</p>
+          <p>Monthly submissions</p>
 
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={trendData}>
@@ -116,16 +192,14 @@ export default function StudentDash() {
                 dominantBaseline="middle"
                 className="donut-total"
               >
-                {total}
+                {totalCategories}
               </text>
               <Tooltip />
             </PieChart>
           </ResponsiveContainer>
         </div>
-
       </div>
 
-      {/* RECENT ACTIVITY */}
       <div className="recent-card">
         <div className="recent-header">
           <div>
@@ -137,46 +211,22 @@ export default function StudentDash() {
           </Link>
         </div>
 
-        {[
-          {
-            id: "CMP-001",
-            status: "In Progress",
-            priority: "High",
-            title: "Internet connectivity issue",
-            category: "IT & Technical",
-            date: "2026-03-28",
-          },
-          {
-            id: "CMP-002",
-            status: "Pending",
-            priority: "Medium",
-            title: "Air conditioning not working",
-            category: "Maintenance",
-            date: "2026-03-27",
-          },
-        ].map((item, index) => (
+        {complaints.slice(0, 2).map((item, index) => (
           <div key={index} className="recent-row">
             <div>
               <div className="recent-top">
-                <span className="complaint-id">{item.id}</span>
-                <span className={`status ${item.status.replace(" ", "-").toLowerCase()}`}>
-                  {item.status}
-                </span>
-                <span className={`priority ${item.priority.toLowerCase()}`}>
-                  {item.priority}
-                </span>
+                <span className="complaint-id">{item._id.slice(-6)}</span>
+                <span className={`status ${item.status}`}>{item.status}</span>
               </div>
               <h4>{item.title}</h4>
-              <p>{item.category} • {item.date}</p>
+              <p>
+                {item.category} • {new Date(item.createdAt).toLocaleDateString()}
+              </p>
             </div>
-            <Link to={`/complaints/${item.id}`} className="view-details">
-              View details
-            </Link>
           </div>
         ))}
       </div>
 
-      {/* NEED HELP */}
       <div className="help-card">
         <div className="help-header">
           <h2>Need Help?</h2>
@@ -204,11 +254,14 @@ export default function StudentDash() {
         </div>
 
         <div className="help-footer">
-          <p><strong>Office Hours:</strong> Monday - Friday, 9:00 AM - 6:00 PM EST</p>
-          <p><strong>Emergency Support:</strong> Available 24/7</p>
+          <p>
+            <strong>Office Hours:</strong> Monday - Friday, 9:00 AM - 6:00 PM EST
+          </p>
+          <p>
+            <strong>Emergency Support:</strong> Available 24/7
+          </p>
         </div>
       </div>
-
     </div>
   );
 }

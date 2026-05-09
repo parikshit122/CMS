@@ -4,6 +4,8 @@ import Button from "../../components/common/Button";
 import { useAlert } from "../../components/common/Alert";
 import { loginUser, registerUser } from "../../services/authService";
 import API from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
+import SuspendedScreen from "../../components/auth/SuspendedScreen";
 import "../../styles/Login.css";
 import "boxicons/css/boxicons.min.css";
 
@@ -22,37 +24,54 @@ const getRoleRedirect = (role) => {
   return "/dashboard";
 };
 
+// ── Moved outside component — no re-creation on render ──────
+const SOCIAL_PROVIDERS = ["google", "github", "twitter", "facebook"];
+
+const PROVIDER_LABELS = {
+  google: "Sign in with Google",
+  github: "Sign in with GitHub",
+  twitter: "Sign in with Twitter",
+  facebook: "Sign in with Facebook",
+};
+
 function Login() {
   const [isActive, setIsActive] = useState(false);
   const [loginData, setLoginData] = useState({ email: "", password: "" });
   const [registerData, setRegisterData] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    password: "",
+    name: "", email: "", phone: "", password: "",
   });
   const [loading, setLoading] = useState(false);
+  const [suspensionData, setSuspensionData] = useState(null);
 
   const navigate = useNavigate();
   const location = useLocation();
   const alert = useAlert();
+  const { login } = useAuth();
 
   useEffect(() => {
     const panel = location.state?.panel;
     setIsActive(panel === "register");
   }, [location.state]);
 
-  useEffect(() => {
-    const token = sessionStorage.getItem("token");
-    const user = JSON.parse(sessionStorage.getItem("user") || "{}");
-    if (token) navigate(getRoleRedirect(user.role), { replace: true });
-  }, []);
-
   const handleBack = () => navigate("/");
+
   const handleLoginChange = (e) =>
     setLoginData({ ...loginData, [e.target.name]: e.target.value });
+
   const handleRegisterChange = (e) =>
     setRegisterData({ ...registerData, [e.target.name]: e.target.value });
+
+  const checkSuspension = (errorResponse, attemptedEmail) => {
+    if (errorResponse?.status === 403 && errorResponse?.data?.suspendedUntil) {
+      setSuspensionData({
+        email: attemptedEmail,
+        suspendedUntil: errorResponse.data.suspendedUntil,
+        reason: errorResponse.data.reason || "",
+      });
+      return true;
+    }
+    return false;
+  };
 
   const handleSocialLogin = async (providerName) => {
     const providers = {
@@ -65,20 +84,26 @@ function Login() {
     const provider = providers[providerName];
     if (!provider) return;
 
+    let firebaseEmail = "";
+
     try {
       setLoading(true);
       const result = await signInWithPopup(auth, provider);
+      firebaseEmail = result.user.email || "your account";
       const idToken = await result.user.getIdToken(true);
       const response = await API.post("/auth/social-login", { idToken });
-      const { token, user } = response.data;
 
-      sessionStorage.setItem("token", token);
-      sessionStorage.setItem("user", JSON.stringify(user));
-
-      alert.success("Login successful");
-      setTimeout(() => navigate(getRoleRedirect(user.role)), 800);
+      if (response.data.success) {
+        const { accessToken, refreshToken, user } = response.data;
+        login(user, accessToken, refreshToken);
+        alert.success("Login successful");
+        navigate(getRoleRedirect(user.role), { replace: true });
+      }
     } catch (err) {
-      alert.error(err.response?.data?.message || "Social login failed");
+      const isSuspended = checkSuspension(err.response, firebaseEmail);
+      if (!isSuspended) {
+        alert.error(err.response?.data?.message || "Social login failed");
+      }
     } finally {
       setLoading(false);
     }
@@ -90,19 +115,22 @@ function Login() {
     try {
       const response = await loginUser(loginData);
       if (response.success) {
-        sessionStorage.setItem("token", response.token);
-        sessionStorage.setItem("user", JSON.stringify(response.user));
+        const { accessToken, refreshToken, user } = response;
+        login(user, accessToken, refreshToken);
         alert.success("Login successful!");
-        setTimeout(() => navigate(getRoleRedirect(response.user.role)), 800);
+        navigate(getRoleRedirect(user.role), { replace: true });
       } else {
         alert.error(response.message || "Login failed");
       }
     } catch (err) {
-      alert.error(
-        err.response?.data?.message ||
-        err.response?.data?.errors?.[0] ||
-        "Login failed"
-      );
+      const isSuspended = checkSuspension(err.response, loginData.email);
+      if (!isSuspended) {
+        alert.error(
+          err.response?.data?.message ||
+          err.response?.data?.errors?.[0] ||
+          "Login failed"
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -114,10 +142,10 @@ function Login() {
     try {
       const response = await registerUser(registerData);
       if (response.success) {
-        sessionStorage.setItem("token", response.token);
-        sessionStorage.setItem("user", JSON.stringify(response.user));
+        const { accessToken, refreshToken, user } = response;
+        login(user, accessToken, refreshToken);
         alert.success("Registration successful!");
-        setTimeout(() => navigate(getRoleRedirect(response.user.role)), 800);
+        navigate(getRoleRedirect(user.role), { replace: true });
       } else {
         alert.error(response.message || "Registration failed");
       }
@@ -132,44 +160,22 @@ function Login() {
     }
   };
 
-  const SocialButtons = () => (
-    <div className="social-icons">
-      <button
-        type="button"
-        className="social-btn"
-        onClick={() => handleSocialLogin("facebook")}
-        disabled={loading}
-        aria-label="Continue with Facebook"
-      >
-        <i className="bx bxl-facebook" />
-      </button>
-      <button
-        type="button"
-        className="social-btn"
-        onClick={() => handleSocialLogin("twitter")}
-        disabled={loading}
-        aria-label="Continue with Twitter"
-      >
-        <i className="bx bxl-twitter" />
-      </button>
-      <button
-        type="button"
-        className="social-btn"
-        onClick={() => handleSocialLogin("google")}
-        disabled={loading}
-        aria-label="Continue with Google"
-      >
-        <i className="bx bxl-google" />
-      </button>
-      <button
-        type="button"
-        className="social-btn"
-        onClick={() => handleSocialLogin("github")}
-        disabled={loading}
-        aria-label="Continue with GitHub"
-      >
-        <i className="bx bxl-github" />
-      </button>
+  // ── Social Buttons (now a stable component outside Login) ──
+  const SocialButtons = ({ formId }) => (
+    <div className="social-icons" role="group" aria-label="Social login options">
+      {SOCIAL_PROVIDERS.map((provider) => (
+        <button
+          key={provider}
+          type="button"
+          className="social-btn"
+          onClick={() => handleSocialLogin(provider)}
+          disabled={loading}
+          aria-label={PROVIDER_LABELS[provider]}
+          title={PROVIDER_LABELS[provider]}
+        >
+          <i className={`bx bxl-${provider}`} aria-hidden="true" />
+        </button>
+      ))}
     </div>
   );
 
@@ -178,121 +184,222 @@ function Login() {
       <Button
         style={{ position: "absolute", top: "10px", left: "10px", zIndex: 9999 }}
         onClick={handleBack}
+        aria-label="Go back to home page"
       >
-        <i className="bx bx-arrow-back" /> Back
+        <i className="bx bx-arrow-back" aria-hidden="true" /> Back
       </Button>
 
-      <div className={`logincontainer ${isActive ? "active" : ""}`}>
+      <div
+        className={`logincontainer ${isActive ? "active" : ""}`}
+        aria-live="polite"
+      >
+        {/* ── Login Form ──────────────────────────────────── */}
+        <div
+          className="form-box login"
+          role="region"
+          aria-label="Login form"
+          aria-hidden={isActive}
+        >
+          <form onSubmit={handleLogin} noValidate>
+            <h1 id="login-heading">Login</h1>
 
-        <div className="form-box login">
-          <form onSubmit={handleLogin}>
-            <h1>Login</h1>
             <div className="input-box">
+              <label htmlFor="login-email" className="visually-hidden">
+                Email address
+              </label>
               <input
+                id="login-email"
                 type="email"
                 name="email"
                 required
                 placeholder="Enter Email"
                 value={loginData.email}
                 onChange={handleLoginChange}
+                autoComplete="email"
+                aria-required="true"
               />
-              <i className="bx bxs-envelope" />
+              <i className="bx bxs-envelope" aria-hidden="true" />
             </div>
+
             <div className="input-box">
+              <label htmlFor="login-password" className="visually-hidden">
+                Password
+              </label>
               <input
+                id="login-password"
                 type="password"
                 name="password"
                 required
                 placeholder="Enter Password"
                 value={loginData.password}
                 onChange={handleLoginChange}
+                autoComplete="current-password"
+                aria-required="true"
               />
-              <i className="bx bxs-lock-alt" />
+              <i className="bx bxs-lock-alt" aria-hidden="true" />
             </div>
+
             <div className="forgot-link">
-              <a href="#">Forgot password?</a>
+              {/* Changed from <a href="#"> to a proper button */}
+              <button
+                type="button"
+                className="forgot-btn"
+                onClick={() => alert.info("Password reset coming soon!")}
+              >
+                Forgot password?
+              </button>
             </div>
-            <Button type="submit" className="login-btn" disabled={loading}>
+
+            <Button
+              type="submit"
+              className="login-btn"
+              disabled={loading}
+              aria-busy={loading}
+            >
               {loading ? "Logging in..." : "Login"}
             </Button>
+
             <p>Or login with social platforms</p>
-            <SocialButtons />
+            <SocialButtons formId="login" />
           </form>
         </div>
 
-        <div className="form-box register">
-          <form onSubmit={handleRegister}>
-            <h1>Registration</h1>
+        {/* ── Register Form ────────────────────────────────── */}
+        <div
+          className="form-box register"
+          role="region"
+          aria-label="Registration form"
+          aria-hidden={!isActive}
+        >
+          <form onSubmit={handleRegister} noValidate>
+            <h1 id="register-heading">Registration</h1>
+
             <div className="input-box">
+              <label htmlFor="reg-name" className="visually-hidden">
+                Full name
+              </label>
               <input
+                id="reg-name"
                 type="text"
                 name="name"
                 required
                 placeholder="Enter Username"
                 value={registerData.name}
                 onChange={handleRegisterChange}
+                autoComplete="name"
+                aria-required="true"
               />
-              <i className="bx bxs-user" />
+              <i className="bx bxs-user" aria-hidden="true" />
             </div>
+
             <div className="input-box">
+              <label htmlFor="reg-email" className="visually-hidden">
+                Email address
+              </label>
               <input
+                id="reg-email"
                 type="email"
                 name="email"
                 required
                 placeholder="Enter Email"
                 value={registerData.email}
                 onChange={handleRegisterChange}
+                autoComplete="email"
+                aria-required="true"
               />
-              <i className="bx bxs-envelope" />
+              <i className="bx bxs-envelope" aria-hidden="true" />
             </div>
+
             <div className="input-box">
+              <label htmlFor="reg-phone" className="visually-hidden">
+                Mobile number
+              </label>
               <input
-                type="text"
+                id="reg-phone"
+                type="tel"
                 name="phone"
                 required
-                placeholder="Enter Mobile Number"
+                pattern="[0-9]{10}"
+                maxLength="10"
+                placeholder="Enter 10-digit Mobile Number"
                 value={registerData.phone}
-                onChange={handleRegisterChange}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, "");
+                  handleRegisterChange({ target: { name: "phone", value } });
+                }}
+                autoComplete="tel"
+                aria-required="true"
               />
-              <i className="bx bxs-phone" />
+              <i className="bx bxs-phone" aria-hidden="true" />
             </div>
+
             <div className="input-box">
+              <label htmlFor="reg-password" className="visually-hidden">
+                Password
+              </label>
               <input
+                id="reg-password"
                 type="password"
                 name="password"
                 required
                 placeholder="Enter Password"
                 value={registerData.password}
                 onChange={handleRegisterChange}
+                autoComplete="new-password"
+                aria-required="true"
               />
-              <i className="bx bxs-lock-alt" />
+              <i className="bx bxs-lock-alt" aria-hidden="true" />
             </div>
-            <Button type="submit" className="register-btn" disabled={loading}>
+
+            <Button
+              type="submit"
+              className="register-btn"
+              disabled={loading}
+              aria-busy={loading}
+            >
               {loading ? "Registering..." : "Register"}
             </Button>
-            <p>Or Register with social platforms</p>
-            <SocialButtons />
+
+            <p>Or register with social platforms</p>
+            <SocialButtons formId="register" />
           </form>
         </div>
 
-        <div className="toggle-box">
+        {/* ── Toggle Panel ──────────────────────────────────── */}
+        <div className="toggle-box" aria-hidden="true">
           <div className="toggle-panel toggle-left">
             <h1>Hello, Welcome!</h1>
             <p>Don't have an account?</p>
-            <Button className="register-btn" onClick={() => setIsActive(true)}>
+            <Button
+              className="register-btn"
+              onClick={() => setIsActive(true)}
+              tabIndex={isActive ? -1 : 0}
+            >
               Register
             </Button>
           </div>
           <div className="toggle-panel toggle-right">
             <h1>Welcome Back!</h1>
             <p>Already have an account?</p>
-            <Button className="login-btn" onClick={() => setIsActive(false)}>
+            <Button
+              className="login-btn"
+              onClick={() => setIsActive(false)}
+              tabIndex={isActive ? 0 : -1}
+            >
               Login
             </Button>
           </div>
         </div>
-
       </div>
+
+      {suspensionData && (
+        <SuspendedScreen
+          email={suspensionData.email}
+          suspendedUntil={suspensionData.suspendedUntil}
+          reason={suspensionData.reason}
+          onClose={() => setSuspensionData(null)}
+        />
+      )}
     </div>
   );
 }

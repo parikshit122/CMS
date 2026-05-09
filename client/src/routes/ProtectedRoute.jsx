@@ -1,18 +1,39 @@
-import { Navigate } from "react-router-dom";
-
-const getToken = () => sessionStorage.getItem("token");
-const getUser = () => JSON.parse(sessionStorage.getItem("user") || "{}");
+import { Navigate, useLocation } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
-  const token = getToken();
-  const user = getUser();
+  const { user } = useAuth();
+  const location = useLocation();
+  const accessToken = sessionStorage.getItem("accessToken");
 
-  if (!token) return <Navigate to="/auth" replace />;
+  if (!accessToken || !user) {
+    return <Navigate to="/auth" replace />;
+  }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     if (user.role === "admin") return <Navigate to="/admin" replace />;
     if (user.role === "staff") return <Navigate to="/staff" replace />;
     return <Navigate to="/dashboard" replace />;
+  }
+
+  const isStudent = user.role === "user";
+  const isStaff = user.role === "staff";
+  const isAdmin = user.role === "admin";
+
+  const studentIncomplete =
+    isStudent && (!user.phone || !user.course || !user.year);
+
+  const staffIncomplete =
+    isStaff && (!user.phone || !user.category);
+
+  const adminIncomplete =
+    isAdmin && !user.phone;
+
+  if (
+    (studentIncomplete || staffIncomplete || adminIncomplete) &&
+    location.pathname !== "/profile"
+  ) {
+    return <Navigate to="/profile" replace />;
   }
 
   return children;

@@ -52,10 +52,10 @@
 }
 
 .stat-card {
-  background: var(--surface-color);
-  padding: 24px;
-  border-radius: 16px;
-  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 130px;
   transition: 0.2s ease;
 }
 
@@ -94,6 +94,34 @@
 
 .stat-change.negative {
   color: #ef4444;
+}
+
+.stat-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  margin-top: 10px;
+}
+
+.stat-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-weight: 600;
+}
+
+.stat-trend.up {
+  color: #10b981;
+}
+
+.stat-trend.down {
+  color: #ef4444;
+}
+
+.stat-context {
+  color: #8a94a6;
+  font-weight: 400;
 }
 
 /* ================= CHART SECTION ================= */

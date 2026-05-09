@@ -6,10 +6,9 @@ import React, {
   useEffect,
 } from 'react';
 import '../../styles/SubmitComplaint.css';
+import API from "../../services/api";
+import { useAlert } from "../../components/common/Alert";
 
-/* ============================================================
-   ICONS — Zero-dependency inline SVGs
-   ============================================================ */
 const Icon = {
   ArrowLeft: () => (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"
@@ -124,9 +123,6 @@ const Icon = {
   ),
 };
 
-/* ============================================================
-   STATIC DATA
-   ============================================================ */
 const CATEGORIES = [
   {
     id: 'infrastructure',
@@ -229,20 +225,17 @@ const LOCATION_GROUPS = [
 ];
 
 const PRIORITIES = [
-  { key: 'low',    label: 'Low',    color: 'green'  },
+  { key: 'low', label: 'Low', color: 'green' },
   { key: 'medium', label: 'Medium', color: 'yellow' },
-  { key: 'high',   label: 'High',   color: 'red'    },
+  { key: 'high', label: 'High', color: 'red' },
 ];
 
 const STEPS = [
   { number: 1, label: 'Category' },
-  { number: 2, label: 'Details'  },
-  { number: 3, label: 'Review'   },
+  { number: 2, label: 'Details' },
+  { number: 3, label: 'Review' },
 ];
 
-/* ============================================================
-   UTILITIES
-   ============================================================ */
 const highlightMatch = (text, query) => {
   if (!query.trim()) return text;
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -267,9 +260,6 @@ const findLocationItem = (id) => {
 
 const findCategory = (id) => CATEGORIES.find((c) => c.id === id) || null;
 
-/* ============================================================
-   STEP INDICATOR
-   ============================================================ */
 const StepIndicator = React.memo(({ currentStep }) => {
   const progress = ((currentStep - 1) / (STEPS.length - 1)) * 100;
 
@@ -277,7 +267,7 @@ const StepIndicator = React.memo(({ currentStep }) => {
     <div className="sc-stepper">
       <div className="sc-stepper__steps">
         {STEPS.map((step, idx) => {
-          const done   = currentStep > step.number;
+          const done = currentStep > step.number;
           const active = currentStep === step.number;
 
           return (
@@ -286,7 +276,7 @@ const StepIndicator = React.memo(({ currentStep }) => {
                 className={[
                   'sc-stepper__item',
                   active ? 'sc-stepper__item--active' : '',
-                  done   ? 'sc-stepper__item--done'   : '',
+                  done ? 'sc-stepper__item--done' : '',
                 ].join(' ')}
               >
                 <div className="sc-stepper__node">
@@ -308,7 +298,6 @@ const StepIndicator = React.memo(({ currentStep }) => {
         })}
       </div>
 
-      {/* Overall progress bar */}
       <div className="sc-stepper__bar" role="progressbar"
         aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
         <div className="sc-stepper__bar-fill" style={{ width: `${progress}%` }} />
@@ -317,9 +306,6 @@ const StepIndicator = React.memo(({ currentStep }) => {
   );
 });
 
-/* ============================================================
-   CATEGORY CARD
-   ============================================================ */
 const CategoryCard = React.memo(({ icon, title, description, selected, onClick }) => (
   <div
     className={`sc-cat-card ${selected ? 'sc-cat-card--selected' : ''}`}
@@ -334,7 +320,6 @@ const CategoryCard = React.memo(({ icon, title, description, selected, onClick }
       }
     }}
   >
-    {/* Selected check badge */}
     <div className="sc-cat-card__badge" aria-hidden="true">
       <Icon.Check size={10} />
     </div>
@@ -345,9 +330,6 @@ const CategoryCard = React.memo(({ icon, title, description, selected, onClick }
   </div>
 ));
 
-/* ============================================================
-   FORM FIELD (Floating Label)
-   ============================================================ */
 const FormField = React.memo(({
   label, value, onChange,
   multiline = false, maxLength,
@@ -362,7 +344,6 @@ const FormField = React.memo(({
     onChange(v);
   }, [onChange, maxLength]);
 
-  // Auto-grow textarea
   useEffect(() => {
     if (multiline && textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -371,11 +352,11 @@ const FormField = React.memo(({
     }
   }, [value, multiline]);
 
-  const pct    = maxLength ? value.length / maxLength : 0;
-  const ctCls  = [
+  const pct = maxLength ? value.length / maxLength : 0;
+  const ctCls = [
     'sc-field__counter',
-    pct >= 1    ? 'sc-field__counter--limit'  : '',
-    pct >= 0.85 ? 'sc-field__counter--warn'   : '',
+    pct >= 1 ? 'sc-field__counter--limit' : '',
+    pct >= 0.85 ? 'sc-field__counter--warn' : '',
   ].filter(Boolean).join(' ');
 
   return (
@@ -414,9 +395,6 @@ const FormField = React.memo(({
   );
 });
 
-/* ============================================================
-   PRIORITY SELECTOR
-   ============================================================ */
 const PrioritySelector = React.memo(({ value, onChange }) => (
   <div className="sc-priority" role="radiogroup" aria-label="Priority level">
     {PRIORITIES.map(({ key, label, color }) => (
@@ -439,14 +417,11 @@ const PrioritySelector = React.memo(({ value, onChange }) => (
   </div>
 ));
 
-/* ============================================================
-   LOCATION DROPDOWN
-   ============================================================ */
 const LocationDropdown = React.memo(({ value, onChange }) => {
-  const [open, setOpen]     = useState(false);
-  const [query, setQuery]   = useState('');
-  const rootRef             = useRef(null);
-  const searchRef           = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const rootRef = useRef(null);
+  const searchRef = useRef(null);
 
   const selected = useMemo(() => findLocationItem(value), [value]);
 
@@ -484,7 +459,6 @@ const LocationDropdown = React.memo(({ value, onChange }) => {
     onChange('');
   }, [onChange]);
 
-  // Close on outside click
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
@@ -497,7 +471,6 @@ const LocationDropdown = React.memo(({ value, onChange }) => {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  // Keyboard: Escape to close
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
@@ -512,12 +485,11 @@ const LocationDropdown = React.memo(({ value, onChange }) => {
       className={`sc-location ${open ? 'sc-location--open' : ''}`}
       ref={rootRef}
     >
-      {/* Trigger */}
       <button
         type="button"
         className={[
           'sc-location__trigger',
-          open     ? 'sc-location__trigger--open'  : '',
+          open ? 'sc-location__trigger--open' : '',
           selected ? 'sc-location__trigger--filled' : '',
         ].join(' ')}
         onClick={toggle}
@@ -554,10 +526,8 @@ const LocationDropdown = React.memo(({ value, onChange }) => {
         </span>
       </button>
 
-      {/* Panel */}
       {open && (
         <div className="sc-location__panel" role="listbox">
-          {/* Search */}
           <div className="sc-location__search">
             <span className="sc-location__search-icon" aria-hidden="true">
               <Icon.Search />
@@ -583,7 +553,6 @@ const LocationDropdown = React.memo(({ value, onChange }) => {
             )}
           </div>
 
-          {/* Results */}
           <div className="sc-location__results">
             {filtered.length === 0 ? (
               <div className="sc-location__empty">
@@ -639,12 +608,9 @@ const LocationDropdown = React.memo(({ value, onChange }) => {
   );
 });
 
-/* ============================================================
-   REVIEW SECTION
-   ============================================================ */
 const ReviewSection = React.memo(({ formData }) => {
-  const cat      = findCategory(formData.category);
-  const loc      = findLocationItem(formData.location);
+  const cat = findCategory(formData.category);
+  const loc = findLocationItem(formData.location);
   const priority = PRIORITIES.find((p) => p.key === formData.priority);
 
   const sections = [
@@ -662,7 +628,7 @@ const ReviewSection = React.memo(({ formData }) => {
       icon: '📋',
       title: 'Complaint Details',
       rows: [
-        { label: 'Title',       value: formData.title       || '—' },
+        { label: 'Title', value: formData.title || '—' },
         { label: 'Description', value: formData.description || '—' },
       ],
     },
@@ -724,9 +690,6 @@ const ReviewSection = React.memo(({ formData }) => {
   );
 });
 
-/* ============================================================
-   SECTION HEADER (reusable inside form card)
-   ============================================================ */
 const SectionHeader = ({ icon, title, desc }) => (
   <div className="sc-section-head">
     <div className="sc-section-head__icon" aria-hidden="true">{icon}</div>
@@ -737,18 +700,18 @@ const SectionHeader = ({ icon, title, desc }) => (
   </div>
 );
 
-/* ============================================================
-   MAIN PAGE — SUBMIT COMPLAINT
-   ============================================================ */
 const SubmitComplaint = () => {
-  const [step,      setStep]      = useState(1);
+  const alert = useAlert();
+  const [step, setStep] = useState(1);
+  const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [form,      setForm]      = useState({
-    category:    '',
-    title:       '',
+  const [submittedId, setSubmittedId] = useState('');
+  const [form, setForm] = useState({
+    category: '',
+    title: '',
     description: '',
-    priority:    '',
-    location:    '',
+    priority: '',
+    location: '',
   });
 
   const update = useCallback((field, value) => {
@@ -763,22 +726,52 @@ const SubmitComplaint = () => {
     form.location
   );
 
-  const next  = useCallback(() => setStep((s) => Math.min(s + 1, 3)), []);
-  const back  = useCallback(() => setStep((s) => Math.max(s - 1, 1)), []);
+  const next = useCallback(() => setStep((s) => Math.min(s + 1, 3)), []);
+  const back = useCallback(() => setStep((s) => Math.max(s - 1, 1)), []);
 
-  const submit = useCallback(() => {
-    // TODO: dispatch Redux action / call complaintService here
-    console.log('[SubmitComplaint] payload →', form);
-    setSubmitted(true);
-  }, [form]);
+  const submit = useCallback(async () => {
+    if (submitting) return;
+
+    setSubmitting(true);
+
+    try {
+      const response = await API.post("/complaints", form);
+
+      if (response.data.success) {
+        const newId = response.data.data?.complaintId || '';
+        setSubmittedId(newId);
+        setSubmitted(true);
+
+        alert.success(
+          newId
+            ? `Complaint submitted successfully! ID: ${newId}`
+            : "Complaint submitted successfully!"
+        );
+
+        setTimeout(() => {
+          window.location.href = "/dashboard";
+        }, 1800);
+      } else {
+        alert.error(response.data.message || "Failed to submit complaint");
+      }
+    } catch (err) {
+      console.error("Submit error:", err);
+      const message =
+        err.response?.data?.message ||
+        "Error submitting complaint. Please try again.";
+      alert.error(message);
+    } finally {
+      setSubmitting(false);
+    }
+  }, [form, alert, submitting]);
 
   const reset = useCallback(() => {
     setForm({ category: '', title: '', description: '', priority: '', location: '' });
     setStep(1);
     setSubmitted(false);
+    setSubmittedId('');
   }, []);
 
-  /* ── Success screen ── */
   if (submitted) {
     return (
       <div className="sc-page">
@@ -789,6 +782,11 @@ const SubmitComplaint = () => {
                 <Icon.SuccessCheck />
               </div>
               <h2 className="sc-success__title">Complaint Submitted!</h2>
+              {submittedId && (
+                <p className="sc-success__id">
+                  Reference ID: <strong>{submittedId}</strong>
+                </p>
+              )}
               <p className="sc-success__desc">
                 Your complaint has been received and will be reviewed by the
                 relevant department shortly. You'll receive updates via
@@ -808,12 +806,10 @@ const SubmitComplaint = () => {
     );
   }
 
-  /* ── Main render ── */
   return (
     <div className="sc-page">
       <div className="sc-page__inner">
 
-        {/* Page header */}
         <header className="sc-page__header">
           <div>
             <p className="sc-page__eyebrow">Student Portal</p>
@@ -825,13 +821,10 @@ const SubmitComplaint = () => {
           </div>
         </header>
 
-        {/* Step indicator */}
         <StepIndicator currentStep={step} />
 
-        {/* Form card */}
         <div className="sc-card">
 
-          {/* ─── STEP 1: CATEGORY ─── */}
           {step === 1 && (
             <div className="sc-step" key="step-1">
               <div className="sc-section">
@@ -868,10 +861,8 @@ const SubmitComplaint = () => {
             </div>
           )}
 
-          {/* ─── STEP 2: DETAILS ─── */}
           {step === 2 && (
             <div className="sc-step" key="step-2">
-              {/* Complaint info */}
               <div className="sc-section">
                 <SectionHeader
                   icon={<Icon.FileText />}
@@ -895,7 +886,6 @@ const SubmitComplaint = () => {
 
               <div className="sc-divider" />
 
-              {/* Priority */}
               <div className="sc-section">
                 <SectionHeader
                   icon={<Icon.Flag />}
@@ -910,7 +900,6 @@ const SubmitComplaint = () => {
 
               <div className="sc-divider" />
 
-              {/* Location */}
               <div className="sc-section">
                 <SectionHeader
                   icon={<Icon.MapPin />}
@@ -945,7 +934,6 @@ const SubmitComplaint = () => {
             </div>
           )}
 
-          {/* ─── STEP 3: REVIEW ─── */}
           {step === 3 && (
             <div className="sc-step" key="step-3">
               <div className="sc-section">
@@ -962,6 +950,7 @@ const SubmitComplaint = () => {
                   type="button"
                   className="sc-btn sc-btn--ghost"
                   onClick={back}
+                  disabled={submitting}
                 >
                   <span className="sc-btn__icon"><Icon.ArrowLeft /></span>
                   Back
@@ -970,9 +959,10 @@ const SubmitComplaint = () => {
                   type="button"
                   className="sc-btn sc-btn--submit"
                   onClick={submit}
+                  disabled={submitting}
                 >
                   <span className="sc-btn__icon"><Icon.Send /></span>
-                  Submit Complaint
+                  {submitting ? "Submitting..." : "Submit Complaint"}
                 </button>
               </div>
             </div>

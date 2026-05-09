@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 import "../../styles/Sidebar.css";
 
 const Sidebar = ({ menuItems = [], role = "User", isOpen, onClose }) => {
   const [darkMode, setDarkMode] = useState(false);
-  const navigate = useNavigate();
+  const { logout } = useAuth();
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("theme") || "dark";
+    // Default to light mode — only go dark if explicitly saved
+    const savedTheme = localStorage.getItem("theme") || "light";
     const isDark = savedTheme === "dark";
     setDarkMode(isDark);
     document.documentElement.setAttribute("data-bs-theme", savedTheme);
@@ -21,9 +23,8 @@ const Sidebar = ({ menuItems = [], role = "User", isOpen, onClose }) => {
   };
 
   const handleLogout = () => {
-    sessionStorage.removeItem("token");
-    sessionStorage.removeItem("user");
-    navigate("/", { replace: true });
+    logout();
+    window.location.href = "/";
   };
 
   const handleLinkClick = () => {
@@ -32,49 +33,81 @@ const Sidebar = ({ menuItems = [], role = "User", isOpen, onClose }) => {
     }
   };
 
+  const roleLabel =
+    role === "Admin"
+      ? "Admin Dashboard"
+      : role === "Staff"
+      ? "Staff Dashboard"
+      : "User Dashboard";
+
   return (
-    <div className={`sidebar ${isOpen ? "open" : "closed"}`}>
-      <div className="sidebar-header">
-        <h3 className="sidebar-title">
-          {role === "Admin"
-            ? "Admin Dashboard"
-            : role === "Staff"
-              ? "Staff Dashboard"
-              : "User Dashboard"}
-        </h3>
-      </div>
+    <>
+      {/* ── Mobile backdrop overlay ─────────────────────── */}
+      {isOpen && (
+        <div
+          className="sidebar-overlay"
+          onClick={onClose}
+          aria-hidden="true"
+        />
+      )}
 
-      <ul className="sidebar-menu">
-        {menuItems.map((item, index) => (
-          <li key={index}>
-            <NavLink
-              to={item.path}
-              onClick={handleLinkClick}
-              className={({ isActive }) =>
-                isActive ? "sidebar-link active" : "sidebar-link"
-              }
+      <nav
+        className={`sidebar ${isOpen ? "open" : "closed"}`}
+        aria-label={`${role} navigation`}
+      >
+        <div className="sidebar-header">
+          <h3 className="sidebar-title">{roleLabel}</h3>
+        </div>
+
+        {/* ── Nav links ───────────────────────────────────── */}
+        <ul className="sidebar-menu" role="list">
+          {menuItems.map((item, index) => (
+            <li key={index} role="listitem">
+              <NavLink
+                to={item.path}
+                end={item.end ?? false}
+                onClick={handleLinkClick}
+                className={({ isActive }) =>
+                  isActive ? "sidebar-link active" : "sidebar-link"
+                }
+                aria-label={item.label}
+              >
+                <i className={item.icon} aria-hidden="true" />
+                <span>{item.label}</span>
+              </NavLink>
+            </li>
+          ))}
+
+          {/* ── Theme toggle ──────────────────────────────── */}
+          <li role="listitem">
+            <button
+              className="sidebar-link theme-link"
+              onClick={toggleTheme}
+              aria-label={`Switch to ${darkMode ? "light" : "dark"} mode`}
+              aria-pressed={darkMode}
             >
-              <i className={item.icon}></i>
-              <span>{item.label}</span>
-            </NavLink>
+              <i
+                className={darkMode ? "bx bx-sun" : "bx bx-moon"}
+                aria-hidden="true"
+              />
+              <span>{darkMode ? "Light Mode" : "Dark Mode"}</span>
+            </button>
           </li>
-        ))}
+        </ul>
 
-        <li>
-          <button className="sidebar-link theme-link" onClick={toggleTheme}>
-            <i className={darkMode ? "bx bx-moon" : "bx bx-sun"}></i>
-            <span>{darkMode ? "Dark Mode" : "Light Mode"}</span>
+        {/* ── Footer / Logout ─────────────────────────────── */}
+        <div className="sidebar-footer">
+          <button
+            className="logout-btn"
+            onClick={handleLogout}
+            aria-label="Logout of your account"
+          >
+            <i className="bx bx-log-out" aria-hidden="true" />
+            <span>Logout</span>
           </button>
-        </li>
-      </ul>
-
-      <div className="sidebar-footer">
-        <button className="logout-btn" onClick={handleLogout}>
-          <i className="bx bx-log-out"></i>
-          <span>Logout</span>
-        </button>
-      </div>
-    </div>
+        </div>
+      </nav>
+    </>
   );
 };
 

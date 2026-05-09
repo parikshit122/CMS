@@ -1,0 +1,336 @@
+import { useState, useEffect, useRef } from "react";
+import { useAlert } from "../components/common/Alert";
+import API from "../services/api";
+import "../styles/Profilepage.css";
+
+const Profile = () => {
+  const fileInputRef = useRef(null);
+  const alert = useAlert();
+
+  const [user, setUser] = useState(null);
+  const [formData, setFormData] = useState(null);
+  const [originalData, setOriginalData] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [popupClosed, setPopupClosed] = useState(false);
+
+  useEffect(() => {
+    const storedUser = JSON.parse(sessionStorage.getItem("user"));
+    if (storedUser) {
+      const profileData = {
+        firstName: storedUser.name?.split(" ")[0] || "",
+        lastName: storedUser.name?.split(" ")[1] || "",
+        email: storedUser.email,
+        phone: storedUser.phone || "",
+        course: storedUser.course || "",
+        year: storedUser.year || "",
+        bio: storedUser.bio || "",
+        avatar: storedUser.avatar || null,
+        avatarFile: null,
+      };
+      setUser(storedUser);
+      setFormData(profileData);
+      setOriginalData(profileData);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!formData || !originalData) return;
+    setIsDirty(JSON.stringify(formData) !== JSON.stringify(originalData));
+  }, [formData, originalData]);
+
+  if (!formData || !user) return null;
+
+  const missingFields = [];
+  if (!formData.phone) missingFields.push("Phone Number");
+  if (user.role === "user") {
+    if (!formData.course) missingFields.push("Course");
+    if (!formData.year) missingFields.push("Year");
+  }
+  if (user.role === "staff" && !user.category) {
+    missingFields.push("Specialization");
+  }
+
+  const showMissingPopup = missingFields.length > 0 && !popupClosed;
+
+  const handleChange = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleEdit = () => {
+    setOriginalData(formData);
+    setIsEditing(true);
+  };
+
+  const handleCancel = () => {
+    setFormData(originalData);
+    setIsEditing(false);
+  };
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+
+      const fullName = `${formData.firstName} ${formData.lastName}`.trim();
+
+      const response = await API.patch("/users/profile", {
+        name: fullName,
+        phone: formData.phone,
+        course: formData.course,
+        year: formData.year,
+        bio: formData.bio,
+      });
+
+      if (!response.data.success) {
+        alert.error("Failed to update profile");
+        setSaving(false);
+        return;
+      }
+
+      let updatedUser = response.data.data;
+
+      if (formData.avatarFile) {
+        const token = sessionStorage.getItem("accessToken");
+        const form = new FormData();
+        form.append("avatar", formData.avatarFile);
+
+        const uploadRes = await fetch(
+          "http://localhost:5000/api/users/upload-avatar",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            body: form,
+          }
+        );
+
+        const uploadData = await uploadRes.json();
+
+        if (uploadData.success) {
+          updatedUser = { ...updatedUser, avatar: uploadData.avatar };
+        }
+      }
+
+      sessionStorage.setItem("user", JSON.stringify(updatedUser));
+      alert.success("Profile updated successfully");
+      setTimeout(() => window.location.reload(), 1000);
+
+    } catch {
+      alert.error("Update failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setFormData((prev) => ({
+      ...prev,
+      avatar: URL.createObjectURL(file),
+      avatarFile: file,
+    }));
+  };
+
+  const roleTitle =
+    user.role === "admin"
+      ? "Admin Profile"
+      : user.role === "staff"
+        ? "Staff Profile"
+        : "Student Profile";
+
+  return (
+    <div className="student-profile-page">
+
+      {showMissingPopup && (
+        <div className="profile-missing-overlay">
+          <div className="profile-missing-modal">
+            <h3>Complete Your Profile</h3>
+            <p>The following information is missing:</p>
+            <ul>
+              {missingFields.map((field, idx) => (
+                <li key={idx}>{field}</li>
+              ))}
+            </ul>
+            <p>Please update your profile to continue.</p>
+
+            <div className="profile-missing-actions">
+              <button
+                className="btn-primary"
+                onClick={() => {
+                  setIsEditing(true);
+                  setPopupClosed(true);
+                }}
+              >
+                Edit Profile
+              </button>
+
+              <button
+                className="btn-cancel"
+                onClick={() => {
+                  setPopupClosed(true);
+                  setTimeout(() => window.location.reload(), 200);
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="profile-header">
+        <div>
+          <h1>{roleTitle}</h1>
+          <p>Manage your account information</p>
+        </div>
+
+        {!isEditing ? (
+          <button className="btn-primary" onClick={handleEdit}>
+            Edit Profile
+          </button>
+        ) : (
+          <div className="action-buttons">
+            <button className="btn-cancel" onClick={handleCancel}>
+              Cancel
+            </button>
+            <button
+              className="btn-save"
+              onClick={handleSave}
+              disabled={!isDirty || saving}
+            >
+              {saving ? "Saving..." : "Save Changes"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="profile-card">
+        <div className="profile-top">
+          <div className="avatar-wrapper">
+            {formData.avatar ? (
+              <img src={formData.avatar} alt="Profile" className="avatar-img" />
+            ) : (
+              <div className="avatar-initials">
+                {formData.firstName?.[0]}
+                {formData.lastName?.[0]}
+              </div>
+            )}
+
+            {isEditing && (
+              <>
+                <button
+                  className="avatar-upload-btn"
+                  onClick={() => fileInputRef.current.click()}
+                >
+                  <i className="bx bx-camera"></i>
+                </button>
+
+                <input
+                  type="file"
+                  hidden
+                  ref={fileInputRef}
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                />
+              </>
+            )}
+          </div>
+
+          <div>
+            <h2>
+              {formData.firstName} {formData.lastName}
+            </h2>
+            <span className="badge">{user.role.toUpperCase()}</span>
+          </div>
+        </div>
+
+        <div className="form-grid">
+
+          <div className="form-field">
+            <label>First Name</label>
+            <input
+              disabled={!isEditing}
+              value={formData.firstName}
+              onChange={(e) => handleChange("firstName", e.target.value)}
+            />
+          </div>
+
+          <div className="form-field">
+            <label>Last Name</label>
+            <input
+              disabled={!isEditing}
+              value={formData.lastName}
+              onChange={(e) => handleChange("lastName", e.target.value)}
+            />
+          </div>
+
+          <div className="form-field full">
+            <label>Email</label>
+            <input disabled value={formData.email} />
+          </div>
+
+          <div className="form-field">
+            <label>Phone</label>
+            <input
+              disabled={!isEditing}
+              value={formData.phone}
+              onChange={(e) => handleChange("phone", e.target.value)}
+            />
+          </div>
+
+          {user.role === "user" && (
+            <>
+              <div className="form-field">
+                <label>Course</label>
+                <input
+                  disabled={!isEditing}
+                  value={formData.course}
+                  onChange={(e) => handleChange("course", e.target.value)}
+                />
+              </div>
+
+              <div className="form-field">
+                <label>Year</label>
+                <select
+                  disabled={!isEditing}
+                  value={formData.year}
+                  onChange={(e) => handleChange("year", e.target.value)}
+                >
+                  <option value="">Select Year</option>
+                  <option value="1st">1st Year</option>
+                  <option value="2nd">2nd Year</option>
+                  <option value="3rd">3rd Year</option>
+                  <option value="4th">4th Year</option>
+                </select>
+              </div>
+            </>
+          )}
+
+          {user.role === "staff" && (
+            <div className="form-field">
+              <label>Specialization</label>
+              <input value={user.category || ""} disabled />
+            </div>
+          )}
+
+          <div className="form-field full">
+            <label>Bio</label>
+            <textarea
+              disabled={!isEditing}
+              rows="4"
+              value={formData.bio}
+              onChange={(e) => handleChange("bio", e.target.value)}
+            />
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Profile;

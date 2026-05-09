@@ -1,58 +1,62 @@
 const mongoose = require("mongoose");
 
-const complaintSchema = new mongoose.Schema({
-  title: {
-    type: String,
-    required: true,
-    trim: true,
+const complaintSchema = new mongoose.Schema(
+  {
+    complaintId: {
+      type: String,
+      index: true,
+    },
+    title: {
+      type: String,
+      required: true,
+    },
+    description: {
+      type: String,
+      required: true,
+    },
+    category: {
+      type: String,
+      required: true,
+    },
+    priority: {
+      type: String,
+      enum: ["low", "medium", "high", "urgent"],
+      default: "medium",
+    },
+    location: {
+      type: String,
+    },
+    status: {
+      type: String,
+      enum: ["pending", "in-progress", "resolved", "rejected"],
+      default: "pending",
+    },
+    student: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+    assignedTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    rejectionReason: {
+      type: String,
+    },
   },
-  description: {
-    type: String,
-    required: true,
-    trim: true,
-  },
-  category: {
-    type: String,
-    required: true,
-    enum: [
-      "infrastructure",
-      "cleanliness",
-      "electrical",
-      "plumbing",
-      "safety",
-      "it",
-      "academic",
-      "other",
-    ],
-  },
-  priority: {
-    type: String,
-    enum: ["low", "medium", "high"],
-    default: "low",
-  },
-  location: {
-    type: String,
-    required: true,
-  },
-  status: {
-    type: String,
-    enum: ["pending", "in-progress", "resolved", "rejected"],
-    default: "pending",
-  },
-  rejectionReason: {
-    type: String,
-    default: null,
-  },
-  student: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    required: true,
-  },
-  assignedTo: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "User",
-    default: null,
-  },
-}, { timestamps: true });
+  { timestamps: true }
+);
+
+complaintSchema.pre("save", async function () {
+  if (this.complaintId) return;
+
+  const year = new Date().getFullYear();
+
+  const count = await this.constructor.countDocuments({
+    complaintId: { $regex: `^CMP-${year}-` },
+  });
+
+  this.complaintId = `CMP-${year}-${String(count + 1).padStart(4, "0")}`;
+});
 
 module.exports = mongoose.model("Complaint", complaintSchema);

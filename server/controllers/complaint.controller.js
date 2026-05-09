@@ -39,19 +39,19 @@ const getAssignedComplaints = async (req, res) => {
       .populate("student", "name email");
 
     const formatted = complaints.map((c) => ({
-      _id:             c._id,
-      title:           c.title,
-      description:     c.description,
-      category:        c.category,
-      priority:        c.priority,
-      location:        c.location,
-      status:          c.status,
+      _id: c._id,
+      complaintId: c.complaintId,
+      title: c.title,
+      description: c.description,
+      category: c.category,
+      priority: c.priority,
+      location: c.location,
+      status: c.status,
       rejectionReason: c.rejectionReason,
-      studentName:     c.student?.name || "Unknown",
-      studentEmail:    c.student?.email || "",
-      createdAt:       c.createdAt,
+      studentName: c.student?.name || "Unknown",
+      studentEmail: c.student?.email || "",
+      createdAt: c.createdAt,
     }));
-
     res.json({ success: true, data: formatted });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -62,8 +62,8 @@ const getAllComplaints = async (req, res) => {
   try {
     const complaints = await Complaint.find()
       .sort({ createdAt: -1 })
-      .populate("student", "name email")
-      .populate("assignedTo", "name email");
+      .populate("student", "name email phone course year")
+      .populate("assignedTo", "name email phone category");
 
     res.json({ success: true, data: complaints });
   } catch (err) {
@@ -79,11 +79,15 @@ const updateComplaintStatus = async (req, res) => {
     const complaint = await Complaint.findById(id);
 
     if (!complaint) {
-      return res.status(404).json({ success: false, message: "Complaint not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Complaint not found" });
     }
 
     if (complaint.assignedTo.toString() !== req.user.id) {
-      return res.status(403).json({ success: false, message: "Not authorized" });
+      return res
+        .status(403)
+        .json({ success: false, message: "Not authorized" });
     }
 
     const locked = ["resolved", "rejected"];
@@ -108,21 +112,24 @@ const updateComplaintStatus = async (req, res) => {
 
     await complaint.save();
 
-    const updated = await Complaint.findById(id)
-      .populate("student", "name email");
+    const updated = await Complaint.findById(id).populate(
+      "student",
+      "name email",
+    );
 
     const formatted = {
-      _id:             updated._id,
-      title:           updated.title,
-      description:     updated.description,
-      category:        updated.category,
-      priority:        updated.priority,
-      location:        updated.location,
-      status:          updated.status,
+      _id: updated._id,
+      complaintId: updated.complaintId,
+      title: updated.title,
+      description: updated.description,
+      category: updated.category,
+      priority: updated.priority,
+      location: updated.location,
+      status: updated.status,
       rejectionReason: updated.rejectionReason,
-      studentName:     updated.student?.name || "Unknown",
-      studentEmail:    updated.student?.email || "",
-      createdAt:       updated.createdAt,
+      studentName: updated.student?.name || "Unknown",
+      studentEmail: updated.student?.email || "",
+      createdAt: updated.createdAt,
     };
 
     res.json({ success: true, data: formatted });
@@ -138,19 +145,23 @@ const assignComplaint = async (req, res) => {
 
     const staff = await User.findById(staffId);
     if (!staff || staff.role !== "staff") {
-      return res.status(400).json({ success: false, message: "Invalid staff member" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid staff member" });
     }
 
     const complaint = await Complaint.findByIdAndUpdate(
       id,
       { assignedTo: staffId, status: "in-progress" },
-      { new: true }
+      { new: true },
     )
       .populate("student", "name email")
       .populate("assignedTo", "name email");
 
     if (!complaint) {
-      return res.status(404).json({ success: false, message: "Complaint not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Complaint not found" });
     }
 
     res.json({ success: true, data: complaint });
@@ -163,18 +174,92 @@ const getStaffStats = async (req, res) => {
   try {
     const staffId = req.user.id;
 
+    const [totalAssigned, pending, inProgress, resolved, rejected] =
+      await Promise.all([
+        Complaint.countDocuments({ assignedTo: staffId }),
+        Complaint.countDocuments({ assignedTo: staffId, status: "pending" }),
+        Complaint.countDocuments({
+          assignedTo: staffId,
+          status: "in-progress",
+        }),
+        Complaint.countDocuments({ assignedTo: staffId, status: "resolved" }),
+        Complaint.countDocuments({ assignedTo: staffId, status: "rejected" }),
+      ]);
+
+    const now = new Date();
+    const startThisWeek = new Date(now);
+    startThisWeek.setDate(startThisWeek.getDate() - 6);
+    startThisWeek.setHours(0, 0, 0, 0);
+
+    const endPrevWeek = new Date(startThisWeek.getTime() - 1);
+    const startPrevWeek = new Date(startThisWeek);
+    startPrevWeek.setDate(startPrevWeek.getDate() - 7);
+    startPrevWeek.setHours(0, 0, 0, 0);
+
     const [
-      totalAssigned,
-      pending,
-      inProgress,
-      resolved,
-      rejected,
+      assignedThisWeek,
+      assignedPrevWeek,
+      pendingThisWeek,
+      pendingPrevWeek,
+      inProgressThisWeek,
+      inProgressPrevWeek,
+      resolvedThisWeek,
+      resolvedPrevWeek,
+      rejectedThisWeek,
+      rejectedPrevWeek,
     ] = await Promise.all([
-      Complaint.countDocuments({ assignedTo: staffId }),
-      Complaint.countDocuments({ assignedTo: staffId, status: "pending" }),
-      Complaint.countDocuments({ assignedTo: staffId, status: "in-progress" }),
-      Complaint.countDocuments({ assignedTo: staffId, status: "resolved" }),
-      Complaint.countDocuments({ assignedTo: staffId, status: "rejected" }),
+      Complaint.countDocuments({
+        assignedTo: staffId,
+        createdAt: { $gte: startThisWeek, $lte: now },
+      }),
+      Complaint.countDocuments({
+        assignedTo: staffId,
+        createdAt: { $gte: startPrevWeek, $lte: endPrevWeek },
+      }),
+
+      Complaint.countDocuments({
+        assignedTo: staffId,
+        status: "pending",
+        createdAt: { $gte: startThisWeek, $lte: now },
+      }),
+      Complaint.countDocuments({
+        assignedTo: staffId,
+        status: "pending",
+        createdAt: { $gte: startPrevWeek, $lte: endPrevWeek },
+      }),
+
+      Complaint.countDocuments({
+        assignedTo: staffId,
+        status: "in-progress",
+        updatedAt: { $gte: startThisWeek, $lte: now },
+      }),
+      Complaint.countDocuments({
+        assignedTo: staffId,
+        status: "in-progress",
+        updatedAt: { $gte: startPrevWeek, $lte: endPrevWeek },
+      }),
+
+      Complaint.countDocuments({
+        assignedTo: staffId,
+        status: "resolved",
+        updatedAt: { $gte: startThisWeek, $lte: now },
+      }),
+      Complaint.countDocuments({
+        assignedTo: staffId,
+        status: "resolved",
+        updatedAt: { $gte: startPrevWeek, $lte: endPrevWeek },
+      }),
+
+      Complaint.countDocuments({
+        assignedTo: staffId,
+        status: "rejected",
+        updatedAt: { $gte: startThisWeek, $lte: now },
+      }),
+      Complaint.countDocuments({
+        assignedTo: staffId,
+        status: "rejected",
+        updatedAt: { $gte: startPrevWeek, $lte: endPrevWeek },
+      }),
     ]);
 
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -185,7 +270,7 @@ const getStaffStats = async (req, res) => {
         const date = new Date(today);
         date.setDate(today.getDate() - (6 - i));
         const start = new Date(date.setHours(0, 0, 0, 0));
-        const end   = new Date(date.setHours(23, 59, 59, 999));
+        const end = new Date(date.setHours(23, 59, 59, 999));
 
         const [assigned, resolvedDay] = await Promise.all([
           Complaint.countDocuments({
@@ -200,14 +285,14 @@ const getStaffStats = async (req, res) => {
         ]);
 
         return { day: days[start.getDay()], assigned, resolved: resolvedDay };
-      })
+      }),
     );
 
     const statusBreakdown = [
-      { name: "Pending",     value: pending,    color: "#f59e0b" },
+      { name: "Pending", value: pending, color: "#f59e0b" },
       { name: "In Progress", value: inProgress, color: "#3b82f6" },
-      { name: "Resolved",    value: resolved,   color: "#10b981" },
-      { name: "Rejected",    value: rejected,   color: "#ef4444" },
+      { name: "Resolved", value: resolved, color: "#10b981" },
+      { name: "Rejected", value: rejected, color: "#ef4444" },
     ];
 
     res.json({
@@ -220,6 +305,19 @@ const getStaffStats = async (req, res) => {
         rejected,
         weeklyTrend,
         statusBreakdown,
+        trendMeta: {
+          totalAssigned: {
+            current: assignedThisWeek,
+            previous: assignedPrevWeek,
+          },
+          pending: { current: pendingThisWeek, previous: pendingPrevWeek },
+          inProgress: {
+            current: inProgressThisWeek,
+            previous: inProgressPrevWeek,
+          },
+          resolved: { current: resolvedThisWeek, previous: resolvedPrevWeek },
+          rejected: { current: rejectedThisWeek, previous: rejectedPrevWeek },
+        },
       },
     });
   } catch (err) {
@@ -229,16 +327,179 @@ const getStaffStats = async (req, res) => {
 
 const getAdminStats = async (req, res) => {
   try {
-    const [total, pending, resolved, inProgress] = await Promise.all([
+    const now = new Date();
+
+    const startThisWeek = new Date(now);
+    startThisWeek.setDate(startThisWeek.getDate() - 6);
+    startThisWeek.setHours(0, 0, 0, 0);
+
+    const endPrevWeek = new Date(startThisWeek.getTime() - 1);
+
+    const startPrevWeek = new Date(startThisWeek);
+    startPrevWeek.setDate(startPrevWeek.getDate() - 7);
+    startPrevWeek.setHours(0, 0, 0, 0);
+
+    const [
+      totalComplaints, // <--- Replaces 'total'
+      pending,
+      resolved,
+      inProgress,
+      submittedThisWeek,
+      submittedPrevWeek,
+      pendingThisWeek,
+      pendingPrevWeek,
+      resolvedThisWeek,
+      resolvedPrevWeek,
+    ] = await Promise.all([
       Complaint.countDocuments(),
       Complaint.countDocuments({ status: "pending" }),
       Complaint.countDocuments({ status: "resolved" }),
       Complaint.countDocuments({ status: "in-progress" }),
+
+      Complaint.countDocuments({
+        createdAt: { $gte: startThisWeek, $lte: now },
+      }),
+
+      Complaint.countDocuments({
+        createdAt: { $gte: startPrevWeek, $lte: endPrevWeek },
+      }),
+
+      Complaint.countDocuments({
+        status: "pending",
+        createdAt: { $gte: startThisWeek, $lte: now },
+      }),
+
+      Complaint.countDocuments({
+        status: "pending",
+        createdAt: { $gte: startPrevWeek, $lte: endPrevWeek },
+      }),
+
+      Complaint.countDocuments({
+        status: "resolved",
+        updatedAt: { $gte: startThisWeek, $lte: now },
+      }),
+
+      Complaint.countDocuments({
+        status: "resolved",
+        updatedAt: { $gte: startPrevWeek, $lte: endPrevWeek },
+      }),
     ]);
+
+    // Average Response Time calculation
+    const avgResponseResult = await Complaint.aggregate([
+      {
+        $match: {
+          status: "resolved",
+          createdAt: { $exists: true },
+          updatedAt: { $exists: true },
+        },
+      },
+      {
+        $project: { responseTime: { $subtract: ["$updatedAt", "$createdAt"] } },
+      },
+      { $group: { _id: null, avgResponseTime: { $avg: "$responseTime" } } },
+    ]);
+
+    const avgResponseTime = avgResponseResult[0]?.avgResponseTime
+      ? Number(
+          (avgResponseResult[0].avgResponseTime / (1000 * 60 * 60)).toFixed(1),
+        )
+      : 0;
+
+    // Charts Data (Weekly & Monthly)
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+    const weeklyData = await Promise.all(
+      Array.from({ length: 7 }).map(async (_, i) => {
+        const date = new Date(now);
+        date.setDate(now.getDate() - (6 - i));
+        const start = new Date(date.setHours(0, 0, 0, 0));
+        const end = new Date(date.setHours(23, 59, 59, 999));
+
+        const [submitted, resolvedCount] = await Promise.all([
+          Complaint.countDocuments({ createdAt: { $gte: start, $lte: end } }),
+          Complaint.countDocuments({
+            status: "resolved",
+            updatedAt: { $gte: start, $lte: end },
+          }),
+        ]);
+
+        return {
+          day: days[start.getDay()],
+          submitted,
+          resolved: resolvedCount,
+        };
+      }),
+    );
+
+    const monthlyData = await Promise.all(
+      Array.from({ length: 6 }).map(async (_, i) => {
+        const date = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+        const start = new Date(date.getFullYear(), date.getMonth(), 1);
+        const end = new Date(
+          date.getFullYear(),
+          date.getMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999,
+        );
+
+        const value = await Complaint.countDocuments({
+          createdAt: { $gte: start, $lte: end },
+        });
+
+        return {
+          month: start.toLocaleString("default", { month: "short" }),
+          value,
+        };
+      }),
+    );
+
+    // Category Breakdown
+    const categoryResult = await Complaint.aggregate([
+      { $group: { _id: "$category", value: { $sum: 1 } } },
+      { $sort: { value: -1 } },
+    ]);
+
+    const iconMap = {
+      technical: "bx bx-cog",
+      service: "bx bx-support",
+      infrastructure: "bx bx-building",
+      billing: "bx bx-credit-card",
+      academic: "bx bx-book",
+      hostel: "bx bx-home",
+      transport: "bx bx-bus",
+    };
+
+    const categoryBreakdown = categoryResult.map((item) => ({
+      label: item._id || "Other",
+      value: item.value,
+      icon: iconMap[(item._id || "other").toLowerCase()] || "bx bx-category",
+    }));
 
     res.json({
       success: true,
-      data: { total, pending, resolved, inProgress },
+      data: {
+        totalComplaints,
+        pending,
+        resolved,
+        inProgress,
+        avgResponseTime,
+        weeklyData,
+        monthlyData,
+        categoryBreakdown,
+        trendMeta: {
+          totalComplaints: {
+            current: submittedThisWeek,
+            previous: submittedPrevWeek,
+          },
+          pending: { current: pendingThisWeek, previous: pendingPrevWeek },
+          resolved: { current: resolvedThisWeek, previous: resolvedPrevWeek },
+        },
+        lastUpdated: now,
+      },
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

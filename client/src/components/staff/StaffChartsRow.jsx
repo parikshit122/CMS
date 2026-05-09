@@ -13,11 +13,6 @@ import {
   Cell,
 } from "recharts";
 
-/* ============================================================
-   STAFF CHARTS ROW
-   - Line chart: Assigned vs Resolved (weekly trend)
-   - Bar chart:  Status distribution
-   ============================================================ */
 
 /* ── Custom Tooltip ── */
 const CustomTooltip = ({ active, payload, label }) => {

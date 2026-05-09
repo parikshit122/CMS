@@ -1,13 +1,6 @@
 import React, { useState, useMemo, useCallback } from "react";
 import StatusBadge from "../complaint/StatusBadge";
 
-/* ============================================================
-   ASSIGNED COMPLAINTS TABLE
-   - Filter by status
-   - Search by title / student name
-   - Locked rows for resolved/rejected complaints
-   - Click row → opens action modal
-   ============================================================ */
 
 const STATUS_FILTERS = [
   { key: "all",         label: "All"         },
