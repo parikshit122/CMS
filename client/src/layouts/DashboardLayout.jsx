@@ -2,6 +2,8 @@ import { useState, useEffect, useId } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import Sidebar from "../components/layout/Sidebar";
+import NotificationBell from "../components/notification/NotificationBell";
+import useAuthSync from "../hooks/useAuthSync";
 import "../styles/Dashboard.css";
 
 const DashboardLayout = ({
@@ -16,10 +18,13 @@ const DashboardLayout = ({
   const { user } = useAuth();
   const searchId = useId();
 
+  useAuthSync(5000);
+
   const [isMobile, setIsMobile] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [searchValue, setSearchValue] = useState("");
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [, forceUpdate] = useState(0);
 
   useEffect(() => {
     const handleResize = () => {
@@ -31,6 +36,12 @@ const DashboardLayout = ({
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    const handleUpdate = () => forceUpdate((n) => n + 1);
+    window.addEventListener("user-updated", handleUpdate);
+    return () => window.removeEventListener("user-updated", handleUpdate);
   }, []);
 
   useEffect(() => {
@@ -118,12 +129,7 @@ const DashboardLayout = ({
         )}
 
         <div className="header-right">
-          <button
-            className="notification-bell"
-            aria-label="View notifications"
-          >
-            <i className="bx bx-bell" aria-hidden="true" />
-          </button>
+          <NotificationBell />
 
           <div
             className="user-info"
@@ -172,7 +178,8 @@ const DashboardLayout = ({
           <div className="profile-block-modal">
             <h3>Complete Your Profile</h3>
             <p>
-              Please add your phone number, course, and year before accessing other pages.
+              Please add your phone number, course, and year before accessing
+              other pages.
             </p>
             <button
               className="btn-primary"

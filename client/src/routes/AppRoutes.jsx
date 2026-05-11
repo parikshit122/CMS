@@ -5,8 +5,14 @@ import Header from "../components/layout/Header";
 import Footer from "../components/layout/Footer";
 import Home from "../pages/Home";
 import Login from "../pages/auth/LoginRegistration";
+import ForgotPassword from "../pages/auth/ForgotPassword";
+import VerifyOtp from "../pages/auth/VerifyOtp";
+import ResetPassword from "../pages/auth/ResetPassword";
 import NotFound from "../pages/NotFound";
 import ManageUsers from "../pages/admin/ManageUsers";
+import MyComplaints from "../pages/student/MyComplaints";
+import Notifications from "../pages/Notifications";
+import AdminSettings from "../pages/admin/AdminSettings";
 
 import DashboardLayout from "../layouts/DashboardLayout";
 import StudentDash from "../pages/student/StudentDash";
@@ -32,13 +38,17 @@ const adminMenuItems = [
   { label: "Dashboard", path: "/admin", icon: "bx bx-grid-alt" },
   { label: "Users", path: "/admin/users", icon: "bx bx-user" },
   { label: "Reports", path: "/admin/reports", icon: "bx bx-bar-chart-alt-2" },
+  { label: "Notifications", path: "/admin/notifications", icon: "bx bx-bell" },
   { label: "Settings", path: "/admin/settings", icon: "bx bx-cog" },
   { label: "Profile", path: "/profile", icon: "bx bx-user" },
 ];
-
 const staffMenuItems = [
   { label: "Dashboard", path: "/staff", icon: "bx bx-grid-alt" },
-  { label: "Assigned Complaints", path: "/staff/complaints", icon: "bx bx-task" },
+  {
+    label: "Assigned Complaints",
+    path: "/staff/complaints",
+    icon: "bx bx-task",
+  },
   { label: "Notifications", path: "/staff/notifications", icon: "bx bx-bell" },
   { label: "Profile", path: "/profile", icon: "bx bx-user" },
 ];
@@ -85,7 +95,6 @@ function AppRoutes() {
 
   return (
     <Routes>
-
       <Route
         path="/"
         element={
@@ -102,6 +111,9 @@ function AppRoutes() {
       />
 
       <Route path="/auth" element={<Login />} />
+      <Route path="/auth/forgot-password" element={<ForgotPassword />} />
+      <Route path="/auth/verify-otp" element={<VerifyOtp />} />
+      <Route path="/auth/reset-password" element={<ResetPassword />} />
 
       <Route
         path="/dashboard"
@@ -134,6 +146,21 @@ function AppRoutes() {
       />
 
       <Route
+        path="/complaints"
+        element={
+          <ProtectedRoute allowedRoles={["user"]}>
+            <DashboardLayout
+              menuItems={studentMenuItems}
+              userName={user?.name}
+              role={getDisplayRole(user?.role)}
+            >
+              <MyComplaints />
+            </DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
         path="/admin"
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
@@ -149,21 +176,6 @@ function AppRoutes() {
       />
 
       <Route
-        path="/admin/reports"
-        element={
-          <ProtectedRoute allowedRoles={["admin"]}>
-            <DashboardLayout
-              menuItems={adminMenuItems}
-              userName={user?.name}
-              role={getDisplayRole(user?.role)}
-            >
-              <AdminReports />
-            </DashboardLayout>
-          </ProtectedRoute>
-        }
-      />
-
-      <Route
         path="/admin/users"
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
@@ -173,6 +185,21 @@ function AppRoutes() {
               role={getDisplayRole(user?.role)}
             >
               <ManageUsers />
+            </DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/reports"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <DashboardLayout
+              menuItems={adminMenuItems}
+              userName={user?.name}
+              role={getDisplayRole(user?.role)}
+            >
+              <AdminReports />
             </DashboardLayout>
           </ProtectedRoute>
         }
@@ -209,6 +236,66 @@ function AppRoutes() {
       />
 
       <Route
+        path="/notifications"
+        element={
+          <ProtectedRoute allowedRoles={["user"]}>
+            <DashboardLayout
+              menuItems={studentMenuItems}
+              userName={user?.name}
+              role={getDisplayRole(user?.role)}
+            >
+              <Notifications />
+            </DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/notifications"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <DashboardLayout
+              menuItems={adminMenuItems}
+              userName={user?.name}
+              role={getDisplayRole(user?.role)}
+            >
+              <Notifications />
+            </DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/settings"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <DashboardLayout
+              menuItems={adminMenuItems}
+              userName={user?.name}
+              role={getDisplayRole(user?.role)}
+            >
+              <AdminSettings />
+            </DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/staff/notifications"
+        element={
+          <ProtectedRoute allowedRoles={["staff"]}>
+            <DashboardLayout
+              menuItems={staffMenuItems}
+              userName={user?.name}
+              role={getDisplayRole(user?.role)}
+            >
+              <Notifications />
+            </DashboardLayout>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
         path="/profile"
         element={
           <ProtectedRoute allowedRoles={["user", "staff", "admin"]}>
@@ -230,7 +317,6 @@ function AppRoutes() {
       />
 
       <Route path="*" element={<NotFound />} />
-
     </Routes>
   );
 }

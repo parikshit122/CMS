@@ -1,6 +1,12 @@
 const User = require("../models/User");
 const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 const admin = require("../config/firebaseadmin");
+const {
+  sendPasswordResetOTPEmail,
+  sendPasswordResetSuccessEmail,
+} = require("../services/email.service");
 
 const generateAccessToken = (userId) => {
   return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "15m" });
@@ -48,13 +54,7 @@ const register = async (req, res) => {
     if (email.endsWith("@staff.com")) role = "staff";
     if (email.endsWith("@admin.com")) role = "admin";
 
-    const userData = {
-      name,
-      email,
-      phone,
-      password,
-      role,
-    };
+    const userData = { name, email, phone, password, role };
 
     if (role === "user") {
       if (course) userData.course = course;
@@ -80,13 +80,14 @@ const register = async (req, res) => {
     });
   }
 };
+
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
     const user = await User.findOne({ email }).select("+password");
     if (!user) {
-      return res.status(401).json({
+      return res.status(404).json({
         success: false,
         message: "Invalid credentials",
       });
@@ -145,24 +146,13 @@ const socialLogin = async (req, res) => {
     const firebaseUser = await admin.auth().getUser(decoded.uid);
 
     const email = firebaseUser.email || `${decoded.uid}@social.local`;
-    const name = firebaseUser.displayName || decoded.name || "User";
 
-    let user = await User.findOne({ email });
+    const user = await User.findOne({ email });
 
     if (!user) {
-      let role = "user";
-      if (email.endsWith("@staff.com")) role = "staff";
-      if (email.endsWith("@admin.com")) role = "admin";
-
-      const randomPassword =
-        "Social@" + Math.random().toString(36).slice(2, 10) + "1A";
-
-      user = await User.create({
-        name,
-        email,
-        password: randomPassword,
-        avatar: firebaseUser.photoURL || "",
-        role,
+      return res.status(404).json({
+        success: false,
+        message: "User not registered. Please register first.",
       });
     }
 
@@ -203,10 +193,7 @@ const refreshTokenController = async (req, res) => {
     const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
     const accessToken = generateAccessToken(decoded.id);
 
-    res.json({
-      success: true,
-      accessToken,
-    });
+    res.json({ success: true, accessToken });
   } catch {
     res.status(401).json({ success: false });
   }
@@ -221,10 +208,227 @@ const getMe = async (req, res) => {
   }
 };
 
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required.",
+      });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "This email is not registered. Please register first.",
+      });
+    }
+
+    if (user.suspendedUntil && user.suspendedUntil > new Date()) {
+      return res.status(403).json({
+        success: false,
+        message: "Your account is suspended. Contact admin.",
+      });
+    }
+
+    const otp = String(Math.floor(100000 + crypto.randomInt(900000)));
+    const hashedOTP = await bcrypt.hash(otp, 10);
+    const expiry = new Date(Date.now() + 10 * 60 * 1000);
+
+    user.passwordResetOTP = hashedOTP;
+    user.passwordResetOTPExpiry = expiry;
+    user.passwordResetToken = null;
+    user.passwordResetTokenExpiry = null;
+    await user.save();
+
+    await sendPasswordResetOTPEmail(user, otp);
+
+    return res.status(200).json({
+      success: true,
+      message: "If this email is registered, an OTP has been sent.",
+    });
+  } catch (err) {
+    console.log("FORGOT PASSWORD ERROR:", err.message);
+    res.status(500).json({
+      success: false,
+      message: "Server error. Try again.",
+      error: err.message,
+    });
+  }
+};
+
+const verifyOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and OTP are required.",
+      });
+    }
+
+    if (!/^\d{6}$/.test(otp)) {
+      return res.status(400).json({
+        success: false,
+        message: "OTP must be exactly 6 digits.",
+      });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "This email is not registered. Please register first.",
+      });
+    }
+
+    if (user.passwordResetOTPExpiry < new Date()) {
+      user.passwordResetOTP = null;
+      user.passwordResetOTPExpiry = null;
+      await user.save();
+
+      return res.status(400).json({
+        success: false,
+        message: "OTP has expired. Please request a new one.",
+      });
+    }
+
+    const isMatch = await bcrypt.compare(otp, user.passwordResetOTP);
+
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP. Please check and try again.",
+      });
+    }
+
+    const rawToken = crypto.randomBytes(32).toString("hex");
+    const hashedToken = await bcrypt.hash(rawToken, 10);
+    const tokenExpiry = new Date(Date.now() + 10 * 60 * 1000);
+
+    user.passwordResetOTP = null;
+    user.passwordResetOTPExpiry = null;
+    user.passwordResetToken = hashedToken;
+    user.passwordResetTokenExpiry = tokenExpiry;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "OTP verified successfully.",
+      resetToken: rawToken,
+      email: user.email,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: "Server error. Try again.",
+      error: err.message,
+    });
+  }
+};
+
+const resetPassword = async (req, res) => {
+  try {
+    const { email, resetToken, newPassword, confirmPassword } = req.body;
+
+    if (!email || !resetToken || !newPassword || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields are required.",
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Passwords do not match.",
+      });
+    }
+
+    const strongPassword =
+      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+
+    if (!strongPassword.test(newPassword)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Password must be at least 8 characters and include uppercase, lowercase, number, and special character (@$!%*?&).",
+      });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+
+    if (!user || !user.passwordResetToken || !user.passwordResetTokenExpiry) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired reset session. Start over.",
+      });
+    }
+
+    if (user.passwordResetTokenExpiry < new Date()) {
+      user.passwordResetToken = null;
+      user.passwordResetTokenExpiry = null;
+      await user.save();
+
+      return res.status(400).json({
+        success: false,
+        message: "Reset session expired. Request a new OTP.",
+      });
+    }
+
+    const isTokenValid = await bcrypt.compare(
+      resetToken,
+      user.passwordResetToken,
+    );
+
+    if (!isTokenValid) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid reset token. Start the process again.",
+      });
+    }
+
+    const isSamePassword = await bcrypt.compare(newPassword, user.password);
+    if (isSamePassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password cannot be the same as your current password.",
+      });
+    }
+
+    user.password = newPassword;
+    user.passwordResetToken = null;
+    user.passwordResetTokenExpiry = null;
+    await user.save();
+
+    await sendPasswordResetSuccessEmail(user);
+
+    return res.status(200).json({
+      success: true,
+      message: "Password reset successful. You can now log in.",
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: "Server error. Try again.",
+      error: err.message,
+    });
+  }
+};
+
 module.exports = {
   register,
   login,
   socialLogin,
   refreshToken: refreshTokenController,
   getMe,
+  forgotPassword,
+  verifyOTP,
+  resetPassword,
 };

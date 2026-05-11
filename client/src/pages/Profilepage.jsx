@@ -16,23 +16,29 @@ const Profile = () => {
   const [popupClosed, setPopupClosed] = useState(false);
 
   useEffect(() => {
-    const storedUser = JSON.parse(sessionStorage.getItem("user"));
-    if (storedUser) {
-      const profileData = {
-        firstName: storedUser.name?.split(" ")[0] || "",
-        lastName: storedUser.name?.split(" ")[1] || "",
-        email: storedUser.email,
-        phone: storedUser.phone || "",
-        course: storedUser.course || "",
-        year: storedUser.year || "",
-        bio: storedUser.bio || "",
-        avatar: storedUser.avatar || null,
-        avatarFile: null,
-      };
-      setUser(storedUser);
-      setFormData(profileData);
-      setOriginalData(profileData);
-    }
+    const loadUser = () => {
+      const storedUser = JSON.parse(sessionStorage.getItem("user"));
+      if (storedUser) {
+        const profileData = {
+          firstName: storedUser.name?.split(" ")[0] || "",
+          lastName: storedUser.name?.split(" ")[1] || "",
+          email: storedUser.email,
+          phone: storedUser.phone || "",
+          course: storedUser.course || "",
+          year: storedUser.year || "",
+          bio: storedUser.bio || "",
+          avatar: storedUser.avatar || null,
+          avatarFile: null,
+        };
+        setUser(storedUser);
+        setFormData(profileData);
+        setOriginalData(profileData);
+      }
+    };
+
+    loadUser();
+    window.addEventListener("user-updated", loadUser);
+    return () => window.removeEventListener("user-updated", loadUser);
   }, []);
 
   useEffect(() => {

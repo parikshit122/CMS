@@ -1,5 +1,12 @@
 const Complaint = require("../models/Complaint");
 const User = require("../models/User");
+const {
+  notifyComplaintSubmitted,
+  notifyComplaintAssigned,
+  notifyComplaintResolved,
+  notifyComplaintRejected,
+  notifyComplaintInProgress,
+} = require("../services/notification.service");
 
 const submitComplaint = async (req, res) => {
   try {
@@ -13,6 +20,9 @@ const submitComplaint = async (req, res) => {
       location,
       student: req.user.id,
     });
+
+    const student = await User.findById(req.user.id);
+    await notifyComplaintSubmitted(complaint, student);
 
     res.status(201).json({ success: true, data: complaint });
   } catch (err) {
@@ -52,6 +62,7 @@ const getAssignedComplaints = async (req, res) => {
       studentEmail: c.student?.email || "",
       createdAt: c.createdAt,
     }));
+
     res.json({ success: true, data: formatted });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -79,15 +90,17 @@ const updateComplaintStatus = async (req, res) => {
     const complaint = await Complaint.findById(id);
 
     if (!complaint) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Complaint not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Complaint not found",
+      });
     }
 
     if (complaint.assignedTo.toString() !== req.user.id) {
-      return res
-        .status(403)
-        .json({ success: false, message: "Not authorized" });
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized",
+      });
     }
 
     const locked = ["resolved", "rejected"];
@@ -112,10 +125,20 @@ const updateComplaintStatus = async (req, res) => {
 
     await complaint.save();
 
-    const updated = await Complaint.findById(id).populate(
-      "student",
-      "name email",
-    );
+    const updated = await Complaint.findById(id)
+      .populate("student", "name email")
+      .populate("assignedTo", "name email");
+
+    const staff = await User.findById(req.user.id);
+    const student = updated.student;
+
+    if (status === "resolved") {
+      await notifyComplaintResolved(updated, student, staff);
+    } else if (status === "rejected") {
+      await notifyComplaintRejected(updated, student, staff);
+    } else if (status === "in-progress") {
+      await notifyComplaintInProgress(updated, student, staff);
+    }
 
     const formatted = {
       _id: updated._id,
@@ -145,9 +168,10 @@ const assignComplaint = async (req, res) => {
 
     const staff = await User.findById(staffId);
     if (!staff || staff.role !== "staff") {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid staff member" });
+      return res.status(400).json({
+        success: false,
+        message: "Invalid staff member",
+      });
     }
 
     const complaint = await Complaint.findByIdAndUpdate(
@@ -159,10 +183,13 @@ const assignComplaint = async (req, res) => {
       .populate("assignedTo", "name email");
 
     if (!complaint) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Complaint not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Complaint not found",
+      });
     }
+
+    await notifyComplaintAssigned(complaint, complaint.student, staff);
 
     res.json({ success: true, data: complaint });
   } catch (err) {
@@ -178,10 +205,7 @@ const getStaffStats = async (req, res) => {
       await Promise.all([
         Complaint.countDocuments({ assignedTo: staffId }),
         Complaint.countDocuments({ assignedTo: staffId, status: "pending" }),
-        Complaint.countDocuments({
-          assignedTo: staffId,
-          status: "in-progress",
-        }),
+        Complaint.countDocuments({ assignedTo: staffId, status: "in-progress" }),
         Complaint.countDocuments({ assignedTo: staffId, status: "resolved" }),
         Complaint.countDocuments({ assignedTo: staffId, status: "rejected" }),
       ]);
@@ -216,7 +240,6 @@ const getStaffStats = async (req, res) => {
         assignedTo: staffId,
         createdAt: { $gte: startPrevWeek, $lte: endPrevWeek },
       }),
-
       Complaint.countDocuments({
         assignedTo: staffId,
         status: "pending",
@@ -227,7 +250,6 @@ const getStaffStats = async (req, res) => {
         status: "pending",
         createdAt: { $gte: startPrevWeek, $lte: endPrevWeek },
       }),
-
       Complaint.countDocuments({
         assignedTo: staffId,
         status: "in-progress",
@@ -238,7 +260,6 @@ const getStaffStats = async (req, res) => {
         status: "in-progress",
         updatedAt: { $gte: startPrevWeek, $lte: endPrevWeek },
       }),
-
       Complaint.countDocuments({
         assignedTo: staffId,
         status: "resolved",
@@ -249,7 +270,6 @@ const getStaffStats = async (req, res) => {
         status: "resolved",
         updatedAt: { $gte: startPrevWeek, $lte: endPrevWeek },
       }),
-
       Complaint.countDocuments({
         assignedTo: staffId,
         status: "rejected",
@@ -306,15 +326,9 @@ const getStaffStats = async (req, res) => {
         weeklyTrend,
         statusBreakdown,
         trendMeta: {
-          totalAssigned: {
-            current: assignedThisWeek,
-            previous: assignedPrevWeek,
-          },
+          totalAssigned: { current: assignedThisWeek, previous: assignedPrevWeek },
           pending: { current: pendingThisWeek, previous: pendingPrevWeek },
-          inProgress: {
-            current: inProgressThisWeek,
-            previous: inProgressPrevWeek,
-          },
+          inProgress: { current: inProgressThisWeek, previous: inProgressPrevWeek },
           resolved: { current: resolvedThisWeek, previous: resolvedPrevWeek },
           rejected: { current: rejectedThisWeek, previous: rejectedPrevWeek },
         },
@@ -334,13 +348,12 @@ const getAdminStats = async (req, res) => {
     startThisWeek.setHours(0, 0, 0, 0);
 
     const endPrevWeek = new Date(startThisWeek.getTime() - 1);
-
     const startPrevWeek = new Date(startThisWeek);
     startPrevWeek.setDate(startPrevWeek.getDate() - 7);
     startPrevWeek.setHours(0, 0, 0, 0);
 
     const [
-      totalComplaints, // <--- Replaces 'total'
+      totalComplaints,
       pending,
       resolved,
       inProgress,
@@ -355,37 +368,14 @@ const getAdminStats = async (req, res) => {
       Complaint.countDocuments({ status: "pending" }),
       Complaint.countDocuments({ status: "resolved" }),
       Complaint.countDocuments({ status: "in-progress" }),
-
-      Complaint.countDocuments({
-        createdAt: { $gte: startThisWeek, $lte: now },
-      }),
-
-      Complaint.countDocuments({
-        createdAt: { $gte: startPrevWeek, $lte: endPrevWeek },
-      }),
-
-      Complaint.countDocuments({
-        status: "pending",
-        createdAt: { $gte: startThisWeek, $lte: now },
-      }),
-
-      Complaint.countDocuments({
-        status: "pending",
-        createdAt: { $gte: startPrevWeek, $lte: endPrevWeek },
-      }),
-
-      Complaint.countDocuments({
-        status: "resolved",
-        updatedAt: { $gte: startThisWeek, $lte: now },
-      }),
-
-      Complaint.countDocuments({
-        status: "resolved",
-        updatedAt: { $gte: startPrevWeek, $lte: endPrevWeek },
-      }),
+      Complaint.countDocuments({ createdAt: { $gte: startThisWeek, $lte: now } }),
+      Complaint.countDocuments({ createdAt: { $gte: startPrevWeek, $lte: endPrevWeek } }),
+      Complaint.countDocuments({ status: "pending", createdAt: { $gte: startThisWeek, $lte: now } }),
+      Complaint.countDocuments({ status: "pending", createdAt: { $gte: startPrevWeek, $lte: endPrevWeek } }),
+      Complaint.countDocuments({ status: "resolved", updatedAt: { $gte: startThisWeek, $lte: now } }),
+      Complaint.countDocuments({ status: "resolved", updatedAt: { $gte: startPrevWeek, $lte: endPrevWeek } }),
     ]);
 
-    // Average Response Time calculation
     const avgResponseResult = await Complaint.aggregate([
       {
         $match: {
@@ -394,19 +384,14 @@ const getAdminStats = async (req, res) => {
           updatedAt: { $exists: true },
         },
       },
-      {
-        $project: { responseTime: { $subtract: ["$updatedAt", "$createdAt"] } },
-      },
+      { $project: { responseTime: { $subtract: ["$updatedAt", "$createdAt"] } } },
       { $group: { _id: null, avgResponseTime: { $avg: "$responseTime" } } },
     ]);
 
     const avgResponseTime = avgResponseResult[0]?.avgResponseTime
-      ? Number(
-          (avgResponseResult[0].avgResponseTime / (1000 * 60 * 60)).toFixed(1),
-        )
+      ? Number((avgResponseResult[0].avgResponseTime / (1000 * 60 * 60)).toFixed(1))
       : 0;
 
-    // Charts Data (Weekly & Monthly)
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
     const weeklyData = await Promise.all(
@@ -418,17 +403,10 @@ const getAdminStats = async (req, res) => {
 
         const [submitted, resolvedCount] = await Promise.all([
           Complaint.countDocuments({ createdAt: { $gte: start, $lte: end } }),
-          Complaint.countDocuments({
-            status: "resolved",
-            updatedAt: { $gte: start, $lte: end },
-          }),
+          Complaint.countDocuments({ status: "resolved", updatedAt: { $gte: start, $lte: end } }),
         ]);
 
-        return {
-          day: days[start.getDay()],
-          submitted,
-          resolved: resolvedCount,
-        };
+        return { day: days[start.getDay()], submitted, resolved: resolvedCount };
       }),
     );
 
@@ -436,15 +414,7 @@ const getAdminStats = async (req, res) => {
       Array.from({ length: 6 }).map(async (_, i) => {
         const date = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
         const start = new Date(date.getFullYear(), date.getMonth(), 1);
-        const end = new Date(
-          date.getFullYear(),
-          date.getMonth() + 1,
-          0,
-          23,
-          59,
-          59,
-          999,
-        );
+        const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
 
         const value = await Complaint.countDocuments({
           createdAt: { $gte: start, $lte: end },
@@ -457,7 +427,6 @@ const getAdminStats = async (req, res) => {
       }),
     );
 
-    // Category Breakdown
     const categoryResult = await Complaint.aggregate([
       { $group: { _id: "$category", value: { $sum: 1 } } },
       { $sort: { value: -1 } },
@@ -491,10 +460,7 @@ const getAdminStats = async (req, res) => {
         monthlyData,
         categoryBreakdown,
         trendMeta: {
-          totalComplaints: {
-            current: submittedThisWeek,
-            previous: submittedPrevWeek,
-          },
+          totalComplaints: { current: submittedThisWeek, previous: submittedPrevWeek },
           pending: { current: pendingThisWeek, previous: pendingPrevWeek },
           resolved: { current: resolvedThisWeek, previous: resolvedPrevWeek },
         },

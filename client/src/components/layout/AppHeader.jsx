@@ -1,8 +1,13 @@
 import { useNavigate } from "react-router-dom";
+import { useDispatch } from "react-redux";
+import { resetNotifications } from "../../redux/notificationSlice";
+import NotificationBell from "../notification/NotificationBell";
 import "../../styles/AdminDashboard.css";
+import "boxicons/css/boxicons.min.css";
 
 const AppHeader = ({ userName, role }) => {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
 
   const handleProfileClick = () => {
     navigate("/profile");
@@ -27,9 +32,8 @@ const AppHeader = ({ userName, role }) => {
           className="header-search"
         />
 
-        <i className="bx bx-bell header-icon"></i>
+        <NotificationBell />
 
-        {/* ✅ PROFILE CLICKABLE */}
         <div
           className="header-user clickable"
           onClick={handleProfileClick}

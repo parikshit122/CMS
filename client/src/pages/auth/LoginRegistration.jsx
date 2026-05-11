@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import Button from "../../components/common/Button";
 import { useAlert } from "../../components/common/Alert";
 import { loginUser, registerUser } from "../../services/authService";
@@ -24,7 +24,6 @@ const getRoleRedirect = (role) => {
   return "/dashboard";
 };
 
-// ── Moved outside component — no re-creation on render ──────
 const SOCIAL_PROVIDERS = ["google", "github", "twitter", "facebook"];
 
 const PROVIDER_LABELS = {
@@ -38,7 +37,10 @@ function Login() {
   const [isActive, setIsActive] = useState(false);
   const [loginData, setLoginData] = useState({ email: "", password: "" });
   const [registerData, setRegisterData] = useState({
-    name: "", email: "", phone: "", password: "",
+    name: "",
+    email: "",
+    phone: "",
+    password: "",
   });
   const [loading, setLoading] = useState(false);
   const [suspensionData, setSuspensionData] = useState(null);
@@ -124,13 +126,18 @@ function Login() {
       }
     } catch (err) {
       const isSuspended = checkSuspension(err.response, loginData.email);
-      if (!isSuspended) {
-        alert.error(
-          err.response?.data?.message ||
-          err.response?.data?.errors?.[0] ||
-          "Login failed"
-        );
+      if (isSuspended) return;
+
+      if (err.response?.status === 404) {
+        alert.error("User not registered. Please register first.");
+        return;
       }
+
+      alert.error(
+        err.response?.data?.message ||
+          err.response?.data?.errors?.[0] ||
+          "Login failed",
+      );
     } finally {
       setLoading(false);
     }
@@ -152,15 +159,14 @@ function Login() {
     } catch (err) {
       alert.error(
         err.response?.data?.message ||
-        err.response?.data?.errors?.[0] ||
-        "Registration failed"
+          err.response?.data?.errors?.[0] ||
+          "Registration failed",
       );
     } finally {
       setLoading(false);
     }
   };
 
-  // ── Social Buttons (now a stable component outside Login) ──
   const SocialButtons = ({ formId }) => (
     <div className="social-icons" role="group" aria-label="Social login options">
       {SOCIAL_PROVIDERS.map((provider) => (
@@ -193,7 +199,6 @@ function Login() {
         className={`logincontainer ${isActive ? "active" : ""}`}
         aria-live="polite"
       >
-        {/* ── Login Form ──────────────────────────────────── */}
         <div
           className="form-box login"
           role="region"
@@ -240,14 +245,12 @@ function Login() {
             </div>
 
             <div className="forgot-link">
-              {/* Changed from <a href="#"> to a proper button */}
-              <button
-                type="button"
+              <Link
+                to="/auth/forgot-password"
                 className="forgot-btn"
-                onClick={() => alert.info("Password reset coming soon!")}
               >
                 Forgot password?
-              </button>
+              </Link>
             </div>
 
             <Button
@@ -264,7 +267,6 @@ function Login() {
           </form>
         </div>
 
-        {/* ── Register Form ────────────────────────────────── */}
         <div
           className="form-box register"
           role="region"
@@ -365,7 +367,6 @@ function Login() {
           </form>
         </div>
 
-        {/* ── Toggle Panel ──────────────────────────────────── */}
         <div className="toggle-box" aria-hidden="true">
           <div className="toggle-panel toggle-left">
             <h1>Hello, Welcome!</h1>

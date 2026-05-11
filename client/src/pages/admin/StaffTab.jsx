@@ -1,8 +1,26 @@
 import React, { useState, useMemo } from "react";
+import API from "../../services/api";
+import { useAlert } from "../../components/common/Alert";
+
+const CATEGORIES = [
+  "infrastructure",
+  "cleanliness",
+  "electrical",
+  "plumbing",
+  "safety",
+  "it",
+  "academic",
+  "other",
+];
 
 const StaffTab = ({ staff, loading, onDelete, onRefresh }) => {
+  const alert = useAlert();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+
+  const [editTarget, setEditTarget] = useState(null);
+  const [form, setForm] = useState({ name: "", phone: "", category: "" });
+  const [saving, setSaving] = useState(false);
 
   const categories = useMemo(() => {
     const set = new Set(staff.map((s) => s.category).filter(Boolean));
@@ -22,6 +40,41 @@ const StaffTab = ({ staff, loading, onDelete, onRefresh }) => {
       return matchesSearch && matchesCategory;
     });
   }, [staff, search, categoryFilter]);
+
+  const openEdit = (s) => {
+    setEditTarget(s);
+    setForm({
+      name: s.name || "",
+      phone: s.phone || "",
+      category: s.category || "",
+    });
+  };
+
+  const handleUpdate = async () => {
+    if (!form.name.trim() || !form.phone.trim() || !form.category) {
+      alert.error("All fields required");
+      return;
+    }
+
+    if (!/^[0-9]{10}$/.test(form.phone)) {
+      alert.error("Phone must be 10 digits");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await API.patch(`/admin/users/staff/${editTarget._id}`, form);
+      if (res.data.success) {
+        alert.success("Staff updated successfully");
+        setEditTarget(null);
+        onRefresh();
+      }
+    } catch (err) {
+      alert.error(err.response?.data?.message || "Update failed");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="users-table-card">
@@ -63,6 +116,7 @@ const StaffTab = ({ staff, loading, onDelete, onRefresh }) => {
               <tr>
                 <th>Staff</th>
                 <th>Email</th>
+                <th>Phone</th>
                 <th>Category</th>
                 <th>Assigned</th>
                 <th>Resolved</th>
@@ -87,6 +141,7 @@ const StaffTab = ({ staff, loading, onDelete, onRefresh }) => {
                     </div>
                   </td>
                   <td className="users-cell-email">{s.email}</td>
+                  <td>{s.phone || "—"}</td>
                   <td>
                     <span className="users-category-badge">
                       {s.category || "Not set"}
@@ -110,6 +165,14 @@ const StaffTab = ({ staff, loading, onDelete, onRefresh }) => {
                   <td>
                     <div className="users-actions">
                       <button
+                        className="users-action-btn users-action-btn--green"
+                        onClick={() => openEdit(s)}
+                        title="Edit"
+                      >
+                        <i className="bx bx-edit"></i>
+                        Edit
+                      </button>
+                      <button
                         className="users-action-btn users-action-btn--red"
                         onClick={() => onDelete(s)}
                         title="Delete"
@@ -124,7 +187,7 @@ const StaffTab = ({ staff, loading, onDelete, onRefresh }) => {
 
               {!filtered.length && (
                 <tr>
-                  <td colSpan={7} className="users-table-empty">
+                  <td colSpan={8} className="users-table-empty">
                     <i className="bx bx-user-x"></i>
                     <p>No staff found. Click "Add Staff" to create one.</p>
                   </td>
@@ -134,6 +197,84 @@ const StaffTab = ({ staff, loading, onDelete, onRefresh }) => {
           </table>
         )}
       </div>
+
+      {editTarget && (
+        <div className="modal-overlay" onClick={() => setEditTarget(null)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>
+                <i className="bx bx-edit"></i>
+                Edit Staff
+              </h3>
+              <button
+                className="modal-close"
+                onClick={() => setEditTarget(null)}
+              >
+                <i className="bx bx-x"></i>
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <div className="form-row">
+                <label>Full Name</label>
+                <input
+                  value={form.name}
+                  onChange={(e) =>
+                    setForm({ ...form, name: e.target.value })
+                  }
+                />
+              </div>
+
+              <div className="form-row">
+                <label>Phone (10 digits)</label>
+                <input
+                  value={form.phone}
+                  maxLength={10}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      phone: e.target.value.replace(/\D/g, ""),
+                    })
+                  }
+                />
+              </div>
+
+              <div className="form-row">
+                <label>Specialization Category</label>
+                <select
+                  value={form.category}
+                  onChange={(e) =>
+                    setForm({ ...form, category: e.target.value })
+                  }
+                >
+                  <option value="">Select Category</option>
+                  {CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c.charAt(0).toUpperCase() + c.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="modal-footer">
+                <button
+                  className="users-btn users-btn--outline"
+                  onClick={() => setEditTarget(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="users-btn users-btn--primary"
+                  onClick={handleUpdate}
+                  disabled={saving}
+                >
+                  {saving ? "Saving..." : "Update Staff"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

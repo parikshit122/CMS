@@ -1,6 +1,10 @@
 const User = require("../models/User");
 const Complaint = require("../models/Complaint");
 const { sendStaffWelcomeEmail } = require("../services/email.service");
+const {
+  notifyComplaintAssigned,
+  notifyComplaintReassigned,
+} = require("../services/notification.service");
 
 const generatePassword = () => {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
@@ -22,12 +26,8 @@ const getAllStudents = async (req, res) => {
 
     const enriched = await Promise.all(
       students.map(async (s) => {
-        const totalComplaints = await Complaint.countDocuments({
-          student: s._id,
-        });
-
-        const isSuspended =
-          s.suspendedUntil && new Date(s.suspendedUntil) > new Date();
+        const totalComplaints = await Complaint.countDocuments({ student: s._id });
+        const isSuspended = s.suspendedUntil && new Date(s.suspendedUntil) > new Date();
 
         return {
           _id: s._id,
@@ -70,11 +70,7 @@ const getAllStaff = async (req, res) => {
           Complaint.countDocuments({ assignedTo: s._id, status: "resolved" }),
         ]);
 
-        return {
-          ...s,
-          assignedCount: assigned,
-          resolvedCount: resolved,
-        };
+        return { ...s, assignedCount: assigned, resolvedCount: resolved };
       }),
     );
 
@@ -176,10 +172,7 @@ const deleteStaff = async (req, res) => {
 
     await User.findByIdAndDelete(id);
 
-    res.json({
-      success: true,
-      message: "Staff deleted successfully",
-    });
+    res.json({ success: true, message: "Staff deleted successfully" });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -222,10 +215,7 @@ const suspendStudent = async (req, res) => {
     res.json({
       success: true,
       message: `Student suspended for ${days} day(s)`,
-      data: {
-        suspendedUntil,
-        reason,
-      },
+      data: { suspendedUntil, reason },
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -249,10 +239,7 @@ const reactivateStudent = async (req, res) => {
     student.isActive = true;
     await student.save();
 
-    res.json({
-      success: true,
-      message: "Student reactivated successfully",
-    });
+    res.json({ success: true, message: "Student reactivated successfully" });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -262,10 +249,7 @@ const getStaffByCategory = async (req, res) => {
   try {
     const { category } = req.params;
 
-    const staff = await User.find({
-      role: "staff",
-      category,
-    })
+    const staff = await User.find({ role: "staff", category })
       .select("name email category")
       .lean();
 
@@ -290,7 +274,7 @@ const assignStaffToComplaint = async (req, res) => {
     const { id } = req.params;
     const { staffId } = req.body;
 
-    const complaint = await Complaint.findById(id);
+    const complaint = await Complaint.findById(id).populate("student", "name email");
     if (!complaint) {
       return res.status(404).json({
         success: false,
@@ -298,13 +282,21 @@ const assignStaffToComplaint = async (req, res) => {
       });
     }
 
-    const staff = await User.findById(staffId);
-    if (!staff || staff.role !== "staff") {
+    const newStaff = await User.findById(staffId);
+    if (!newStaff || newStaff.role !== "staff") {
       return res.status(400).json({
         success: false,
         message: "Invalid staff member",
       });
     }
+
+    const oldStaffId = complaint.assignedTo;
+    const oldStaff = oldStaffId
+      ? await User.findById(oldStaffId)
+      : null;
+
+    const isReassignment = oldStaffId &&
+      oldStaffId.toString() !== staffId.toString();
 
     complaint.assignedTo = staffId;
     if (complaint.status === "pending") {
@@ -316,6 +308,12 @@ const assignStaffToComplaint = async (req, res) => {
       .populate("student", "name email")
       .populate("assignedTo", "name email category");
 
+    if (isReassignment) {
+      await notifyComplaintReassigned(complaint, oldStaff, newStaff);
+    } else {
+      await notifyComplaintAssigned(complaint, complaint.student, newStaff);
+    }
+
     res.json({
       success: true,
       message: "Staff assigned successfully",
@@ -326,10 +324,53 @@ const assignStaffToComplaint = async (req, res) => {
   }
 };
 
+const updateStaff = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, phone, category } = req.body;
+
+    const staff = await User.findById(id);
+    if (!staff || staff.role !== "staff") {
+      return res.status(404).json({
+        success: false,
+        message: "Staff not found",
+      });
+    }
+
+    if (phone && !/^[0-9]{10}$/.test(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: "Phone number must be 10 digits",
+      });
+    }
+
+    if (name) staff.name = name;
+    if (phone) staff.phone = phone;
+    if (category) staff.category = category;
+
+    await staff.save();
+
+    res.json({
+      success: true,
+      message: "Staff updated successfully",
+      data: {
+        id: staff._id,
+        name: staff.name,
+        email: staff.email,
+        phone: staff.phone,
+        category: staff.category,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 module.exports = {
   getAllStudents,
   getAllStaff,
   addStaff,
+  updateStaff,
   deleteStaff,
   suspendStudent,
   reactivateStudent,

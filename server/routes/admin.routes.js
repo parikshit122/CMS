@@ -5,6 +5,7 @@ const {
   getAllStudents,
   getAllStaff,
   addStaff,
+  updateStaff,
   deleteStaff,
   suspendStudent,
   reactivateStudent,
@@ -24,7 +25,9 @@ const adminOnly = (req, res, next) => {
 
 router.get("/users/students", protect, adminOnly, getAllStudents);
 router.get("/users/staff", protect, adminOnly, getAllStaff);
+
 router.post("/users/staff", protect, adminOnly, addStaff);
+router.patch("/users/staff/:id", protect, adminOnly, updateStaff);
 router.delete("/users/staff/:id", protect, adminOnly, deleteStaff);
 
 router.patch("/users/students/:id/suspend", protect, adminOnly, suspendStudent);
@@ -32,20 +35,21 @@ router.patch(
   "/users/students/:id/reactivate",
   protect,
   adminOnly,
-  reactivateStudent,
+  reactivateStudent
 );
 
 router.get(
   "/staff/by-category/:category",
   protect,
   adminOnly,
-  getStaffByCategory,
+  getStaffByCategory
 );
+
 router.patch(
   "/complaints/:id/assign",
   protect,
   adminOnly,
-  assignStaffToComplaint,
+  assignStaffToComplaint
 );
 
 module.exports = router;

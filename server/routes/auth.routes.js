@@ -7,6 +7,9 @@ const {
   refreshToken,
   getMe,
   socialLogin,
+  forgotPassword,
+  verifyOTP,
+  resetPassword,
 } = require("../controllers/auth.controller");
 const { protect } = require("../middlewares/auth.middleware");
 const User = require("../models/User");
@@ -55,6 +58,12 @@ router.get("/me", protect, getMe);
 
 router.post("/social-login", socialLogin);
 
+router.post("/forgot-password", forgotPassword);
+
+router.post("/verify-otp", verifyOTP);
+
+router.post("/reset-password", resetPassword);
+
 router.patch("/profile", protect, async (req, res) => {
   try {
     const { name, phone, course, year } = req.body;
@@ -75,15 +84,9 @@ router.patch("/profile", protect, async (req, res) => {
 
     await user.save();
 
-    res.json({
-      success: true,
-      data: user,
-    });
+    res.json({ success: true, data: user });
   } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: err.message,
-    });
+    res.status(500).json({ success: false, message: err.message });
   }
 });
 
