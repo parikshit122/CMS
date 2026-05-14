@@ -63,7 +63,7 @@ const register = async (req, res) => {
 
     const user = await User.create(userData);
 
-    const accessToken = generateAccessToken(user._id);
+    const accessToken  = generateAccessToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
 
     res.status(201).json({
@@ -120,7 +120,7 @@ const login = async (req, res) => {
       });
     }
 
-    const accessToken = generateAccessToken(user._id);
+    const accessToken  = generateAccessToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
 
     res.json({
@@ -140,19 +140,82 @@ const login = async (req, res) => {
 
 const socialLogin = async (req, res) => {
   try {
-    const { idToken } = req.body;
+    const {
+      idToken,
+      email:    clientEmail,
+      name:     clientName,
+      avatar:   clientAvatar,
+      provider: clientProvider,
+    } = req.body;
 
-    const decoded = await admin.auth().verifyIdToken(idToken);
-    const firebaseUser = await admin.auth().getUser(decoded.uid);
+    if (!idToken) {
+      return res.status(400).json({
+        success: false,
+        message: "ID token is required.",
+      });
+    }
 
-    const email = firebaseUser.email || `${decoded.uid}@social.local`;
+    let decoded;
+    try {
+      decoded = await admin.auth().verifyIdToken(idToken);
+    } catch {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid or expired token. Please try again.",
+      });
+    }
 
-    const user = await User.findOne({ email });
+    const email = decoded.email || clientEmail || "";
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "No email found from social provider. Please use another login method.",
+      });
+    }
+
+    const name =
+      decoded.name ||
+      clientName    ||
+      email.split("@")[0];
+
+    const avatar =
+      decoded.picture ||
+      clientAvatar    ||
+      "";
+
+    const rawProvider =
+      clientProvider                  ||
+      decoded.firebase?.sign_in_provider ||
+      "google";
+
+    const providerMap = {
+      "google.com":   "google",
+      "github.com":   "github",
+      "facebook.com": "facebook",
+      "twitter.com":  "twitter",
+      "google":       "google",
+      "github":       "github",
+      "facebook":     "facebook",
+      "twitter":      "twitter",
+    };
+
+    const provider = providerMap[rawProvider] || "google";
+
+    let user = await User.findOne({ email });
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not registered. Please register first.",
+      let role = "user";
+      if (email.endsWith("@staff.com")) role = "staff";
+      if (email.endsWith("@admin.com")) role = "admin";
+
+      user = await User.create({
+        name,
+        email,
+        password: crypto.randomBytes(32).toString("hex"),
+        role,
+        provider,
+        avatar,
       });
     }
 
@@ -168,17 +231,28 @@ const socialLogin = async (req, res) => {
       });
     }
 
-    const accessToken = generateAccessToken(user._id);
+    if (user.isActive === false) {
+      return res.status(403).json({
+        success: false,
+        message: "Account is deactivated. Contact admin.",
+      });
+    }
+
+    const accessToken  = generateAccessToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
 
-    res.json({
+    return res.json({
       success: true,
       accessToken,
       refreshToken,
       user: buildUserResponse(user),
     });
-  } catch {
-    res.status(500).json({ success: false });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: "Social login failed.",
+      error: err.message,
+    });
   }
 };
 
@@ -190,7 +264,7 @@ const refreshTokenController = async (req, res) => {
       return res.status(401).json({ success: false });
     }
 
-    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+    const decoded     = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
     const accessToken = generateAccessToken(decoded.id);
 
     res.json({ success: true, accessToken });
@@ -235,13 +309,13 @@ const forgotPassword = async (req, res) => {
       });
     }
 
-    const otp = String(Math.floor(100000 + crypto.randomInt(900000)));
+    const otp       = String(Math.floor(100000 + crypto.randomInt(900000)));
     const hashedOTP = await bcrypt.hash(otp, 10);
-    const expiry = new Date(Date.now() + 10 * 60 * 1000);
+    const expiry    = new Date(Date.now() + 10 * 60 * 1000);
 
-    user.passwordResetOTP = hashedOTP;
-    user.passwordResetOTPExpiry = expiry;
-    user.passwordResetToken = null;
+    user.passwordResetOTP        = hashedOTP;
+    user.passwordResetOTPExpiry  = expiry;
+    user.passwordResetToken      = null;
     user.passwordResetTokenExpiry = null;
     await user.save();
 
@@ -252,7 +326,6 @@ const forgotPassword = async (req, res) => {
       message: "If this email is registered, an OTP has been sent.",
     });
   } catch (err) {
-    console.log("FORGOT PASSWORD ERROR:", err.message);
     res.status(500).json({
       success: false,
       message: "Server error. Try again.",
@@ -289,7 +362,7 @@ const verifyOTP = async (req, res) => {
     }
 
     if (user.passwordResetOTPExpiry < new Date()) {
-      user.passwordResetOTP = null;
+      user.passwordResetOTP       = null;
       user.passwordResetOTPExpiry = null;
       await user.save();
 
@@ -308,14 +381,14 @@ const verifyOTP = async (req, res) => {
       });
     }
 
-    const rawToken = crypto.randomBytes(32).toString("hex");
+    const rawToken    = crypto.randomBytes(32).toString("hex");
     const hashedToken = await bcrypt.hash(rawToken, 10);
     const tokenExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
-    user.passwordResetOTP = null;
-    user.passwordResetOTPExpiry = null;
-    user.passwordResetToken = hashedToken;
-    user.passwordResetTokenExpiry = tokenExpiry;
+    user.passwordResetOTP          = null;
+    user.passwordResetOTPExpiry    = null;
+    user.passwordResetToken        = hashedToken;
+    user.passwordResetTokenExpiry  = tokenExpiry;
     await user.save();
 
     return res.status(200).json({
@@ -372,7 +445,7 @@ const resetPassword = async (req, res) => {
     }
 
     if (user.passwordResetTokenExpiry < new Date()) {
-      user.passwordResetToken = null;
+      user.passwordResetToken       = null;
       user.passwordResetTokenExpiry = null;
       await user.save();
 
@@ -382,10 +455,7 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    const isTokenValid = await bcrypt.compare(
-      resetToken,
-      user.passwordResetToken,
-    );
+    const isTokenValid = await bcrypt.compare(resetToken, user.passwordResetToken);
 
     if (!isTokenValid) {
       return res.status(400).json({
@@ -402,8 +472,8 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    user.password = newPassword;
-    user.passwordResetToken = null;
+    user.password                 = newPassword;
+    user.passwordResetToken       = null;
     user.passwordResetTokenExpiry = null;
     await user.save();
 

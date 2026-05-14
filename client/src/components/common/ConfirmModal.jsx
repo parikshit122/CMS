@@ -11,17 +11,18 @@ const ConfirmModal = ({
   type = "default",
   icon,
   loading = false,
+  confirmDisabled = false,
 }) => {
   if (!isOpen) return null;
 
   const typeConfig = {
     default: { color: "#6366f1", bg: "#eef2ff", iconName: "bx-info-circle" },
-    danger: { color: "#ef4444", bg: "#fef2f2", iconName: "bx-error-circle" },
-    warning: { color: "#f59e0b", bg: "#fffbeb", iconName: "bx-error" },
+    danger:  { color: "#ef4444", bg: "#fef2f2", iconName: "bx-error-circle" },
+    warning: { color: "#f59e0b", bg: "#fffbeb", iconName: "bx-error"        },
     success: { color: "#10b981", bg: "#ecfdf5", iconName: "bx-check-circle" },
   };
 
-  const config = typeConfig[type] || typeConfig.default;
+  const config    = typeConfig[type] || typeConfig.default;
   const finalIcon = icon || config.iconName;
 
   return (
@@ -35,7 +36,8 @@ const ConfirmModal = ({
         </div>
 
         <h3 className="confirm-title">{title}</h3>
-        <p className="confirm-message">{message}</p>
+
+        <div className="confirm-message">{message}</div>
 
         <div className="confirm-actions">
           <button
@@ -48,8 +50,11 @@ const ConfirmModal = ({
           <button
             className={`confirm-btn confirm-btn--${type}`}
             onClick={onConfirm}
-            disabled={loading}
-            style={{ background: config.color }}
+            disabled={loading || confirmDisabled}
+            style={{
+              background: loading || confirmDisabled ? "#9ca3af" : config.color,
+              cursor: loading || confirmDisabled ? "not-allowed" : "pointer",
+            }}
           >
             {loading ? (
               <>

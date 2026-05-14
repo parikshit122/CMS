@@ -366,6 +366,83 @@ const updateStaff = async (req, res) => {
   }
 };
 
+const getStudentDeletePreview = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const student = await User.findById(id);
+    if (!student || student.role !== "user") {
+      return res.status(404).json({
+        success: false,
+        message: "Student not found",
+      });
+    }
+
+    const Notification = require("../models/Notification");
+
+    const [complaintsCount, notificationsReceived, notificationsSent] =
+      await Promise.all([
+        Complaint.countDocuments({ student: id }),
+        Notification.countDocuments({ recipient: id }),
+        Notification.countDocuments({ sender: id }),
+      ]);
+
+    res.json({
+      success: true,
+      data: {
+        student: {
+          name: student.name,
+          email: student.email,
+          createdAt: student.createdAt,
+        },
+        complaints: complaintsCount,
+        notificationsReceived,
+        notificationsSent,
+        total: complaintsCount + notificationsReceived + notificationsSent + 1,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const deleteStudent = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const student = await User.findById(id);
+    if (!student || student.role !== "user") {
+      return res.status(404).json({
+        success: false,
+        message: "Student not found",
+      });
+    }
+
+    const Notification = require("../models/Notification");
+
+    const [complaintsResult, notifReceivedResult, notifSentResult] =
+      await Promise.all([
+        Complaint.deleteMany({ student: id }),
+        Notification.deleteMany({ recipient: id }),
+        Notification.deleteMany({ sender: id }),
+      ]);
+
+    await User.findByIdAndDelete(id);
+
+    res.json({
+      success: true,
+      message: `Student ${student.name} deleted successfully`,
+      data: {
+        deletedComplaints: complaintsResult.deletedCount,
+        deletedNotifications:
+          notifReceivedResult.deletedCount + notifSentResult.deletedCount,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 module.exports = {
   getAllStudents,
   getAllStaff,
@@ -376,4 +453,6 @@ module.exports = {
   reactivateStudent,
   getStaffByCategory,
   assignStaffToComplaint,
+  getStudentDeletePreview,
+  deleteStudent,
 };

@@ -15,7 +15,7 @@ const userSchema = new mongoose.Schema(
 
     phone: { type: String, unique: true, sparse: true },
 
-    password: { type: String, required: true },
+    password: { type: String },
 
     role: {
       type: String,
@@ -25,7 +25,7 @@ const userSchema = new mongoose.Schema(
 
     provider: {
       type: String,
-      enum: ["local", "google", "facebook", "twitter"],
+      enum: ["local", "google", "facebook", "twitter", "github"],
       default: "local",
     },
 
@@ -34,7 +34,7 @@ const userSchema = new mongoose.Schema(
     bio: { type: String, trim: true },
 
     course: { type: String, trim: true },
-    year: { type: String, trim: true },
+    year:   { type: String, trim: true },
 
     category: {
       type: String,
@@ -50,17 +50,17 @@ const userSchema = new mongoose.Schema(
       ],
     },
 
-    isActive: { type: Boolean, default: true },
-    suspendedUntil: { type: Date },
-    suspensionReason: { type: String },
+    isActive:          { type: Boolean, default: true },
+    suspendedUntil:    { type: Date },
+    suspensionReason:  { type: String },
 
     loginAttempts: { type: Number, default: 0 },
-    lockUntil: { type: Date },
+    lockUntil:     { type: Date },
 
-    passwordResetOTP: { type: String, default: null },
-    passwordResetOTPExpiry: { type: Date, default: null },
-    passwordResetToken: { type: String, default: null },
-    passwordResetTokenExpiry: { type: Date, default: null },
+    passwordResetOTP:          { type: String, default: null },
+    passwordResetOTPExpiry:    { type: Date,   default: null },
+    passwordResetToken:        { type: String, default: null },
+    passwordResetTokenExpiry:  { type: Date,   default: null },
   },
   { timestamps: true },
 );
@@ -71,6 +71,7 @@ userSchema.pre("save", async function () {
 });
 
 userSchema.methods.matchPassword = async function (enteredPassword) {
+  if (!this.password) return false;
   return await bcrypt.compare(enteredPassword, this.password);
 };
 

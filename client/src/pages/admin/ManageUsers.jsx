@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import API from "../../services/api";
 import { useAlert } from "../../components/common/Alert";
 import ConfirmModal from "../../components/common/ConfirmModal";
@@ -9,15 +10,36 @@ import SuspendStudentModal from "../../components/admin/SuspendStudentModal";
 import "../../styles/ManageUsers.css";
 
 const ManageUsers = () => {
-  const alert = useAlert();
-  const [activeTab, setActiveTab]       = useState("students");
-  const [students, setStudents]         = useState([]);
-  const [staff, setStaff]               = useState([]);
-  const [loading, setLoading]           = useState(false);
-  const [showAddStaff, setShowAddStaff] = useState(false);
-  const [suspendTarget, setSuspendTarget] = useState(null);
-  const [confirmAction, setConfirmAction] = useState(null);
-  const [confirmLoading, setConfirmLoading] = useState(false);
+  const alert    = useAlert();
+  const navigate = useNavigate();
+
+  const [activeTab, setActiveTab]                       = useState("students");
+  const [students, setStudents]                         = useState([]);
+  const [staff, setStaff]                               = useState([]);
+  const [loading, setLoading]                           = useState(false);
+  const [showAddStaff, setShowAddStaff]                 = useState(false);
+  const [suspendTarget, setSuspendTarget]               = useState(null);
+  const [confirmAction, setConfirmAction]               = useState(null);
+  const [confirmLoading, setConfirmLoading]             = useState(false);
+  const [deletePreview, setDeletePreview]               = useState(null);
+  const [deletePreviewLoading, setDeletePreviewLoading] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText]       = useState("");
+
+  const getCurrentUserId = () => {
+    try {
+      const raw = localStorage.getItem("user") || sessionStorage.getItem("user");
+      if (!raw) return null;
+      return JSON.parse(raw)?._id ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  const forceLogout = () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    navigate("/login", { replace: true });
+  };
 
   const fetchStudents = useCallback(async () => {
     try {
@@ -76,21 +98,48 @@ const ManageUsers = () => {
     });
   };
 
-  const handleDeleteStaff = (staffMember) => {
+  const openDeletePreview = async (user, type, previewEndpoint) => {
+    setDeletePreview(null);
+    setDeleteConfirmText("");
+    setDeletePreviewLoading(true);
+
     setConfirmAction({
-      type: "delete",
-      target: staffMember,
-      title: "Delete Staff Member?",
-      message: `This will permanently remove ${staffMember.name} from the system. This action cannot be undone.`,
+      type,
+      target: user,
+      title: type === "delete" ? "Delete Staff Member?" : "Delete Student?",
       confirmText: "Delete",
       modalType: "danger",
       icon: "bx-trash",
     });
+
+    try {
+      const res = await API.get(previewEndpoint);
+      if (res.data.success) setDeletePreview(res.data.data);
+    } catch {
+      setDeletePreview({ complaints: 0, notificationsReceived: 0, notificationsSent: 0 });
+    } finally {
+      setDeletePreviewLoading(false);
+    }
   };
+
+  const handleDeleteStaff = (staffMember) =>
+    openDeletePreview(
+      staffMember,
+      "delete",
+      `/admin/users/staff/${staffMember._id}/delete-preview`
+    );
+
+  const handleDeleteStudent = (student) =>
+    openDeletePreview(
+      student,
+      "delete-student",
+      `/admin/users/students/${student._id}/delete-preview`
+    );
 
   const executeConfirmedAction = async () => {
     if (!confirmAction) return;
     setConfirmLoading(true);
+
     try {
       if (confirmAction.type === "reactivate") {
         const res = await API.patch(
@@ -105,11 +154,26 @@ const ManageUsers = () => {
           `/admin/users/staff/${confirmAction.target._id}`
         );
         if (res.data.success) {
-          alert.success("Staff deleted successfully");
+          alert.success("Staff member and all associated data deleted");
+          const deletedId = confirmAction.target._id;
           fetchStaff();
+          if (getCurrentUserId() === deletedId) forceLogout();
+        }
+      } else if (confirmAction.type === "delete-student") {
+        const res = await API.delete(
+          `/admin/users/students/${confirmAction.target._id}`
+        );
+        if (res.data.success) {
+          alert.success("Student and all associated data deleted");
+          const deletedId = confirmAction.target._id;
+          fetchStudents();
+          if (getCurrentUserId() === deletedId) forceLogout();
         }
       }
+
       setConfirmAction(null);
+      setDeletePreview(null);
+      setDeleteConfirmText("");
     } catch (err) {
       alert.error(err.response?.data?.message || "Action failed");
     } finally {
@@ -131,9 +195,94 @@ const ManageUsers = () => {
     }
   };
 
+  const handleCloseConfirm = () => {
+    if (confirmLoading) return;
+    setConfirmAction(null);
+    setDeletePreview(null);
+    setDeleteConfirmText("");
+  };
+
+  const buildDeleteMessage = () => {
+    if (
+      confirmAction?.type !== "delete" &&
+      confirmAction?.type !== "delete-student"
+    ) {
+      return confirmAction?.message;
+    }
+
+    const name = confirmAction.target?.name;
+
+    if (deletePreviewLoading) {
+      return (
+        <span className="delete-preview">
+          <span className="delete-preview__intro">
+            Checking records for <strong>{name}</strong>…
+          </span>
+          <span className="delete-preview__loading">
+            <i className="bx bx-loader-alt bx-spin" />
+            <span>Loading preview…</span>
+          </span>
+        </span>
+      );
+    }
+
+    return (
+      <span className="delete-preview">
+        <span className="delete-preview__intro">
+          The following will be <strong>permanently deleted</strong>:
+        </span>
+
+        <span className="delete-preview__list">
+          <span className="delete-preview__list-item">
+            <i className="bx bx-user-x" />
+            The account for <strong>{name}</strong>
+          </span>
+          <span className="delete-preview__list-item">
+            <i className="bx bx-file" />
+            <strong>{deletePreview?.complaints ?? 0}</strong> complaint
+            {deletePreview?.complaints !== 1 ? "s" : ""} submitted by them
+          </span>
+          <span className="delete-preview__list-item">
+            <i className="bx bx-bell" />
+            <strong>{deletePreview?.notificationsReceived ?? 0}</strong>{" "}
+            notification
+            {deletePreview?.notificationsReceived !== 1 ? "s" : ""} received by
+            them
+          </span>
+          <span className="delete-preview__list-item">
+            <i className="bx bx-send" />
+            <strong>{deletePreview?.notificationsSent ?? 0}</strong>{" "}
+            notification
+            {deletePreview?.notificationsSent !== 1 ? "s" : ""} they sent
+          </span>
+        </span>
+
+        <span className="delete-preview__warning">
+          <i className="bx bx-error-circle" />
+          This action is <strong>irreversible</strong>. The user will not be
+          able to log in again.
+        </span>
+
+        <span className="delete-preview__confirm-input">
+          <label htmlFor="delete-confirm-field">
+            Type <strong>DELETE</strong> to confirm:
+          </label>
+          <input
+            id="delete-confirm-field"
+            type="text"
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.target.value)}
+            placeholder="DELETE"
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </span>
+      </span>
+    );
+  };
+
   return (
     <div className="users-page">
-      {/* ── Page Header ───────────────────────────────────── */}
       <div className="users-header">
         <div>
           <span className="users-eyebrow">
@@ -156,7 +305,6 @@ const ManageUsers = () => {
         )}
       </div>
 
-      {/* ── Tabs ──────────────────────────────────────────── */}
       <div
         className="users-tabs"
         role="tablist"
@@ -199,7 +347,6 @@ const ManageUsers = () => {
         </button>
       </div>
 
-      {/* ── Tab Panels ────────────────────────────────────── */}
       <div
         className="users-content"
         role="tabpanel"
@@ -213,6 +360,7 @@ const ManageUsers = () => {
             loading={loading}
             onSuspend={(student) => setSuspendTarget(student)}
             onReactivate={handleReactivate}
+            onDelete={handleDeleteStudent}
             onRefresh={fetchStudents}
           />
         ) : (
@@ -225,7 +373,6 @@ const ManageUsers = () => {
         )}
       </div>
 
-      {/* ── Modals ────────────────────────────────────────── */}
       {showAddStaff && (
         <AddStaffModal
           onClose={() => setShowAddStaff(false)}
@@ -243,14 +390,20 @@ const ManageUsers = () => {
 
       <ConfirmModal
         isOpen={!!confirmAction}
-        onClose={() => !confirmLoading && setConfirmAction(null)}
+        onClose={handleCloseConfirm}
         onConfirm={executeConfirmedAction}
         title={confirmAction?.title}
-        message={confirmAction?.message}
+        message={buildDeleteMessage()}
         confirmText={confirmAction?.confirmText}
         type={confirmAction?.modalType}
         icon={confirmAction?.icon}
         loading={confirmLoading}
+        confirmDisabled={
+          confirmAction?.type === "delete" ||
+          confirmAction?.type === "delete-student"
+            ? deleteConfirmText !== "DELETE"
+            : false
+        }
       />
     </div>
   );

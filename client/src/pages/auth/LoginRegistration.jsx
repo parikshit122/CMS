@@ -75,41 +75,83 @@ function Login() {
     return false;
   };
 
-  const handleSocialLogin = async (providerName) => {
-    const providers = {
-      google: googleProvider,
-      facebook: facebookProvider,
-      github: githubProvider,
-      twitter: twitterProvider,
-    };
-
-    const provider = providers[providerName];
-    if (!provider) return;
-
-    let firebaseEmail = "";
-
-    try {
-      setLoading(true);
-      const result = await signInWithPopup(auth, provider);
-      firebaseEmail = result.user.email || "your account";
-      const idToken = await result.user.getIdToken(true);
-      const response = await API.post("/auth/social-login", { idToken });
-
-      if (response.data.success) {
-        const { accessToken, refreshToken, user } = response.data;
-        login(user, accessToken, refreshToken);
-        alert.success("Login successful");
-        navigate(getRoleRedirect(user.role), { replace: true });
-      }
-    } catch (err) {
-      const isSuspended = checkSuspension(err.response, firebaseEmail);
-      if (!isSuspended) {
-        alert.error(err.response?.data?.message || "Social login failed");
-      }
-    } finally {
-      setLoading(false);
-    }
+const handleSocialLogin = async (providerName) => {
+  const providers = {
+    google: googleProvider,
+    facebook: facebookProvider,
+    github: githubProvider,
+    twitter: twitterProvider,
   };
+
+  const provider = providers[providerName];
+  if (!provider) return;
+
+  let firebaseEmail = "";
+
+  try {
+    setLoading(true);
+
+    const result = await signInWithPopup(auth, provider);
+
+    firebaseEmail =
+      result.user.email ||
+      result.user.providerData?.[0]?.email ||
+      result._tokenResponse?.email ||
+      "";
+
+    const firebaseName =
+      result.user.displayName ||
+      result.user.providerData?.[0]?.displayName ||
+      "";
+
+    const firebaseAvatar =
+      result.user.photoURL ||
+      result.user.providerData?.[0]?.photoURL ||
+      "";
+
+    if (!firebaseEmail) {
+      alert.error(
+        `${providerName.charAt(0).toUpperCase() + providerName.slice(1)} did not share your email. Please use Google or register manually.`,
+      );
+      return;
+    }
+
+    const idToken = await result.user.getIdToken(true);
+
+    const response = await API.post("/auth/social-login", {
+      idToken,
+      email: firebaseEmail,
+      name: firebaseName,
+      avatar: firebaseAvatar,
+      provider: providerName,
+    });
+
+    if (response.data.success) {
+      const { accessToken, refreshToken, user } = response.data;
+      login(user, accessToken, refreshToken);
+      alert.success("Login successful");
+      navigate(getRoleRedirect(user.role), { replace: true });
+    }
+  } catch (err) {
+    const status = err?.response?.status;
+    const message = err?.response?.data?.message;
+
+    const isSuspended = checkSuspension(err.response, firebaseEmail);
+    if (isSuspended) return;
+
+    if (err?.code === "auth/popup-closed-by-user") return;
+    if (err?.code === "auth/cancelled-popup-request") return;
+
+    if (status === 404) {
+      alert.error(`${firebaseEmail} is not registered. Please register first.`);
+      return;
+    }
+
+    alert.error(message || "Social login failed");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleLogin = async (e) => {
     e.preventDefault();

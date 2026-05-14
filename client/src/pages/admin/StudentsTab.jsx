@@ -1,6 +1,13 @@
 import React, { useState, useMemo } from "react";
 
-const StudentsTab = ({ students, loading, onSuspend, onReactivate, onRefresh }) => {
+const StudentsTab = ({
+  students,
+  loading,
+  onSuspend,
+  onReactivate,
+  onDelete,
+  onRefresh,
+}) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -85,14 +92,18 @@ const StudentsTab = ({ students, loading, onSuspend, onReactivate, onRefresh }) 
                     {s.course || s.year ? (
                       <div className="users-class-cell">
                         <div className="users-course">{s.course || "—"}</div>
-                        <div className="users-year">{s.year ? `${s.year} Year` : ""}</div>
+                        <div className="users-year">
+                          {s.year ? `${s.year} Year` : ""}
+                        </div>
                       </div>
                     ) : (
                       <span className="users-muted">Not set</span>
                     )}
                   </td>
                   <td>
-                    <span className="users-count">{s.totalComplaints || 0}</span>
+                    <span className="users-count">
+                      {s.totalComplaints || 0}
+                    </span>
                   </td>
                   <td>
                     <span className={`users-status users-status--${s.status}`}>
@@ -101,7 +112,8 @@ const StudentsTab = ({ students, loading, onSuspend, onReactivate, onRefresh }) 
                     </span>
                     {s.isSuspended && s.suspendedUntil && (
                       <div className="users-suspended-until">
-                        Until {new Date(s.suspendedUntil).toLocaleDateString()}
+                        Until{" "}
+                        {new Date(s.suspendedUntil).toLocaleDateString()}
                       </div>
                     )}
                   </td>
@@ -133,6 +145,14 @@ const StudentsTab = ({ students, loading, onSuspend, onReactivate, onRefresh }) 
                           Suspend
                         </button>
                       )}
+                      <button
+                        className="users-action-btn users-action-btn--danger"
+                        onClick={() => onDelete(s)}
+                        title="Delete permanently"
+                      >
+                        <i className="bx bx-trash"></i>
+                        Delete
+                      </button>
                     </div>
                   </td>
                 </tr>

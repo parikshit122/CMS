@@ -3,10 +3,6 @@ const cloudinary = require("../config/cloudinary");
 
 const uploadAvatar = async (req, res) => {
   try {
-    console.log("==== UPLOAD START ====");
-    console.log("File:", req.file);
-    console.log("User:", req.user);
-
     if (!req.file) {
       return res.status(400).json({
         success: false,
@@ -21,33 +17,25 @@ const uploadAvatar = async (req, res) => {
           transformation: [{ width: 300, height: 300, crop: "fill" }],
         },
         (error, result) => {
-          if (error) {
-            console.error("Cloudinary Error:", error);
-            reject(error);
-          } else {
-            resolve(result);
-          }
+          if (error) reject(error);
+          else resolve(result);
         }
       );
 
       stream.end(req.file.buffer);
     });
 
-    console.log("Cloudinary Result:", result);
-
     const user = await User.findByIdAndUpdate(
       req.user.id,
       { avatar: result.secure_url },
-      { new: true }
+      { returnDocument: "after" }
     );
 
     res.json({
       success: true,
-      avatar: user.avatar,
+      avatar: result.secure_url,
     });
-
   } catch (err) {
-    console.error("UPLOAD ERROR:", err);
     res.status(500).json({
       success: false,
       message: err.message || "Upload failed",

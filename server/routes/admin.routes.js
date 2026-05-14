@@ -11,6 +11,8 @@ const {
   reactivateStudent,
   getStaffByCategory,
   assignStaffToComplaint,
+  getStudentDeletePreview,
+  deleteStudent,
 } = require("../controllers/admin.controller");
 
 const adminOnly = (req, res, next) => {
@@ -35,21 +37,28 @@ router.patch(
   "/users/students/:id/reactivate",
   protect,
   adminOnly,
-  reactivateStudent
+  reactivateStudent,
 );
+router.get(
+  "/users/students/:id/delete-preview",
+  protect,
+  adminOnly,
+  getStudentDeletePreview,
+);
+router.delete("/users/students/:id", protect, adminOnly, deleteStudent);
 
 router.get(
   "/staff/by-category/:category",
   protect,
   adminOnly,
-  getStaffByCategory
+  getStaffByCategory,
 );
 
 router.patch(
   "/complaints/:id/assign",
   protect,
   adminOnly,
-  assignStaffToComplaint
+  assignStaffToComplaint,
 );
 
 module.exports = router;
