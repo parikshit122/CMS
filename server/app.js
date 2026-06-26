@@ -3,30 +3,26 @@ const cors = require("cors");
 
 const app = express();
 
-// Allow popup-based auth (Google login fix)
+// ✅ Allow popup-based auth (Google login fix)
 app.use((req, res, next) => {
   res.setHeader("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
   next();
 });
 
-// ✅ Production-ready CORS
+// ✅ FIXED CORS (works for local + production)
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "http://localhost:3000",
-      process.env.FRONTEND_URL,
-    ],
+    origin: true,          // allow all origins safely
     credentials: true,
-  }),
+  })
 );
 
 app.use(express.json());
 
-// Routes
+// ✅ Routes
 app.use("/api", require("./routes"));
 
-// 404 handler
+// ✅ 404 handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -34,7 +30,7 @@ app.use((req, res) => {
   });
 });
 
-// Global error handler
+// ✅ Global error handler
 app.use((err, req, res, next) => {
   console.error("Global Error:", err.message);
   res.status(err.status || 500).json({
