@@ -1,11 +1,11 @@
 import "../styles/Home.css";
 import Button from "../components/common/Button";
-import Image from "../assets/images/carousel/carousel1.png"
+import Image from "../assets/images/carousel/carousel1.png";
+import "boxicons/css/boxicons.min.css";
 
 function Home() {
   return (
     <div className="landing">
-
       <div className="hero-section w-100 overflow-hidden rounded-3">
         <div
           id="carouselExampleDark"
@@ -13,16 +13,33 @@ function Home() {
           data-bs-ride="carousel"
         >
           <div className="carousel-indicators">
-            <button type="button" data-bs-target="#carouselExampleDark" data-bs-slide-to="0"
-              className="active" aria-current="true" aria-label="Slide 1" />
-            <button type="button" data-bs-target="#carouselExampleDark" data-bs-slide-to="1"
-              aria-label="Slide 2" />
-            <button type="button" data-bs-target="#carouselExampleDark" data-bs-slide-to="2"
-              aria-label="Slide 3" />
+            <button
+              type="button"
+              data-bs-target="#carouselExampleDark"
+              data-bs-slide-to="0"
+              className="active"
+              aria-current="true"
+              aria-label="Slide 1"
+            />
+            <button
+              type="button"
+              data-bs-target="#carouselExampleDark"
+              data-bs-slide-to="1"
+              aria-label="Slide 2"
+            />
+            <button
+              type="button"
+              data-bs-target="#carouselExampleDark"
+              data-bs-slide-to="2"
+              aria-label="Slide 3"
+            />
           </div>
 
           <div className="carousel-inner h-100">
-            <div className="carousel-item active h-100" data-bs-interval="5000">
+            <div
+              className="carousel-item active h-100"
+              data-bs-interval="5000"
+            >
               <img
                 src={Image}
                 className="d-block w-100 h-100"
@@ -38,7 +55,6 @@ function Home() {
                 alt="Slide 2"
                 style={{ objectFit: "cover", objectPosition: "center" }}
               />
-
             </div>
 
             <div className="carousel-item h-100" data-bs-interval="5000">
@@ -51,14 +67,22 @@ function Home() {
             </div>
           </div>
 
-          <button className="carousel-control-prev" type="button"
-            data-bs-target="#carouselExampleDark" data-bs-slide="prev">
+          <button
+            className="carousel-control-prev"
+            type="button"
+            data-bs-target="#carouselExampleDark"
+            data-bs-slide="prev"
+          >
             <span className="carousel-control-prev-icon" aria-hidden="true" />
             <span className="visually-hidden">Previous</span>
           </button>
 
-          <button className="carousel-control-next" type="button"
-            data-bs-target="#carouselExampleDark" data-bs-slide="next">
+          <button
+            className="carousel-control-next"
+            type="button"
+            data-bs-target="#carouselExampleDark"
+            data-bs-slide="next"
+          >
             <span className="carousel-control-next-icon" aria-hidden="true" />
             <span className="visually-hidden">Next</span>
           </button>
@@ -71,7 +95,12 @@ function Home() {
 
       <div className="container">
         <h1>
-          Streamline Your <span><br />Complaint</span> Management
+          Streamline Your{" "}
+          <span>
+            <br />
+            Complaint
+          </span>{" "}
+          Management
         </h1>
 
         <p>
@@ -122,37 +151,49 @@ function Home() {
       <section className="features-wrap">
         <div className="features-grid">
           <article className="feature-card">
-            <div className="feature-icon" aria-hidden="true" />
+            <div className="feature-icon" aria-hidden="true">
+              <i className="bx bx-edit" />
+            </div>
             <h3>Easy Submission</h3>
             <p>Submit complaints in minutes with our intuitive interface</p>
           </article>
 
           <article className="feature-card">
-            <div className="feature-icon" aria-hidden="true" />
+            <div className="feature-icon" aria-hidden="true">
+              <i className="bx bx-radar" />
+            </div>
             <h3>Real-time Tracking</h3>
             <p>Track your complaint status 24/7 with live updates</p>
           </article>
 
           <article className="feature-card">
-            <div className="feature-icon" aria-hidden="true" />
+            <div className="feature-icon" aria-hidden="true">
+              <i className="bx bx-shield-quarter" />
+            </div>
             <h3>Secure &amp; Private</h3>
             <p>Your data is encrypted and protected at all times</p>
           </article>
 
           <article className="feature-card">
-            <div className="feature-icon" aria-hidden="true" />
+            <div className="feature-icon" aria-hidden="true">
+              <i className="bx bx-bar-chart-alt-2" />
+            </div>
             <h3>Analytics Dashboard</h3>
             <p>Get insights and reports on complaint trends</p>
           </article>
 
           <article className="feature-card">
-            <div className="feature-icon" aria-hidden="true" />
+            <div className="feature-icon" aria-hidden="true">
+              <i className="bx bx-group" />
+            </div>
             <h3>Multi-role Support</h3>
             <p>Designed for users, staff, and administrators</p>
           </article>
 
           <article className="feature-card">
-            <div className="feature-icon" aria-hidden="true" />
+            <div className="feature-icon" aria-hidden="true">
+              <i className="bx bx-rocket" />
+            </div>
             <h3>Fast Resolution</h3>
             <p>Streamlined workflow for quick issue resolution</p>
           </article>
@@ -169,7 +210,9 @@ function Home() {
           </p>
 
           <div className="Button">
-            <Button className="btn-home register-btn">Create Free Account →</Button>
+            <Button className="btn-home register-btn">
+              Create Free Account →
+            </Button>
             <Button className="btn-home login-btn">Sign In Now</Button>
           </div>
         </div>
