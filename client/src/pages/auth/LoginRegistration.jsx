@@ -304,36 +304,28 @@ function Login() {
     try {
       setLoading(true);
 
-      const useMobile = isMobileDevice();
-      console.log(useMobile ? "📱 Using REDIRECT" : "💻 Using POPUP");
-
-      if (useMobile) {
-        localStorage.setItem(REDIRECT_PROVIDER_KEY, providerName);
-        sessionStorage.removeItem(REDIRECT_PROCESSED_KEY);
-        await signInWithRedirect(auth, provider);
-        return;
-      }
+      console.log("🪟 Using POPUP for all devices");
 
       let result;
       try {
         result = await signInWithPopup(auth, provider);
+        console.log("✅ Popup login succeeded");
       } catch (popupErr) {
-        console.warn("Popup failed:", popupErr.code);
+        console.warn("Popup error:", popupErr.code, popupErr.message);
 
-        if (popupErr.code === "auth/popup-closed-by-user") return;
-        if (popupErr.code === "auth/cancelled-popup-request") return;
-
-        if (
-          popupErr.code === "auth/popup-blocked" ||
-          popupErr.code === "auth/web-storage-unsupported" ||
-          popupErr.message?.includes("Cross-Origin")
-        ) {
-          console.log("🔄 Falling back to redirect");
-          localStorage.setItem(REDIRECT_PROVIDER_KEY, providerName);
-          sessionStorage.removeItem(REDIRECT_PROCESSED_KEY);
-          await signInWithRedirect(auth, provider);
+        if (popupErr.code === "auth/popup-closed-by-user") {
           return;
         }
+        if (popupErr.code === "auth/cancelled-popup-request") {
+          return;
+        }
+        if (popupErr.code === "auth/popup-blocked") {
+          alert.error(
+            "Popup blocked! Please allow popups for this site in browser settings, then try again.",
+          );
+          return;
+        }
+
         throw popupErr;
       }
 
@@ -376,7 +368,6 @@ function Login() {
       }
     } catch (err) {
       console.error("Social login error:", err);
-
       await auth.signOut().catch(() => {});
 
       const status = err?.response?.status;
@@ -397,7 +388,6 @@ function Login() {
       setLoading(false);
     }
   };
-
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
