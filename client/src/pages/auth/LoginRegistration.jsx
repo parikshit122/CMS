@@ -304,12 +304,13 @@ function Login() {
     try {
       setLoading(true);
 
-      console.log("🪟 Using POPUP for all devices");
+      console.log("🪟 Opening popup...");
 
       let result;
       try {
         result = await signInWithPopup(auth, provider);
         console.log("✅ Popup login succeeded");
+        console.log("👤 User email:", result.user.email);
       } catch (popupErr) {
         console.warn("Popup error:", popupErr.code, popupErr.message);
 
@@ -340,6 +341,9 @@ function Login() {
       const firebaseAvatar =
         result.user.photoURL || result.user.providerData?.[0]?.photoURL || "";
 
+      console.log("📧 Email:", firebaseEmail);
+      console.log("👤 Name:", firebaseName);
+
       if (!firebaseEmail) {
         alert.error(
           `${providerName.charAt(0).toUpperCase() + providerName.slice(1)} did not share your email.`,
@@ -348,7 +352,16 @@ function Login() {
         return;
       }
 
+      console.log("🔑 Getting ID token...");
       const idToken = await result.user.getIdToken(true);
+      console.log("✅ Got token, length:", idToken.length);
+
+      console.log("🌐 ABOUT TO CALL BACKEND");
+      console.log("📍 API base URL:", import.meta.env.VITE_API_URL);
+      console.log(
+        "📍 Full URL will be:",
+        `${import.meta.env.VITE_API_URL}/auth/social-login`,
+      );
 
       const response = await API.post("/auth/social-login", {
         idToken,
@@ -358,16 +371,27 @@ function Login() {
         provider: providerName,
       });
 
+      console.log("✅ Backend responded:", response.status);
+      console.log("📦 Response data:", response.data);
+
       await auth.signOut().catch(() => {});
 
       if (response.data.success) {
         const { accessToken, refreshToken, user } = response.data;
         login(user, accessToken, refreshToken);
         alert.success("Login successful");
+        console.log("🚀 Navigating to:", getRoleRedirect(user.role));
         navigate(getRoleRedirect(user.role), { replace: true });
       }
     } catch (err) {
-      console.error("Social login error:", err);
+      console.error("❌ Social login error:");
+      console.error("  Error type:", err.constructor.name);
+      console.error("  Error code:", err?.code);
+      console.error("  Error message:", err?.message);
+      console.error("  Error response status:", err?.response?.status);
+      console.error("  Error response data:", err?.response?.data);
+      console.error("  Full error:", err);
+
       await auth.signOut().catch(() => {});
 
       const status = err?.response?.status;
@@ -380,6 +404,11 @@ function Login() {
         alert.error(
           `${firebaseEmail} is not registered. Please register first.`,
         );
+        return;
+      }
+
+      if (err.code === "ERR_NETWORK" || err.message === "Network Error") {
+        alert.error("Network error. Please check your internet and try again.");
         return;
       }
 
