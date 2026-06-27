@@ -9,13 +9,12 @@ import {
   setPersistence,
 } from "firebase/auth";
 
-// ✅ Helper to clean env variables (removes quotes, commas, spaces)
 const cleanEnv = (value) => {
   if (!value) return "";
   return String(value)
     .trim()
-    .replace(/^["']|["']$/g, "")  // Remove leading/trailing quotes
-    .replace(/,+$/, "")            // Remove trailing commas
+    .replace(/^["']|["']$/g, "")
+    .replace(/,+$/, "")
     .trim();
 };
 
@@ -28,11 +27,6 @@ const firebaseConfig = {
   appId: cleanEnv(import.meta.env.VITE_FIREBASE_APP_ID),
   measurementId: cleanEnv(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID),
 };
-
-// 🔍 Validate before initializing
-if (!firebaseConfig.apiKey) {
-  console.error("❌ Firebase API Key missing! Check environment variables.");
-}
 
 const app = initializeApp(firebaseConfig);
 
@@ -58,6 +52,6 @@ facebookProvider.addScope("email");
 export const isMobileDevice = () => {
   if (typeof window === "undefined") return false;
   return /iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(
-    navigator.userAgent
+    navigator.userAgent,
   );
 };

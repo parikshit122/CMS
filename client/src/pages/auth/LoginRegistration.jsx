@@ -38,7 +38,6 @@ const PROVIDER_LABELS = {
   facebook: "Sign in with Facebook",
 };
 
-// ✅ Store provider name during redirect (survives page reload)
 const REDIRECT_PROVIDER_KEY = "auth_redirect_provider";
 
 function Login() {
@@ -63,17 +62,14 @@ function Login() {
     setIsActive(panel === "register");
   }, [location.state]);
 
-  // ✅ CRITICAL: Handle redirect result on page load (for mobile login)
   useEffect(() => {
     const handleRedirectResult = async () => {
       try {
-        setLoading(true);
         const result = await getRedirectResult(auth);
 
-        if (!result) {
-          setLoading(false);
-          return;
-        }
+        if (!result) return;
+
+        setLoading(true);
 
         const providerName =
           localStorage.getItem(REDIRECT_PROVIDER_KEY) || "google";
@@ -97,7 +93,7 @@ function Login() {
 
         if (!firebaseEmail) {
           alert.error(
-            `${providerName} did not share your email. Please use Google or register manually.`
+            `${providerName} did not share your email. Please use Google or register manually.`,
           );
           setLoading(false);
           return;
@@ -124,13 +120,8 @@ function Login() {
         const status = err?.response?.status;
         const message = err?.response?.data?.message;
 
-        const attemptedEmail =
-          err?.customData?.email || localStorage.getItem("attempted_email") || "";
-        const isSuspended = checkSuspension(err.response, attemptedEmail);
-        if (isSuspended) return;
-
         if (status === 404) {
-          alert.error(`Account not registered. Please register first.`);
+          alert.error("Account not registered. Please register first.");
         } else if (message) {
           alert.error(message);
         }
@@ -140,7 +131,6 @@ function Login() {
     };
 
     handleRedirectResult();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleBack = () => navigate("/");
@@ -163,7 +153,6 @@ function Login() {
     return false;
   };
 
-  // ✅ MAIN FIX: Use redirect on mobile, popup on desktop
   const handleSocialLogin = async (providerName) => {
     const providers = {
       google: googleProvider,
@@ -175,21 +164,20 @@ function Login() {
     const provider = providers[providerName];
     if (!provider) return;
 
+    let firebaseEmail = "";
+
     try {
       setLoading(true);
 
-      // ✅ Mobile devices: use redirect (popup is blocked/unreliable)
       if (isMobileDevice()) {
         localStorage.setItem(REDIRECT_PROVIDER_KEY, providerName);
         await signInWithRedirect(auth, provider);
-        // Page redirects → result handled in useEffect on return
         return;
       }
 
-      // ✅ Desktop: use popup (better UX)
       const result = await signInWithPopup(auth, provider);
 
-      const firebaseEmail =
+      firebaseEmail =
         result.user.email ||
         result.user.providerData?.[0]?.email ||
         result._tokenResponse?.email ||
@@ -207,7 +195,7 @@ function Login() {
 
       if (!firebaseEmail) {
         alert.error(
-          `${providerName.charAt(0).toUpperCase() + providerName.slice(1)} did not share your email. Please use Google or register manually.`
+          `${providerName.charAt(0).toUpperCase() + providerName.slice(1)} did not share your email. Please use Google or register manually.`,
         );
         return;
       }
@@ -229,18 +217,17 @@ function Login() {
         navigate(getRoleRedirect(user.role), { replace: true });
       }
     } catch (err) {
+      console.error("Social login error:", err);
       const status = err?.response?.status;
       const message = err?.response?.data?.message;
-      const firebaseEmail = err?.customData?.email || "";
 
       const isSuspended = checkSuspension(err.response, firebaseEmail);
       if (isSuspended) return;
 
-      // Silent ignores for user cancellations
       if (err?.code === "auth/popup-closed-by-user") return;
       if (err?.code === "auth/cancelled-popup-request") return;
+
       if (err?.code === "auth/popup-blocked") {
-        // ✅ Fallback: if popup is blocked on desktop, use redirect
         alert.error("Popup blocked. Redirecting to sign-in page...");
         localStorage.setItem(REDIRECT_PROVIDER_KEY, providerName);
         await signInWithRedirect(auth, provider);
@@ -248,9 +235,7 @@ function Login() {
       }
 
       if (status === 404) {
-        alert.error(
-          `${firebaseEmail || "Account"} is not registered. Please register first.`
-        );
+        alert.error(`${firebaseEmail} is not registered. Please register first.`);
         return;
       }
 
@@ -285,7 +270,7 @@ function Login() {
       alert.error(
         err.response?.data?.message ||
           err.response?.data?.errors?.[0] ||
-          "Login failed"
+          "Login failed",
       );
     } finally {
       setLoading(false);
@@ -309,7 +294,7 @@ function Login() {
       alert.error(
         err.response?.data?.message ||
           err.response?.data?.errors?.[0] ||
-          "Registration failed"
+          "Registration failed",
       );
     } finally {
       setLoading(false);
