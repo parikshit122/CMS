@@ -74,8 +74,7 @@ function Login() {
       try {
         setLoading(true);
 
-        const firebaseEmail =
-          user.email || user.providerData?.[0]?.email || "";
+        const firebaseEmail = user.email || user.providerData?.[0]?.email || "";
         const firebaseName =
           user.displayName || user.providerData?.[0]?.displayName || "";
         const firebaseAvatar =
@@ -165,7 +164,7 @@ function Login() {
         const result = await getRedirectResult(auth);
         console.log(
           "Redirect result:",
-          result ? `Found: ${result.user.email}` : "None"
+          result ? `Found: ${result.user.email}` : "None",
         );
 
         const providerName =
@@ -244,9 +243,7 @@ function Login() {
       const result = await signInWithPopup(auth, provider);
 
       firebaseEmail =
-        result.user.email ||
-        result.user.providerData?.[0]?.email ||
-        "";
+        result.user.email || result.user.providerData?.[0]?.email || "";
 
       const firebaseName =
         result.user.displayName ||
@@ -254,13 +251,11 @@ function Login() {
         "";
 
       const firebaseAvatar =
-        result.user.photoURL ||
-        result.user.providerData?.[0]?.photoURL ||
-        "";
+        result.user.photoURL || result.user.providerData?.[0]?.photoURL || "";
 
       if (!firebaseEmail) {
         alert.error(
-          `${providerName.charAt(0).toUpperCase() + providerName.slice(1)} did not share your email.`
+          `${providerName.charAt(0).toUpperCase() + providerName.slice(1)} did not share your email.`,
         );
         await auth.signOut().catch(() => {});
         return;
@@ -306,7 +301,9 @@ function Login() {
       }
 
       if (status === 404) {
-        alert.error(`${firebaseEmail} is not registered. Please register first.`);
+        alert.error(
+          `${firebaseEmail} is not registered. Please register first.`,
+        );
         return;
       }
 
@@ -341,7 +338,7 @@ function Login() {
       alert.error(
         err.response?.data?.message ||
           err.response?.data?.errors?.[0] ||
-          "Login failed"
+          "Login failed",
       );
     } finally {
       setLoading(false);
@@ -365,7 +362,7 @@ function Login() {
       alert.error(
         err.response?.data?.message ||
           err.response?.data?.errors?.[0] ||
-          "Registration failed"
+          "Registration failed",
       );
     } finally {
       setLoading(false);
@@ -373,13 +370,24 @@ function Login() {
   };
 
   const SocialButtons = ({ formId }) => (
-    <div className="social-icons" role="group" aria-label="Social login options">
+    <div
+      className="social-icons"
+      role="group"
+      aria-label="Social login options"
+    >
       {SOCIAL_PROVIDERS.map((provider) => (
         <button
           key={provider}
           type="button"
           className="social-btn"
-          onClick={() => handleSocialLogin(provider)}
+          onClick={() => {
+            alert(`TAPPED: ${provider}`);
+            console.log("🔴 BUTTON TAPPED:", provider);
+            handleSocialLogin(provider);
+          }}
+          onTouchStart={() => {
+            console.log("👆 Touch start:", provider);
+          }}
           disabled={loading}
           aria-label={PROVIDER_LABELS[provider]}
           title={PROVIDER_LABELS[provider]}
@@ -393,7 +401,12 @@ function Login() {
   return (
     <div className="outer-container">
       <Button
-        style={{ position: "absolute", top: "10px", left: "10px", zIndex: 9999 }}
+        style={{
+          position: "absolute",
+          top: "10px",
+          left: "10px",
+          zIndex: 9999,
+        }}
         onClick={handleBack}
         aria-label="Go back to home page"
       >
