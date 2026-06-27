@@ -90,6 +90,19 @@ function Login() {
   const { login } = useAuth();
 
   useEffect(() => {
+  const testIDB = async () => {
+    try {
+      const req = indexedDB.open("test-db", 1);
+      req.onsuccess = () => console.log("✅ IndexedDB works");
+      req.onerror = () => console.log("❌ IndexedDB blocked");
+    } catch (e) {
+      console.log("❌ IndexedDB error:", e);
+    }
+  };
+  testIDB();
+}, []);
+
+  useEffect(() => {
     const panel = location.state?.panel;
     setIsActive(panel === "register");
   }, [location.state]);
