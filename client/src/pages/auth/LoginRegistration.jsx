@@ -113,7 +113,71 @@ function Login() {
     let mounted = true;
 
     const processSocialLogin = async (user, providerName) => {
-      // ... existing code stays same
+      try {
+        setLoading(true);
+
+        const firebaseEmail = user.email || user.providerData?.[0]?.email || "";
+        const firebaseName =
+          user.displayName || user.providerData?.[0]?.displayName || "";
+        const firebaseAvatar =
+          user.photoURL || user.providerData?.[0]?.photoURL || "";
+
+        console.log("📧 Email:", firebaseEmail);
+
+        if (!firebaseEmail) {
+          alert.error("Email not shared. Please try another method.");
+          await auth.signOut().catch(() => {});
+          return;
+        }
+
+        console.log("🔑 Getting ID token...");
+        const idToken = await user.getIdToken(true);
+        console.log("✅ Got token, length:", idToken.length);
+
+        console.log("🌐 Calling backend...");
+        const response = await API.post("/auth/social-login", {
+          idToken,
+          email: firebaseEmail,
+          name: firebaseName,
+          avatar: firebaseAvatar,
+          provider: providerName,
+        });
+
+        console.log("✅ Backend response:", response.data);
+
+        try {
+          await auth.signOut();
+          console.log("✅ Firebase session cleared");
+        } catch (signOutErr) {
+          console.warn("Sign out warning:", signOutErr);
+        }
+
+        if (response.data.success && mounted) {
+          const { accessToken, refreshToken, user: userData } = response.data;
+          login(userData, accessToken, refreshToken);
+          alert.success("Login successful");
+          navigate(getRoleRedirect(userData.role), { replace: true });
+        }
+      } catch (err) {
+        console.error("❌ Process error:", err);
+
+        try {
+          await auth.signOut();
+        } catch (e) {}
+
+        const status = err?.response?.status;
+        const message = err?.response?.data?.message;
+
+        if (status === 404) {
+          alert.error("Account not registered. Please register first.");
+        } else if (message) {
+          alert.error(message);
+        } else {
+          alert.error("Login failed");
+        }
+      } finally {
+        if (mounted) setLoading(false);
+      }
     };
 
     const handleRedirectResult = async () => {
