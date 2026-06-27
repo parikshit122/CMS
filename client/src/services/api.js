@@ -1,9 +1,12 @@
 import axios from "axios";
 
 const API = axios.create({
-  baseURL: "http://localhost:5000/api",
+  baseURL: import.meta.env.VITE_API_URL,
+  withCredentials: false,
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
-
 const AUTH_BYPASS_PATHS = [
   "/auth/login",
   "/auth/register",
@@ -14,10 +17,7 @@ const AUTH_BYPASS_PATHS = [
   "/auth/refresh-token",
 ];
 
-const FORCE_LOGOUT_MESSAGES = [
-  "User no longer exists",
-  "Account deactivated",
-];
+const FORCE_LOGOUT_MESSAGES = ["User no longer exists", "Account deactivated"];
 
 const isAuthBypassPath = (url) => {
   if (!url) return false;
@@ -30,7 +30,7 @@ const forceLogout = () => {
 };
 
 API.interceptors.request.use((config) => {
-  const token = sessionStorage.getItem("accessToken");
+  const token = localStorage.getItem("accessToken");
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -41,8 +41,8 @@ API.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    const message         = error.response?.data?.message || "";
-    const status          = error.response?.status;
+    const message = error.response?.data?.message || "";
+    const status = error.response?.status;
 
     if (isAuthBypassPath(originalRequest?.url)) {
       return Promise.reject(error);
