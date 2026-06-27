@@ -65,25 +65,26 @@ function Login() {
 
   // ✅ CRITICAL: Handle redirect result on page load (for mobile login)
   useEffect(() => {
+    let mounted = true;
+
     const handleRedirectResult = async () => {
       try {
-        setLoading(true);
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
         const result = await getRedirectResult(auth);
 
-        if (!result) {
-          setLoading(false);
-          return;
-        }
+        console.log("Redirect result:", result ? "Found" : "None");
+
+        if (!result || !mounted) return;
+
+        setLoading(true);
 
         const providerName =
           localStorage.getItem(REDIRECT_PROVIDER_KEY) || "google";
         localStorage.removeItem(REDIRECT_PROVIDER_KEY);
 
         const firebaseEmail =
-          result.user.email ||
-          result.user.providerData?.[0]?.email ||
-          result._tokenResponse?.email ||
-          "";
+          result.user.email || result.user.providerData?.[0]?.email || "";
 
         const firebaseName =
           result.user.displayName ||
@@ -91,19 +92,18 @@ function Login() {
           "";
 
         const firebaseAvatar =
-          result.user.photoURL ||
-          result.user.providerData?.[0]?.photoURL ||
-          "";
+          result.user.photoURL || result.user.providerData?.[0]?.photoURL || "";
+
+        console.log("Mobile login - email:", firebaseEmail);
 
         if (!firebaseEmail) {
-          alert.error(
-            `${providerName} did not share your email. Please use Google or register manually.`
-          );
+          alert.error("Email not shared. Please try another login method.");
           setLoading(false);
           return;
         }
 
         const idToken = await result.user.getIdToken(true);
+        console.log("Got ID token, calling backend...");
 
         const response = await API.post("/auth/social-login", {
           idToken,
@@ -113,34 +113,44 @@ function Login() {
           provider: providerName,
         });
 
-        if (response.data.success) {
+        console.log("Backend response:", response.data);
+
+        if (response.data.success && mounted) {
           const { accessToken, refreshToken, user } = response.data;
           login(user, accessToken, refreshToken);
           alert.success("Login successful");
           navigate(getRoleRedirect(user.role), { replace: true });
         }
       } catch (err) {
-        console.error("Redirect login error:", err);
+        console.error("Mobile redirect login error:", err);
+        console.error("Error details:", {
+          code: err?.code,
+          message: err?.message,
+          response: err?.response?.data,
+        });
+
         const status = err?.response?.status;
         const message = err?.response?.data?.message;
 
-        const attemptedEmail =
-          err?.customData?.email || localStorage.getItem("attempted_email") || "";
-        const isSuspended = checkSuspension(err.response, attemptedEmail);
-        if (isSuspended) return;
-
         if (status === 404) {
-          alert.error(`Account not registered. Please register first.`);
+          alert.error("Account not registered. Please register first.");
         } else if (message) {
           alert.error(message);
+        } else if (err?.code) {
+          alert.error(`Firebase error: ${err.code}`);
+        } else {
+          alert.error("Login failed. Please try again.");
         }
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     };
 
     handleRedirectResult();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const handleBack = () => navigate("/");
@@ -201,13 +211,11 @@ function Login() {
         "";
 
       const firebaseAvatar =
-        result.user.photoURL ||
-        result.user.providerData?.[0]?.photoURL ||
-        "";
+        result.user.photoURL || result.user.providerData?.[0]?.photoURL || "";
 
       if (!firebaseEmail) {
         alert.error(
-          `${providerName.charAt(0).toUpperCase() + providerName.slice(1)} did not share your email. Please use Google or register manually.`
+          `${providerName.charAt(0).toUpperCase() + providerName.slice(1)} did not share your email. Please use Google or register manually.`,
         );
         return;
       }
@@ -249,7 +257,7 @@ function Login() {
 
       if (status === 404) {
         alert.error(
-          `${firebaseEmail || "Account"} is not registered. Please register first.`
+          `${firebaseEmail || "Account"} is not registered. Please register first.`,
         );
         return;
       }
@@ -285,7 +293,7 @@ function Login() {
       alert.error(
         err.response?.data?.message ||
           err.response?.data?.errors?.[0] ||
-          "Login failed"
+          "Login failed",
       );
     } finally {
       setLoading(false);
@@ -309,7 +317,7 @@ function Login() {
       alert.error(
         err.response?.data?.message ||
           err.response?.data?.errors?.[0] ||
-          "Registration failed"
+          "Registration failed",
       );
     } finally {
       setLoading(false);
@@ -317,7 +325,11 @@ function Login() {
   };
 
   const SocialButtons = ({ formId }) => (
-    <div className="social-icons" role="group" aria-label="Social login options">
+    <div
+      className="social-icons"
+      role="group"
+      aria-label="Social login options"
+    >
       {SOCIAL_PROVIDERS.map((provider) => (
         <button
           key={provider}
@@ -337,7 +349,12 @@ function Login() {
   return (
     <div className="outer-container">
       <Button
-        style={{ position: "absolute", top: "10px", left: "10px", zIndex: 9999 }}
+        style={{
+          position: "absolute",
+          top: "10px",
+          left: "10px",
+          zIndex: 9999,
+        }}
         onClick={handleBack}
         aria-label="Go back to home page"
       >
