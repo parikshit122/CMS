@@ -43,6 +43,29 @@ const PROVIDER_LABELS = {
 const REDIRECT_PROVIDER_KEY = "auth_redirect_provider";
 const REDIRECT_PROCESSED_KEY = "auth_redirect_processed";
 
+function SocialButtons({ onSocialClick, loading }) {
+  return (
+    <div className="social-icons" role="group" aria-label="Social login options">
+      {SOCIAL_PROVIDERS.map((provider) => (
+        <button
+          key={provider}
+          type="button"
+          className="social-btn"
+          onClick={() => {
+            console.log("🔴 Button clicked:", provider);
+            onSocialClick(provider);
+          }}
+          disabled={loading}
+          aria-label={PROVIDER_LABELS[provider]}
+          title={PROVIDER_LABELS[provider]}
+        >
+          <i className={`bx bxl-${provider}`} aria-hidden="true" />
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Login() {
   const [isActive, setIsActive] = useState(false);
   const [loginData, setLoginData] = useState({ email: "", password: "" });
@@ -74,7 +97,8 @@ function Login() {
       try {
         setLoading(true);
 
-        const firebaseEmail = user.email || user.providerData?.[0]?.email || "";
+        const firebaseEmail =
+          user.email || user.providerData?.[0]?.email || "";
         const firebaseName =
           user.displayName || user.providerData?.[0]?.displayName || "";
         const firebaseAvatar =
@@ -164,7 +188,7 @@ function Login() {
         const result = await getRedirectResult(auth);
         console.log(
           "Redirect result:",
-          result ? `Found: ${result.user.email}` : "None",
+          result ? `Found: ${result.user.email}` : "None"
         );
 
         const providerName =
@@ -216,6 +240,8 @@ function Login() {
   };
 
   const handleSocialLogin = async (providerName) => {
+    console.log("🔴 handleSocialLogin called:", providerName);
+
     const providers = {
       google: googleProvider,
       facebook: facebookProvider,
@@ -224,26 +250,53 @@ function Login() {
     };
 
     const provider = providers[providerName];
-    if (!provider) return;
+    if (!provider) {
+      console.error("❌ Provider not found:", providerName);
+      return;
+    }
 
     let firebaseEmail = "";
 
     try {
       setLoading(true);
 
-      if (isMobileDevice()) {
-        console.log("📱 Mobile - using redirect");
+      const useMobile = isMobileDevice();
+      console.log(useMobile ? "📱 Using REDIRECT" : "💻 Using POPUP");
+
+      if (useMobile) {
         localStorage.setItem(REDIRECT_PROVIDER_KEY, providerName);
         sessionStorage.removeItem(REDIRECT_PROCESSED_KEY);
         await signInWithRedirect(auth, provider);
         return;
       }
 
-      console.log("💻 Desktop - using popup");
-      const result = await signInWithPopup(auth, provider);
+      let result;
+      try {
+        result = await signInWithPopup(auth, provider);
+      } catch (popupErr) {
+        console.warn("Popup failed:", popupErr.code);
+
+        if (popupErr.code === "auth/popup-closed-by-user") return;
+        if (popupErr.code === "auth/cancelled-popup-request") return;
+
+        if (
+          popupErr.code === "auth/popup-blocked" ||
+          popupErr.code === "auth/web-storage-unsupported" ||
+          popupErr.message?.includes("Cross-Origin")
+        ) {
+          console.log("🔄 Falling back to redirect");
+          localStorage.setItem(REDIRECT_PROVIDER_KEY, providerName);
+          sessionStorage.removeItem(REDIRECT_PROCESSED_KEY);
+          await signInWithRedirect(auth, provider);
+          return;
+        }
+        throw popupErr;
+      }
 
       firebaseEmail =
-        result.user.email || result.user.providerData?.[0]?.email || "";
+        result.user.email ||
+        result.user.providerData?.[0]?.email ||
+        "";
 
       const firebaseName =
         result.user.displayName ||
@@ -251,11 +304,13 @@ function Login() {
         "";
 
       const firebaseAvatar =
-        result.user.photoURL || result.user.providerData?.[0]?.photoURL || "";
+        result.user.photoURL ||
+        result.user.providerData?.[0]?.photoURL ||
+        "";
 
       if (!firebaseEmail) {
         alert.error(
-          `${providerName.charAt(0).toUpperCase() + providerName.slice(1)} did not share your email.`,
+          `${providerName.charAt(0).toUpperCase() + providerName.slice(1)} did not share your email.`
         );
         await auth.signOut().catch(() => {});
         return;
@@ -290,20 +345,8 @@ function Login() {
       const isSuspended = checkSuspension(err.response, firebaseEmail);
       if (isSuspended) return;
 
-      if (err?.code === "auth/popup-closed-by-user") return;
-      if (err?.code === "auth/cancelled-popup-request") return;
-
-      if (err?.code === "auth/popup-blocked") {
-        alert.error("Popup blocked. Redirecting...");
-        localStorage.setItem(REDIRECT_PROVIDER_KEY, providerName);
-        await signInWithRedirect(auth, provider);
-        return;
-      }
-
       if (status === 404) {
-        alert.error(
-          `${firebaseEmail} is not registered. Please register first.`,
-        );
+        alert.error(`${firebaseEmail} is not registered. Please register first.`);
         return;
       }
 
@@ -338,7 +381,7 @@ function Login() {
       alert.error(
         err.response?.data?.message ||
           err.response?.data?.errors?.[0] ||
-          "Login failed",
+          "Login failed"
       );
     } finally {
       setLoading(false);
@@ -362,51 +405,17 @@ function Login() {
       alert.error(
         err.response?.data?.message ||
           err.response?.data?.errors?.[0] ||
-          "Registration failed",
+          "Registration failed"
       );
     } finally {
       setLoading(false);
     }
   };
 
-  const SocialButtons = ({ formId }) => (
-    <div
-      className="social-icons"
-      role="group"
-      aria-label="Social login options"
-    >
-      {SOCIAL_PROVIDERS.map((provider) => (
-        <button
-          key={provider}
-          type="button"
-          className="social-btn"
-          onClick={() => {
-            alert(`TAPPED: ${provider}`);
-            console.log("🔴 BUTTON TAPPED:", provider);
-            handleSocialLogin(provider);
-          }}
-          onTouchStart={() => {
-            console.log("👆 Touch start:", provider);
-          }}
-          disabled={loading}
-          aria-label={PROVIDER_LABELS[provider]}
-          title={PROVIDER_LABELS[provider]}
-        >
-          <i className={`bx bxl-${provider}`} aria-hidden="true" />
-        </button>
-      ))}
-    </div>
-  );
-
   return (
     <div className="outer-container">
       <Button
-        style={{
-          position: "absolute",
-          top: "10px",
-          left: "10px",
-          zIndex: 9999,
-        }}
+        style={{ position: "absolute", top: "10px", left: "10px", zIndex: 9999 }}
         onClick={handleBack}
         aria-label="Go back to home page"
       >
@@ -478,7 +487,7 @@ function Login() {
             </Button>
 
             <p>Or login with social platforms</p>
-            <SocialButtons formId="login" />
+            <SocialButtons onSocialClick={handleSocialLogin} loading={loading} />
           </form>
         </div>
 
@@ -578,7 +587,7 @@ function Login() {
             </Button>
 
             <p>Or register with social platforms</p>
-            <SocialButtons formId="register" />
+            <SocialButtons onSocialClick={handleSocialLogin} loading={loading} />
           </form>
         </div>
 
