@@ -69,13 +69,30 @@ function Login() {
 
     const handleRedirectResult = async () => {
       try {
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        console.log("🔍 Checking for redirect result...");
+        console.log("Current auth user:", auth.currentUser?.email);
+
+        await new Promise((resolve) => setTimeout(resolve, 1000));
 
         const result = await getRedirectResult(auth);
 
-        console.log("Redirect result:", result ? "Found" : "None");
+        console.log(
+          "Redirect result:",
+          result ? `Found: ${result.user.email}` : "None",
+        );
+        console.log("Auth current user after check:", auth.currentUser?.email);
 
-        if (!result || !mounted) return;
+        let user = result?.user;
+
+        if (!user && auth.currentUser) {
+          console.log("⚠️ Using auth.currentUser as fallback");
+          user = auth.currentUser;
+        }
+
+        if (!user || !mounted) {
+          console.log("No user found, exiting");
+          return;
+        }
 
         setLoading(true);
 
@@ -83,28 +100,27 @@ function Login() {
           localStorage.getItem(REDIRECT_PROVIDER_KEY) || "google";
         localStorage.removeItem(REDIRECT_PROVIDER_KEY);
 
-        const firebaseEmail =
-          result.user.email || result.user.providerData?.[0]?.email || "";
+        const firebaseEmail = user.email || user.providerData?.[0]?.email || "";
 
         const firebaseName =
-          result.user.displayName ||
-          result.user.providerData?.[0]?.displayName ||
-          "";
+          user.displayName || user.providerData?.[0]?.displayName || "";
 
         const firebaseAvatar =
-          result.user.photoURL || result.user.providerData?.[0]?.photoURL || "";
+          user.photoURL || user.providerData?.[0]?.photoURL || "";
 
-        console.log("Mobile login - email:", firebaseEmail);
+        console.log("📧 Email:", firebaseEmail);
 
         if (!firebaseEmail) {
-          alert.error("Email not shared. Please try another login method.");
+          alert.error("Email not shared. Please try another method.");
           setLoading(false);
           return;
         }
 
-        const idToken = await result.user.getIdToken(true);
-        console.log("Got ID token, calling backend...");
+        console.log("🔑 Getting ID token...");
+        const idToken = await user.getIdToken(true);
+        console.log("✅ Got token, length:", idToken.length);
 
+        console.log("🌐 Calling backend...");
         const response = await API.post("/auth/social-login", {
           idToken,
           email: firebaseEmail,
@@ -113,21 +129,19 @@ function Login() {
           provider: providerName,
         });
 
-        console.log("Backend response:", response.data);
+        console.log("✅ Backend response:", response.data);
 
         if (response.data.success && mounted) {
-          const { accessToken, refreshToken, user } = response.data;
-          login(user, accessToken, refreshToken);
+          const { accessToken, refreshToken, user: userData } = response.data;
+          login(userData, accessToken, refreshToken);
           alert.success("Login successful");
-          navigate(getRoleRedirect(user.role), { replace: true });
+          navigate(getRoleRedirect(userData.role), { replace: true });
         }
       } catch (err) {
-        console.error("Mobile redirect login error:", err);
-        console.error("Error details:", {
-          code: err?.code,
-          message: err?.message,
-          response: err?.response?.data,
-        });
+        console.error("❌ Redirect login error:", err);
+        console.error("Code:", err?.code);
+        console.error("Message:", err?.message);
+        console.error("Response:", err?.response?.data);
 
         const status = err?.response?.status;
         const message = err?.response?.data?.message;
@@ -137,9 +151,7 @@ function Login() {
         } else if (message) {
           alert.error(message);
         } else if (err?.code) {
-          alert.error(`Firebase error: ${err.code}`);
-        } else {
-          alert.error("Login failed. Please try again.");
+          alert.error(`Error: ${err.code}`);
         }
       } finally {
         if (mounted) setLoading(false);

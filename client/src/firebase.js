@@ -6,7 +6,9 @@ import {
   TwitterAuthProvider,
   FacebookAuthProvider,
   browserLocalPersistence,
+  indexedDBLocalPersistence,
   setPersistence,
+  initializeAuth,
 } from "firebase/auth";
 
 const cleanEnv = (value) => {
@@ -30,11 +32,19 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-export const auth = getAuth(app);
+let auth;
+try {
+  auth = initializeAuth(app, {
+    persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+  });
+} catch (err) {
+  auth = getAuth(app);
+  setPersistence(auth, browserLocalPersistence).catch((e) =>
+    console.error("Persistence error:", e)
+  );
+}
 
-setPersistence(auth, browserLocalPersistence).catch((err) => {
-  console.error("Firebase persistence error:", err);
-});
+export { auth };
 
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope("email");
