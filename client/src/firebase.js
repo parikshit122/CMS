@@ -1,13 +1,13 @@
 import { initializeApp, getApps } from "firebase/app";
 import {
-  initializeAuth,
+  getAuth,
   GoogleAuthProvider,
   GithubAuthProvider,
   TwitterAuthProvider,
   FacebookAuthProvider,
   indexedDBLocalPersistence,
   browserLocalPersistence,
-  browserSessionPersistence,
+  setPersistence,
 } from "firebase/auth";
 
 const cleanEnv = (value) => {
@@ -31,15 +31,23 @@ const firebaseConfig = {
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
 
-export const auth = initializeAuth(app, {
-  persistence: [
-    indexedDBLocalPersistence,
-    browserLocalPersistence,
-    browserSessionPersistence,
-  ],
-});
+export const auth = getAuth(app);
 
-console.log("🔥 Firebase initialized with multi-persistence");
+export const authReady = (async () => {
+  try {
+    await setPersistence(auth, indexedDBLocalPersistence);
+    console.log("✅ IndexedDB persistence set");
+  } catch (e) {
+    console.warn("IndexedDB failed, trying localStorage:", e.message);
+    try {
+      await setPersistence(auth, browserLocalPersistence);
+      console.log("✅ LocalStorage persistence set");
+    } catch (e2) {
+      console.error("All persistence failed:", e2.message);
+    }
+  }
+  return auth;
+})();
 
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope("email");

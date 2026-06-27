@@ -14,8 +14,10 @@ import {
   signInWithRedirect,
   getRedirectResult,
 } from "firebase/auth";
+
 import {
   auth,
+  authReady,
   googleProvider,
   githubProvider,
   twitterProvider,
@@ -90,17 +92,17 @@ function Login() {
   const { login } = useAuth();
 
   useEffect(() => {
-  const testIDB = async () => {
-    try {
-      const req = indexedDB.open("test-db", 1);
-      req.onsuccess = () => console.log("✅ IndexedDB works");
-      req.onerror = () => console.log("❌ IndexedDB blocked");
-    } catch (e) {
-      console.log("❌ IndexedDB error:", e);
-    }
-  };
-  testIDB();
-}, []);
+    const testIDB = async () => {
+      try {
+        const req = indexedDB.open("test-db", 1);
+        req.onsuccess = () => console.log("✅ IndexedDB works");
+        req.onerror = () => console.log("❌ IndexedDB blocked");
+      } catch (e) {
+        console.log("❌ IndexedDB error:", e);
+      }
+    };
+    testIDB();
+  }, []);
 
   useEffect(() => {
     const panel = location.state?.panel;
@@ -116,13 +118,13 @@ function Login() {
 
     const handleRedirectResult = async () => {
       if (redirectHandledRef.current) {
-        console.log("⏭️ Already handled in this session");
+        console.log("⏭️ Already handled");
         return;
       }
 
       const alreadyProcessed = sessionStorage.getItem(REDIRECT_PROCESSED_KEY);
       if (alreadyProcessed) {
-        console.log("⏭️ Already processed, clearing flag");
+        console.log("⏭️ Already processed");
         sessionStorage.removeItem(REDIRECT_PROCESSED_KEY);
         await auth.signOut().catch(() => {});
         return;
@@ -131,6 +133,9 @@ function Login() {
       redirectHandledRef.current = true;
 
       try {
+        await authReady;
+        console.log("✅ Auth persistence ready");
+
         if (!auth) {
           console.error("❌ Auth not initialized!");
           return;
@@ -142,16 +147,12 @@ function Login() {
           localStorage.getItem(REDIRECT_PROVIDER_KEY),
         );
         console.log(
-          "📋 sessionStorage flag:",
-          sessionStorage.getItem(REDIRECT_PROCESSED_KEY),
-        );
-        console.log(
           "👤 auth.currentUser before:",
           auth.currentUser?.email || "null",
         );
 
         await new Promise((resolve) => setTimeout(resolve, 2000));
-        console.log("⏰ After 2s wait...");
+        console.log("⏰ After 2s wait");
         console.log(
           "👤 auth.currentUser after wait:",
           auth.currentUser?.email || "null",
@@ -161,10 +162,6 @@ function Login() {
         console.log(
           "📦 Redirect result:",
           result ? `Found: ${result.user.email}` : "None",
-        );
-        console.log(
-          "👤 auth.currentUser final:",
-          auth.currentUser?.email || "null",
         );
 
         const providerName =
@@ -182,8 +179,6 @@ function Login() {
             sessionStorage.setItem(REDIRECT_PROCESSED_KEY, "true");
             localStorage.removeItem(REDIRECT_PROVIDER_KEY);
             await processSocialLogin(auth.currentUser, providerName);
-          } else {
-            console.log("⚠️ currentUser exists but no flag - skipping");
           }
         } else {
           console.log("❌ No user found anywhere");
@@ -191,7 +186,6 @@ function Login() {
       } catch (err) {
         console.error("❌ Redirect handler error:", err);
         console.error("Code:", err?.code);
-        console.error("Message:", err?.message);
       }
     };
 
@@ -224,6 +218,9 @@ function Login() {
 
   const handleSocialLogin = async (providerName) => {
     console.log("🔴 handleSocialLogin called:", providerName);
+
+    await authReady;
+    console.log("✅ Auth ready for sign-in");
 
     const providers = {
       google: googleProvider,
