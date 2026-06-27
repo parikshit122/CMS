@@ -9,46 +9,52 @@ import {
   setPersistence,
 } from "firebase/auth";
 
-// ✅ Use environment variables (more secure)
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+// ✅ Helper to clean env variables (removes quotes, commas, spaces)
+const cleanEnv = (value) => {
+  if (!value) return "";
+  return String(value)
+    .trim()
+    .replace(/^["']|["']$/g, "")  // Remove leading/trailing quotes
+    .replace(/,+$/, "")            // Remove trailing commas
+    .trim();
 };
+
+const firebaseConfig = {
+  apiKey: cleanEnv(import.meta.env.VITE_FIREBASE_API_KEY),
+  authDomain: cleanEnv(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN),
+  projectId: cleanEnv(import.meta.env.VITE_FIREBASE_PROJECT_ID),
+  storageBucket: cleanEnv(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET),
+  messagingSenderId: cleanEnv(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID),
+  appId: cleanEnv(import.meta.env.VITE_FIREBASE_APP_ID),
+  measurementId: cleanEnv(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID),
+};
+
+// 🔍 Validate before initializing
+if (!firebaseConfig.apiKey) {
+  console.error("❌ Firebase API Key missing! Check environment variables.");
+}
 
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 
-// ✅ Ensure session persists across redirects (CRITICAL for mobile)
 setPersistence(auth, browserLocalPersistence).catch((err) => {
   console.error("Firebase persistence error:", err);
 });
 
-// ✅ Google Provider
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope("email");
 googleProvider.addScope("profile");
-googleProvider.setCustomParameters({
-  prompt: "select_account",
-});
+googleProvider.setCustomParameters({ prompt: "select_account" });
 
-// ✅ GitHub Provider
 export const githubProvider = new GithubAuthProvider();
 githubProvider.addScope("user:email");
 
-// ✅ Twitter Provider
 export const twitterProvider = new TwitterAuthProvider();
 
-// ✅ Facebook Provider
 export const facebookProvider = new FacebookAuthProvider();
 facebookProvider.addScope("email");
 
-// ✅ Detect mobile devices
 export const isMobileDevice = () => {
   if (typeof window === "undefined") return false;
   return /iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(
