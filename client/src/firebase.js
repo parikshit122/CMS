@@ -1,12 +1,13 @@
 import { initializeApp, getApps } from "firebase/app";
 import {
-  getAuth,
+  initializeAuth,
   GoogleAuthProvider,
   GithubAuthProvider,
   TwitterAuthProvider,
   FacebookAuthProvider,
+  indexedDBLocalPersistence,
   browserLocalPersistence,
-  setPersistence,
+  browserSessionPersistence,
 } from "firebase/auth";
 
 const cleanEnv = (value) => {
@@ -30,11 +31,15 @@ const firebaseConfig = {
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
 
-export const auth = getAuth(app);
-
-setPersistence(auth, browserLocalPersistence).catch((err) => {
-  console.error("Persistence error:", err);
+export const auth = initializeAuth(app, {
+  persistence: [
+    indexedDBLocalPersistence,
+    browserLocalPersistence,
+    browserSessionPersistence,
+  ],
 });
+
+console.log("🔥 Firebase initialized with multi-persistence");
 
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope("email");
@@ -51,7 +56,11 @@ facebookProvider.addScope("email");
 
 export const isMobileDevice = () => {
   if (typeof window === "undefined") return false;
-  return /iPhone|iPad|iPod|Android|webOS|BlackBerry|IEMobile|Opera Mini/i.test(
-    navigator.userAgent,
-  );
+  
+  const userAgent = navigator.userAgent || navigator.vendor || "";
+  const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|mobile|CriOS|FxiOS/i.test(userAgent);
+  const isTouchDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  const isSmallScreen = window.innerWidth <= 1024;
+  
+  return isMobileUA || (isTouchDevice && isSmallScreen);
 };
