@@ -9,13 +9,18 @@ import SuspendedScreen from "../../components/auth/SuspendedScreen";
 import "../../styles/Login.css";
 import "boxicons/css/boxicons.min.css";
 
-import { signInWithPopup } from "firebase/auth";
+import {
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+} from "firebase/auth";
 import {
   auth,
   googleProvider,
   githubProvider,
   twitterProvider,
   facebookProvider,
+  isMobileDevice,
 } from "../../firebase";
 
 const getRoleRedirect = (role) => {
@@ -32,6 +37,9 @@ const PROVIDER_LABELS = {
   twitter: "Sign in with Twitter",
   facebook: "Sign in with Facebook",
 };
+
+// ✅ Store provider name during redirect (survives page reload)
+const REDIRECT_PROVIDER_KEY = "auth_redirect_provider";
 
 function Login() {
   const [isActive, setIsActive] = useState(false);
@@ -55,6 +63,86 @@ function Login() {
     setIsActive(panel === "register");
   }, [location.state]);
 
+  // ✅ CRITICAL: Handle redirect result on page load (for mobile login)
+  useEffect(() => {
+    const handleRedirectResult = async () => {
+      try {
+        setLoading(true);
+        const result = await getRedirectResult(auth);
+
+        if (!result) {
+          setLoading(false);
+          return;
+        }
+
+        const providerName =
+          localStorage.getItem(REDIRECT_PROVIDER_KEY) || "google";
+        localStorage.removeItem(REDIRECT_PROVIDER_KEY);
+
+        const firebaseEmail =
+          result.user.email ||
+          result.user.providerData?.[0]?.email ||
+          result._tokenResponse?.email ||
+          "";
+
+        const firebaseName =
+          result.user.displayName ||
+          result.user.providerData?.[0]?.displayName ||
+          "";
+
+        const firebaseAvatar =
+          result.user.photoURL ||
+          result.user.providerData?.[0]?.photoURL ||
+          "";
+
+        if (!firebaseEmail) {
+          alert.error(
+            `${providerName} did not share your email. Please use Google or register manually.`
+          );
+          setLoading(false);
+          return;
+        }
+
+        const idToken = await result.user.getIdToken(true);
+
+        const response = await API.post("/auth/social-login", {
+          idToken,
+          email: firebaseEmail,
+          name: firebaseName,
+          avatar: firebaseAvatar,
+          provider: providerName,
+        });
+
+        if (response.data.success) {
+          const { accessToken, refreshToken, user } = response.data;
+          login(user, accessToken, refreshToken);
+          alert.success("Login successful");
+          navigate(getRoleRedirect(user.role), { replace: true });
+        }
+      } catch (err) {
+        console.error("Redirect login error:", err);
+        const status = err?.response?.status;
+        const message = err?.response?.data?.message;
+
+        const attemptedEmail =
+          err?.customData?.email || localStorage.getItem("attempted_email") || "";
+        const isSuspended = checkSuspension(err.response, attemptedEmail);
+        if (isSuspended) return;
+
+        if (status === 404) {
+          alert.error(`Account not registered. Please register first.`);
+        } else if (message) {
+          alert.error(message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    handleRedirectResult();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleBack = () => navigate("/");
 
   const handleLoginChange = (e) =>
@@ -75,83 +163,102 @@ function Login() {
     return false;
   };
 
-const handleSocialLogin = async (providerName) => {
-  const providers = {
-    google: googleProvider,
-    facebook: facebookProvider,
-    github: githubProvider,
-    twitter: twitterProvider,
+  // ✅ MAIN FIX: Use redirect on mobile, popup on desktop
+  const handleSocialLogin = async (providerName) => {
+    const providers = {
+      google: googleProvider,
+      facebook: facebookProvider,
+      github: githubProvider,
+      twitter: twitterProvider,
+    };
+
+    const provider = providers[providerName];
+    if (!provider) return;
+
+    try {
+      setLoading(true);
+
+      // ✅ Mobile devices: use redirect (popup is blocked/unreliable)
+      if (isMobileDevice()) {
+        localStorage.setItem(REDIRECT_PROVIDER_KEY, providerName);
+        await signInWithRedirect(auth, provider);
+        // Page redirects → result handled in useEffect on return
+        return;
+      }
+
+      // ✅ Desktop: use popup (better UX)
+      const result = await signInWithPopup(auth, provider);
+
+      const firebaseEmail =
+        result.user.email ||
+        result.user.providerData?.[0]?.email ||
+        result._tokenResponse?.email ||
+        "";
+
+      const firebaseName =
+        result.user.displayName ||
+        result.user.providerData?.[0]?.displayName ||
+        "";
+
+      const firebaseAvatar =
+        result.user.photoURL ||
+        result.user.providerData?.[0]?.photoURL ||
+        "";
+
+      if (!firebaseEmail) {
+        alert.error(
+          `${providerName.charAt(0).toUpperCase() + providerName.slice(1)} did not share your email. Please use Google or register manually.`
+        );
+        return;
+      }
+
+      const idToken = await result.user.getIdToken(true);
+
+      const response = await API.post("/auth/social-login", {
+        idToken,
+        email: firebaseEmail,
+        name: firebaseName,
+        avatar: firebaseAvatar,
+        provider: providerName,
+      });
+
+      if (response.data.success) {
+        const { accessToken, refreshToken, user } = response.data;
+        login(user, accessToken, refreshToken);
+        alert.success("Login successful");
+        navigate(getRoleRedirect(user.role), { replace: true });
+      }
+    } catch (err) {
+      const status = err?.response?.status;
+      const message = err?.response?.data?.message;
+      const firebaseEmail = err?.customData?.email || "";
+
+      const isSuspended = checkSuspension(err.response, firebaseEmail);
+      if (isSuspended) return;
+
+      // Silent ignores for user cancellations
+      if (err?.code === "auth/popup-closed-by-user") return;
+      if (err?.code === "auth/cancelled-popup-request") return;
+      if (err?.code === "auth/popup-blocked") {
+        // ✅ Fallback: if popup is blocked on desktop, use redirect
+        alert.error("Popup blocked. Redirecting to sign-in page...");
+        localStorage.setItem(REDIRECT_PROVIDER_KEY, providerName);
+        await signInWithRedirect(auth, provider);
+        return;
+      }
+
+      if (status === 404) {
+        alert.error(
+          `${firebaseEmail || "Account"} is not registered. Please register first.`
+        );
+        return;
+      }
+
+      alert.error(message || "Social login failed");
+    } finally {
+      setLoading(false);
+    }
   };
-
-  const provider = providers[providerName];
-  if (!provider) return;
-
-  let firebaseEmail = "";
-
-  try {
-    setLoading(true);
-
-    const result = await signInWithPopup(auth, provider);
-
-    firebaseEmail =
-      result.user.email ||
-      result.user.providerData?.[0]?.email ||
-      result._tokenResponse?.email ||
-      "";
-
-    const firebaseName =
-      result.user.displayName ||
-      result.user.providerData?.[0]?.displayName ||
-      "";
-
-    const firebaseAvatar =
-      result.user.photoURL ||
-      result.user.providerData?.[0]?.photoURL ||
-      "";
-
-    if (!firebaseEmail) {
-      alert.error(
-        `${providerName.charAt(0).toUpperCase() + providerName.slice(1)} did not share your email. Please use Google or register manually.`,
-      );
-      return;
-    }
-
-    const idToken = await result.user.getIdToken(true);
-
-    const response = await API.post("/auth/social-login", {
-      idToken,
-      email: firebaseEmail,
-      name: firebaseName,
-      avatar: firebaseAvatar,
-      provider: providerName,
-    });
-
-    if (response.data.success) {
-      const { accessToken, refreshToken, user } = response.data;
-      login(user, accessToken, refreshToken);
-      alert.success("Login successful");
-      navigate(getRoleRedirect(user.role), { replace: true });
-    }
-  } catch (err) {
-    const status = err?.response?.status;
-    const message = err?.response?.data?.message;
-
-    const isSuspended = checkSuspension(err.response, firebaseEmail);
-    if (isSuspended) return;
-
-    if (err?.code === "auth/popup-closed-by-user") return;
-    if (err?.code === "auth/cancelled-popup-request") return;
-
-    if (status === 404) {
-      alert.error(`${firebaseEmail} is not registered. Please register first.`);
-      return;
-    }
-
-    alert.error(message || "Social login failed");
-  } finally {
-    setLoading(false);
-  }
-};
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -178,7 +285,7 @@ const handleSocialLogin = async (providerName) => {
       alert.error(
         err.response?.data?.message ||
           err.response?.data?.errors?.[0] ||
-          "Login failed",
+          "Login failed"
       );
     } finally {
       setLoading(false);
@@ -202,7 +309,7 @@ const handleSocialLogin = async (providerName) => {
       alert.error(
         err.response?.data?.message ||
           err.response?.data?.errors?.[0] ||
-          "Registration failed",
+          "Registration failed"
       );
     } finally {
       setLoading(false);
@@ -287,10 +394,7 @@ const handleSocialLogin = async (providerName) => {
             </div>
 
             <div className="forgot-link">
-              <Link
-                to="/auth/forgot-password"
-                className="forgot-btn"
-              >
+              <Link to="/auth/forgot-password" className="forgot-btn">
                 Forgot password?
               </Link>
             </div>
