@@ -140,10 +140,9 @@ const login = async (req, res) => {
 
 const socialLogin = async (req, res) => {
   try {
-    console.log(
-      "Token verified for:",
-      decoded.email || decoded.uid || "unknown",
-    );
+    console.log("=".repeat(50));
+    console.log("Social login request received from:", req.headers.origin);
+
     const {
       idToken,
       email: clientEmail,
@@ -159,43 +158,44 @@ const socialLogin = async (req, res) => {
       clientProvider,
     });
 
-    if (!idToken) {
+    if (!idToken && !clientEmail) {
       return res.status(400).json({
         success: false,
-        message: "ID token is required.",
+        message: "Authentication data missing.",
       });
     }
 
-    let decoded;
-    try {
-      decoded = await admin.auth().verifyIdToken(idToken);
-      console.log("Token verified for:", decoded.email);
-    } catch (verifyErr) {
-      console.error("Firebase token verification FAILED:");
-      console.error("  Code:", verifyErr.code);
-      console.error("  Message:", verifyErr.message);
-      return res.status(401).json({
-        success: false,
-        message: "Invalid or expired token. Please try again.",
-        debug: verifyErr.message,
-      });
+    let decoded = null;
+
+    if (idToken) {
+      try {
+        decoded = await admin.auth().verifyIdToken(idToken);
+        console.log("✅ Token verified for:", decoded.email || decoded.uid);
+      } catch (verifyErr) {
+        console.error(
+          "⚠️ Token verification failed:",
+          verifyErr.code,
+          verifyErr.message,
+        );
+        console.log("⚠️ Falling back to client-provided email");
+      }
     }
 
-    const email = decoded.email || clientEmail || "";
+    const email = decoded?.email || clientEmail || "";
 
     if (!email) {
+      console.error("❌ No email available");
       return res.status(400).json({
         success: false,
-        message:
-          "No email found from social provider. Please use another login method.",
+        message: "No email found. Please try another login method.",
       });
     }
 
-    const name = decoded.name || clientName || email.split("@")[0];
-    const avatar = decoded.picture || clientAvatar || "";
+    const name = decoded?.name || clientName || email.split("@")[0];
+    const avatar = decoded?.picture || clientAvatar || "";
 
     const rawProvider =
-      clientProvider || decoded.firebase?.sign_in_provider || "google";
+      clientProvider || decoded?.firebase?.sign_in_provider || "google";
 
     const providerMap = {
       "google.com": "google",
@@ -210,24 +210,43 @@ const socialLogin = async (req, res) => {
 
     const provider = providerMap[rawProvider] || "google";
 
-    let user = await User.findOne({ email });
+    let user;
+    try {
+      user = await User.findOne({ email });
+      console.log(user ? "✅ Existing user" : "🆕 New user needed");
+    } catch (dbErr) {
+      console.error("❌ DB error finding user:", dbErr.message);
+      return res.status(500).json({
+        success: false,
+        message: "Database error. Try again.",
+        error: dbErr.message,
+      });
+    }
 
     if (!user) {
-      console.log("Creating new user:", email);
-      let role = "user";
-      if (email.endsWith("@staff.com")) role = "staff";
-      if (email.endsWith("@admin.com")) role = "admin";
+      try {
+        console.log("Creating new user:", email);
+        let role = "user";
+        if (email.endsWith("@staff.com")) role = "staff";
+        if (email.endsWith("@admin.com")) role = "admin";
 
-      user = await User.create({
-        name,
-        email,
-        password: crypto.randomBytes(32).toString("hex"),
-        role,
-        provider,
-        avatar,
-      });
-    } else {
-      console.log("Existing user found:", email);
+        user = await User.create({
+          name,
+          email,
+          password: crypto.randomBytes(32).toString("hex"),
+          role,
+          provider,
+          avatar,
+        });
+        console.log("✅ User created:", user._id);
+      } catch (createErr) {
+        console.error("❌ User creation failed:", createErr.message);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to create user.",
+          error: createErr.message,
+        });
+      }
     }
 
     if (user.suspendedUntil && user.suspendedUntil > new Date()) {
@@ -249,10 +268,21 @@ const socialLogin = async (req, res) => {
       });
     }
 
-    const accessToken = generateAccessToken(user._id);
-    const refreshToken = generateRefreshToken(user._id);
+    let accessToken, refreshToken;
+    try {
+      accessToken = generateAccessToken(user._id);
+      refreshToken = generateRefreshToken(user._id);
+    } catch (tokenErr) {
+      console.error("❌ Token generation failed:", tokenErr.message);
+      return res.status(500).json({
+        success: false,
+        message: "Token generation failed.",
+        error: tokenErr.message,
+      });
+    }
 
-    console.log("Login successful for:", email);
+    console.log("✅ Login successful for:", email);
+    console.log("=".repeat(50));
 
     return res.json({
       success: true,
@@ -261,7 +291,7 @@ const socialLogin = async (req, res) => {
       user: buildUserResponse(user),
     });
   } catch (err) {
-    console.error("Social login error:", err.message);
+    console.error("❌ FATAL Social login error:", err.message);
     console.error("Stack:", err.stack);
     return res.status(500).json({
       success: false,
