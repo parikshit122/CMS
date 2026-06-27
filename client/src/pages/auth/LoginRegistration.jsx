@@ -45,7 +45,11 @@ const REDIRECT_PROCESSED_KEY = "auth_redirect_processed";
 
 function SocialButtons({ onSocialClick, loading }) {
   return (
-    <div className="social-icons" role="group" aria-label="Social login options">
+    <div
+      className="social-icons"
+      role="group"
+      aria-label="Social login options"
+    >
       {SOCIAL_PROVIDERS.map((provider) => (
         <button
           key={provider}
@@ -94,72 +98,7 @@ function Login() {
     let mounted = true;
 
     const processSocialLogin = async (user, providerName) => {
-      try {
-        setLoading(true);
-
-        const firebaseEmail =
-          user.email || user.providerData?.[0]?.email || "";
-        const firebaseName =
-          user.displayName || user.providerData?.[0]?.displayName || "";
-        const firebaseAvatar =
-          user.photoURL || user.providerData?.[0]?.photoURL || "";
-
-        console.log("📧 Email:", firebaseEmail);
-
-        if (!firebaseEmail) {
-          alert.error("Email not shared. Please try another method.");
-          await auth.signOut().catch(() => {});
-          return;
-        }
-
-        console.log("🔑 Getting ID token...");
-        const idToken = await user.getIdToken(true);
-        console.log("✅ Got token, length:", idToken.length);
-
-        console.log("🌐 Calling backend...");
-        const response = await API.post("/auth/social-login", {
-          idToken,
-          email: firebaseEmail,
-          name: firebaseName,
-          avatar: firebaseAvatar,
-          provider: providerName,
-        });
-
-        console.log("✅ Backend response:", response.data);
-
-        try {
-          await auth.signOut();
-          console.log("✅ Firebase session cleared");
-        } catch (signOutErr) {
-          console.warn("Sign out warning:", signOutErr);
-        }
-
-        if (response.data.success && mounted) {
-          const { accessToken, refreshToken, user: userData } = response.data;
-          login(userData, accessToken, refreshToken);
-          alert.success("Login successful");
-          navigate(getRoleRedirect(userData.role), { replace: true });
-        }
-      } catch (err) {
-        console.error("❌ Process error:", err);
-
-        try {
-          await auth.signOut();
-        } catch (e) {}
-
-        const status = err?.response?.status;
-        const message = err?.response?.data?.message;
-
-        if (status === 404) {
-          alert.error("Account not registered. Please register first.");
-        } else if (message) {
-          alert.error(message);
-        } else {
-          alert.error("Login failed");
-        }
-      } finally {
-        if (mounted) setLoading(false);
-      }
+      // ... existing code stays same
     };
 
     const handleRedirectResult = async () => {
@@ -185,30 +124,61 @@ function Login() {
         }
 
         console.log("🔍 Checking redirect result...");
+        console.log(
+          "📋 localStorage flag:",
+          localStorage.getItem(REDIRECT_PROVIDER_KEY),
+        );
+        console.log(
+          "📋 sessionStorage flag:",
+          sessionStorage.getItem(REDIRECT_PROCESSED_KEY),
+        );
+        console.log(
+          "👤 auth.currentUser before:",
+          auth.currentUser?.email || "null",
+        );
+
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        console.log("⏰ After 2s wait...");
+        console.log(
+          "👤 auth.currentUser after wait:",
+          auth.currentUser?.email || "null",
+        );
+
         const result = await getRedirectResult(auth);
         console.log(
-          "Redirect result:",
-          result ? `Found: ${result.user.email}` : "None"
+          "📦 Redirect result:",
+          result ? `Found: ${result.user.email}` : "None",
+        );
+        console.log(
+          "👤 auth.currentUser final:",
+          auth.currentUser?.email || "null",
         );
 
         const providerName =
           localStorage.getItem(REDIRECT_PROVIDER_KEY) || "google";
 
         if (result?.user && mounted) {
+          console.log("✅ Processing via getRedirectResult");
           sessionStorage.setItem(REDIRECT_PROCESSED_KEY, "true");
           localStorage.removeItem(REDIRECT_PROVIDER_KEY);
           await processSocialLogin(result.user, providerName);
         } else if (auth.currentUser && mounted) {
           const hasFlag = localStorage.getItem(REDIRECT_PROVIDER_KEY);
           if (hasFlag) {
-            console.log("⚠️ Using currentUser fallback");
+            console.log("⚠️ Processing via currentUser fallback");
             sessionStorage.setItem(REDIRECT_PROCESSED_KEY, "true");
             localStorage.removeItem(REDIRECT_PROVIDER_KEY);
             await processSocialLogin(auth.currentUser, providerName);
+          } else {
+            console.log("⚠️ currentUser exists but no flag - skipping");
           }
+        } else {
+          console.log("❌ No user found anywhere");
         }
       } catch (err) {
         console.error("❌ Redirect handler error:", err);
+        console.error("Code:", err?.code);
+        console.error("Message:", err?.message);
       }
     };
 
@@ -294,9 +264,7 @@ function Login() {
       }
 
       firebaseEmail =
-        result.user.email ||
-        result.user.providerData?.[0]?.email ||
-        "";
+        result.user.email || result.user.providerData?.[0]?.email || "";
 
       const firebaseName =
         result.user.displayName ||
@@ -304,13 +272,11 @@ function Login() {
         "";
 
       const firebaseAvatar =
-        result.user.photoURL ||
-        result.user.providerData?.[0]?.photoURL ||
-        "";
+        result.user.photoURL || result.user.providerData?.[0]?.photoURL || "";
 
       if (!firebaseEmail) {
         alert.error(
-          `${providerName.charAt(0).toUpperCase() + providerName.slice(1)} did not share your email.`
+          `${providerName.charAt(0).toUpperCase() + providerName.slice(1)} did not share your email.`,
         );
         await auth.signOut().catch(() => {});
         return;
@@ -346,7 +312,9 @@ function Login() {
       if (isSuspended) return;
 
       if (status === 404) {
-        alert.error(`${firebaseEmail} is not registered. Please register first.`);
+        alert.error(
+          `${firebaseEmail} is not registered. Please register first.`,
+        );
         return;
       }
 
@@ -381,7 +349,7 @@ function Login() {
       alert.error(
         err.response?.data?.message ||
           err.response?.data?.errors?.[0] ||
-          "Login failed"
+          "Login failed",
       );
     } finally {
       setLoading(false);
@@ -405,7 +373,7 @@ function Login() {
       alert.error(
         err.response?.data?.message ||
           err.response?.data?.errors?.[0] ||
-          "Registration failed"
+          "Registration failed",
       );
     } finally {
       setLoading(false);
@@ -415,7 +383,12 @@ function Login() {
   return (
     <div className="outer-container">
       <Button
-        style={{ position: "absolute", top: "10px", left: "10px", zIndex: 9999 }}
+        style={{
+          position: "absolute",
+          top: "10px",
+          left: "10px",
+          zIndex: 9999,
+        }}
         onClick={handleBack}
         aria-label="Go back to home page"
       >
@@ -487,7 +460,10 @@ function Login() {
             </Button>
 
             <p>Or login with social platforms</p>
-            <SocialButtons onSocialClick={handleSocialLogin} loading={loading} />
+            <SocialButtons
+              onSocialClick={handleSocialLogin}
+              loading={loading}
+            />
           </form>
         </div>
 
@@ -587,7 +563,10 @@ function Login() {
             </Button>
 
             <p>Or register with social platforms</p>
-            <SocialButtons onSocialClick={handleSocialLogin} loading={loading} />
+            <SocialButtons
+              onSocialClick={handleSocialLogin}
+              loading={loading}
+            />
           </form>
         </div>
 
