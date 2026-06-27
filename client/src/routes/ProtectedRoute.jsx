@@ -2,11 +2,29 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const location = useLocation();
-  const accessToken = sessionStorage.getItem("accessToken");
+  const accessToken = localStorage.getItem("accessToken");
+
+  if (loading) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          minHeight: "100vh",
+          fontSize: "16px",
+          color: "#666",
+        }}
+      >
+        Loading...
+      </div>
+    );
+  }
 
   if (!accessToken || !user) {
+    console.log("❌ No auth, redirecting to /auth");
     return <Navigate to="/auth" replace />;
   }
 
@@ -23,11 +41,9 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   const studentIncomplete =
     isStudent && (!user.phone || !user.course || !user.year);
 
-  const staffIncomplete =
-    isStaff && (!user.phone || !user.category);
+  const staffIncomplete = isStaff && (!user.phone || !user.category);
 
-  const adminIncomplete =
-    isAdmin && !user.phone;
+  const adminIncomplete = isAdmin && !user.phone;
 
   if (
     (studentIncomplete || staffIncomplete || adminIncomplete) &&

@@ -9,12 +9,12 @@ const useAuthSync = (intervalMs = 5000) => {
         if (!res.data?.success) return;
 
         const latest = res.data.user;
-        const stored = JSON.parse(sessionStorage.getItem("user"));
+        const stored = JSON.parse(localStorage.getItem("user"));
 
         if (!stored) return;
 
         if (JSON.stringify(latest) !== JSON.stringify(stored)) {
-          sessionStorage.setItem("user", JSON.stringify(latest));
+          localStorage.setItem("user", JSON.stringify(latest));
           window.dispatchEvent(new Event("user-updated"));
         }
       } catch {

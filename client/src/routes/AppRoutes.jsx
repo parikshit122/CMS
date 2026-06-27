@@ -70,8 +70,8 @@ function AppRoutes() {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    const token = sessionStorage.getItem("accessToken");
-    const storedUser = sessionStorage.getItem("user");
+    const token = localStorage.getItem("accessToken");
+    const storedUser = localStorage.getItem("user");
 
     if (!token) {
       setUser(null);
@@ -83,7 +83,7 @@ function AppRoutes() {
       try {
         setUser(JSON.parse(storedUser));
       } catch {
-        sessionStorage.clear();
+        localStorage.clear();
         setUser(null);
       }
     }

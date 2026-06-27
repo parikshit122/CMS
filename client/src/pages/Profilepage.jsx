@@ -17,7 +17,7 @@ const Profile = () => {
 
   useEffect(() => {
     const loadUser = () => {
-      const storedUser = JSON.parse(sessionStorage.getItem("user"));
+      const storedUser = JSON.parse(localStorage.getItem("user"));
       if (storedUser) {
         const profileData = {
           firstName: storedUser.name?.split(" ")[0] || "",
@@ -97,7 +97,7 @@ const Profile = () => {
       let updatedUser = response.data.data;
 
       if (formData.avatarFile) {
-        const token = sessionStorage.getItem("accessToken");
+        const token = localStorage.getItem("accessToken");
         const form = new FormData();
         form.append("avatar", formData.avatarFile);
 
@@ -119,7 +119,7 @@ const Profile = () => {
         }
       }
 
-      sessionStorage.setItem("user", JSON.stringify(updatedUser));
+      localStorage.setItem("user", JSON.stringify(updatedUser));
       alert.success("Profile updated successfully");
       setTimeout(() => window.location.reload(), 1000);
 

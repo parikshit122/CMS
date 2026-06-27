@@ -186,10 +186,10 @@ function Login() {
         return;
       }
 
-      const alreadyProcessed = sessionStorage.getItem(REDIRECT_PROCESSED_KEY);
+      const alreadyProcessed = localStorage.getItem(REDIRECT_PROCESSED_KEY);
       if (alreadyProcessed) {
         console.log("⏭️ Already processed");
-        sessionStorage.removeItem(REDIRECT_PROCESSED_KEY);
+        localStorage.removeItem(REDIRECT_PROCESSED_KEY);
         await auth.signOut().catch(() => {});
         return;
       }
@@ -233,14 +233,14 @@ function Login() {
 
         if (result?.user && mounted) {
           console.log("✅ Processing via getRedirectResult");
-          sessionStorage.setItem(REDIRECT_PROCESSED_KEY, "true");
+          localStorage.setItem(REDIRECT_PROCESSED_KEY, "true");
           localStorage.removeItem(REDIRECT_PROVIDER_KEY);
           await processSocialLogin(result.user, providerName);
         } else if (auth.currentUser && mounted) {
           const hasFlag = localStorage.getItem(REDIRECT_PROVIDER_KEY);
           if (hasFlag) {
             console.log("⚠️ Processing via currentUser fallback");
-            sessionStorage.setItem(REDIRECT_PROCESSED_KEY, "true");
+            localStorage.setItem(REDIRECT_PROCESSED_KEY, "true");
             localStorage.removeItem(REDIRECT_PROVIDER_KEY);
             await processSocialLogin(auth.currentUser, providerName);
           }

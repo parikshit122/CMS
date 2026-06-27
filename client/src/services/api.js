@@ -7,27 +7,6 @@ const API = axios.create({
     "Content-Type": "application/json",
   },
 });
-const AUTH_BYPASS_PATHS = [
-  "/auth/login",
-  "/auth/register",
-  "/auth/social-login",
-  "/auth/forgot-password",
-  "/auth/verify-otp",
-  "/auth/reset-password",
-  "/auth/refresh-token",
-];
-
-const FORCE_LOGOUT_MESSAGES = ["User no longer exists", "Account deactivated"];
-
-const isAuthBypassPath = (url) => {
-  if (!url) return false;
-  return AUTH_BYPASS_PATHS.some((path) => url.includes(path));
-};
-
-const forceLogout = () => {
-  sessionStorage.clear();
-  window.location.href = "/auth";
-};
 
 API.interceptors.request.use((config) => {
   const token = localStorage.getItem("accessToken");
@@ -41,49 +20,33 @@ API.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    const message = error.response?.data?.message || "";
-    const status = error.response?.status;
 
-    if (isAuthBypassPath(originalRequest?.url)) {
-      return Promise.reject(error);
-    }
-
-    if (
-      status === 401 &&
-      FORCE_LOGOUT_MESSAGES.some((m) => message.includes(m))
-    ) {
-      forceLogout();
-      return Promise.reject(error);
-    }
-
-    if (status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
-
-      const refreshToken = sessionStorage.getItem("refreshToken");
-
-      if (!refreshToken) {
-        forceLogout();
-        return Promise.reject(error);
-      }
-
+      
       try {
+        const refreshToken = localStorage.getItem("refreshToken");
         const response = await axios.post(
-          "http://localhost:5000/api/auth/refresh-token",
-          { refreshToken },
+          `${import.meta.env.VITE_API_URL}/auth/refresh-token`,
+          { refreshToken }
         );
-
+        
         const newAccessToken = response.data.accessToken;
-        sessionStorage.setItem("accessToken", newAccessToken);
-
+        localStorage.setItem("accessToken", newAccessToken);
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+        
         return API(originalRequest);
-      } catch {
-        forceLogout();
+      } catch (refreshErr) {
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("refreshToken");
+        localStorage.removeItem("user");
+        window.location.href = "/auth";
+        return Promise.reject(refreshErr);
       }
     }
 
     return Promise.reject(error);
-  },
+  }
 );
 
 export default API;

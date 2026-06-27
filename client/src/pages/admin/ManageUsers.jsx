@@ -27,7 +27,7 @@ const ManageUsers = () => {
 
   const getCurrentUserId = () => {
     try {
-      const raw = localStorage.getItem("user") || sessionStorage.getItem("user");
+      const raw = localStorage.getItem("user") || localStorage.getItem("user");
       if (!raw) return null;
       return JSON.parse(raw)?._id ?? null;
     } catch {
@@ -37,7 +37,7 @@ const ManageUsers = () => {
 
   const forceLogout = () => {
     localStorage.clear();
-    sessionStorage.clear();
+    localStorage.clear();
     navigate("/login", { replace: true });
   };
 

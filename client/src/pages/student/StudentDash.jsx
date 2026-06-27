@@ -18,7 +18,7 @@ import {
 } from "recharts";
 
 export default function StudentDash() {
-  const user = JSON.parse(sessionStorage.getItem("user") || "{}");
+  const user = JSON.parse(localStorage.getItem("user") || "{}");
   const userName = user?.name || "User";
 
   const [complaints, setComplaints] = useState([]);

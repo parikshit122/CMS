@@ -25,11 +25,11 @@ export default function NotificationBell() {
   const dropdownRef = useRef(null);
   const pollRef = useRef(null);
 
-  const token = sessionStorage.getItem("accessToken");
+  const token = localStorage.getItem("accessToken");
   const recentItems = items.slice(0, 5);
 
   const getNotifPath = () => {
-    const user = JSON.parse(sessionStorage.getItem("user") || "{}");
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
     if (user.role === "admin") return "/admin/notifications";
     if (user.role === "staff") return "/staff/notifications";
     return "/notifications";
