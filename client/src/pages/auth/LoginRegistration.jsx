@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import Button from "../../components/common/Button";
 import { useAlert } from "../../components/common/Alert";
@@ -23,6 +23,8 @@ import {
   isMobileDevice,
 } from "../../firebase";
 
+console.log("🔥 Firebase auth loaded:", !!auth, auth?.app?.name);
+
 const getRoleRedirect = (role) => {
   if (role === "admin") return "/admin";
   if (role === "staff") return "/staff";
@@ -38,8 +40,8 @@ const PROVIDER_LABELS = {
   facebook: "Sign in with Facebook",
 };
 
-// ✅ Store provider name during redirect (survives page reload)
 const REDIRECT_PROVIDER_KEY = "auth_redirect_provider";
+const REDIRECT_PROCESSED_KEY = "auth_redirect_processed";
 
 function Login() {
   const [isActive, setIsActive] = useState(false);
@@ -53,6 +55,8 @@ function Login() {
   const [loading, setLoading] = useState(false);
   const [suspensionData, setSuspensionData] = useState(null);
 
+  const redirectHandledRef = useRef(false);
+
   const navigate = useNavigate();
   const location = useLocation();
   const alert = useAlert();
@@ -63,48 +67,17 @@ function Login() {
     setIsActive(panel === "register");
   }, [location.state]);
 
-  // ✅ CRITICAL: Handle redirect result on page load (for mobile login)
   useEffect(() => {
     let mounted = true;
 
-    const handleRedirectResult = async () => {
+    const processSocialLogin = async (user, providerName) => {
       try {
-        console.log("🔍 Checking for redirect result...");
-        console.log("Current auth user:", auth.currentUser?.email);
-
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        const result = await getRedirectResult(auth);
-
-        console.log(
-          "Redirect result:",
-          result ? `Found: ${result.user.email}` : "None",
-        );
-        console.log("Auth current user after check:", auth.currentUser?.email);
-
-        let user = result?.user;
-
-        if (!user && auth.currentUser) {
-          console.log("⚠️ Using auth.currentUser as fallback");
-          user = auth.currentUser;
-        }
-
-        if (!user || !mounted) {
-          console.log("No user found, exiting");
-          return;
-        }
-
         setLoading(true);
 
-        const providerName =
-          localStorage.getItem(REDIRECT_PROVIDER_KEY) || "google";
-        localStorage.removeItem(REDIRECT_PROVIDER_KEY);
-
-        const firebaseEmail = user.email || user.providerData?.[0]?.email || "";
-
+        const firebaseEmail =
+          user.email || user.providerData?.[0]?.email || "";
         const firebaseName =
           user.displayName || user.providerData?.[0]?.displayName || "";
-
         const firebaseAvatar =
           user.photoURL || user.providerData?.[0]?.photoURL || "";
 
@@ -112,7 +85,7 @@ function Login() {
 
         if (!firebaseEmail) {
           alert.error("Email not shared. Please try another method.");
-          setLoading(false);
+          await auth.signOut().catch(() => {});
           return;
         }
 
@@ -131,6 +104,13 @@ function Login() {
 
         console.log("✅ Backend response:", response.data);
 
+        try {
+          await auth.signOut();
+          console.log("✅ Firebase session cleared");
+        } catch (signOutErr) {
+          console.warn("Sign out warning:", signOutErr);
+        }
+
         if (response.data.success && mounted) {
           const { accessToken, refreshToken, user: userData } = response.data;
           login(userData, accessToken, refreshToken);
@@ -138,10 +118,11 @@ function Login() {
           navigate(getRoleRedirect(userData.role), { replace: true });
         }
       } catch (err) {
-        console.error("❌ Redirect login error:", err);
-        console.error("Code:", err?.code);
-        console.error("Message:", err?.message);
-        console.error("Response:", err?.response?.data);
+        console.error("❌ Process error:", err);
+
+        try {
+          await auth.signOut();
+        } catch (e) {}
 
         const status = err?.response?.status;
         const message = err?.response?.data?.message;
@@ -150,11 +131,61 @@ function Login() {
           alert.error("Account not registered. Please register first.");
         } else if (message) {
           alert.error(message);
-        } else if (err?.code) {
-          alert.error(`Error: ${err.code}`);
+        } else {
+          alert.error("Login failed");
         }
       } finally {
         if (mounted) setLoading(false);
+      }
+    };
+
+    const handleRedirectResult = async () => {
+      if (redirectHandledRef.current) {
+        console.log("⏭️ Already handled in this session");
+        return;
+      }
+
+      const alreadyProcessed = sessionStorage.getItem(REDIRECT_PROCESSED_KEY);
+      if (alreadyProcessed) {
+        console.log("⏭️ Already processed, clearing flag");
+        sessionStorage.removeItem(REDIRECT_PROCESSED_KEY);
+        await auth.signOut().catch(() => {});
+        return;
+      }
+
+      redirectHandledRef.current = true;
+
+      try {
+        if (!auth) {
+          console.error("❌ Auth not initialized!");
+          return;
+        }
+
+        console.log("🔍 Checking redirect result...");
+        const result = await getRedirectResult(auth);
+        console.log(
+          "Redirect result:",
+          result ? `Found: ${result.user.email}` : "None"
+        );
+
+        const providerName =
+          localStorage.getItem(REDIRECT_PROVIDER_KEY) || "google";
+
+        if (result?.user && mounted) {
+          sessionStorage.setItem(REDIRECT_PROCESSED_KEY, "true");
+          localStorage.removeItem(REDIRECT_PROVIDER_KEY);
+          await processSocialLogin(result.user, providerName);
+        } else if (auth.currentUser && mounted) {
+          const hasFlag = localStorage.getItem(REDIRECT_PROVIDER_KEY);
+          if (hasFlag) {
+            console.log("⚠️ Using currentUser fallback");
+            sessionStorage.setItem(REDIRECT_PROCESSED_KEY, "true");
+            localStorage.removeItem(REDIRECT_PROVIDER_KEY);
+            await processSocialLogin(auth.currentUser, providerName);
+          }
+        }
+      } catch (err) {
+        console.error("❌ Redirect handler error:", err);
       }
     };
 
@@ -185,7 +216,6 @@ function Login() {
     return false;
   };
 
-  // ✅ MAIN FIX: Use redirect on mobile, popup on desktop
   const handleSocialLogin = async (providerName) => {
     const providers = {
       google: googleProvider,
@@ -197,24 +227,25 @@ function Login() {
     const provider = providers[providerName];
     if (!provider) return;
 
+    let firebaseEmail = "";
+
     try {
       setLoading(true);
 
-      // ✅ Mobile devices: use redirect (popup is blocked/unreliable)
       if (isMobileDevice()) {
+        console.log("📱 Mobile - using redirect");
         localStorage.setItem(REDIRECT_PROVIDER_KEY, providerName);
+        sessionStorage.removeItem(REDIRECT_PROCESSED_KEY);
         await signInWithRedirect(auth, provider);
-        // Page redirects → result handled in useEffect on return
         return;
       }
 
-      // ✅ Desktop: use popup (better UX)
+      console.log("💻 Desktop - using popup");
       const result = await signInWithPopup(auth, provider);
 
-      const firebaseEmail =
+      firebaseEmail =
         result.user.email ||
         result.user.providerData?.[0]?.email ||
-        result._tokenResponse?.email ||
         "";
 
       const firebaseName =
@@ -223,12 +254,15 @@ function Login() {
         "";
 
       const firebaseAvatar =
-        result.user.photoURL || result.user.providerData?.[0]?.photoURL || "";
+        result.user.photoURL ||
+        result.user.providerData?.[0]?.photoURL ||
+        "";
 
       if (!firebaseEmail) {
         alert.error(
-          `${providerName.charAt(0).toUpperCase() + providerName.slice(1)} did not share your email. Please use Google or register manually.`,
+          `${providerName.charAt(0).toUpperCase() + providerName.slice(1)} did not share your email.`
         );
+        await auth.signOut().catch(() => {});
         return;
       }
 
@@ -242,6 +276,8 @@ function Login() {
         provider: providerName,
       });
 
+      await auth.signOut().catch(() => {});
+
       if (response.data.success) {
         const { accessToken, refreshToken, user } = response.data;
         login(user, accessToken, refreshToken);
@@ -249,28 +285,28 @@ function Login() {
         navigate(getRoleRedirect(user.role), { replace: true });
       }
     } catch (err) {
+      console.error("Social login error:", err);
+
+      await auth.signOut().catch(() => {});
+
       const status = err?.response?.status;
       const message = err?.response?.data?.message;
-      const firebaseEmail = err?.customData?.email || "";
 
       const isSuspended = checkSuspension(err.response, firebaseEmail);
       if (isSuspended) return;
 
-      // Silent ignores for user cancellations
       if (err?.code === "auth/popup-closed-by-user") return;
       if (err?.code === "auth/cancelled-popup-request") return;
+
       if (err?.code === "auth/popup-blocked") {
-        // ✅ Fallback: if popup is blocked on desktop, use redirect
-        alert.error("Popup blocked. Redirecting to sign-in page...");
+        alert.error("Popup blocked. Redirecting...");
         localStorage.setItem(REDIRECT_PROVIDER_KEY, providerName);
         await signInWithRedirect(auth, provider);
         return;
       }
 
       if (status === 404) {
-        alert.error(
-          `${firebaseEmail || "Account"} is not registered. Please register first.`,
-        );
+        alert.error(`${firebaseEmail} is not registered. Please register first.`);
         return;
       }
 
@@ -305,7 +341,7 @@ function Login() {
       alert.error(
         err.response?.data?.message ||
           err.response?.data?.errors?.[0] ||
-          "Login failed",
+          "Login failed"
       );
     } finally {
       setLoading(false);
@@ -329,7 +365,7 @@ function Login() {
       alert.error(
         err.response?.data?.message ||
           err.response?.data?.errors?.[0] ||
-          "Registration failed",
+          "Registration failed"
       );
     } finally {
       setLoading(false);
@@ -337,11 +373,7 @@ function Login() {
   };
 
   const SocialButtons = ({ formId }) => (
-    <div
-      className="social-icons"
-      role="group"
-      aria-label="Social login options"
-    >
+    <div className="social-icons" role="group" aria-label="Social login options">
       {SOCIAL_PROVIDERS.map((provider) => (
         <button
           key={provider}
@@ -361,12 +393,7 @@ function Login() {
   return (
     <div className="outer-container">
       <Button
-        style={{
-          position: "absolute",
-          top: "10px",
-          left: "10px",
-          zIndex: 9999,
-        }}
+        style={{ position: "absolute", top: "10px", left: "10px", zIndex: 9999 }}
         onClick={handleBack}
         aria-label="Go back to home page"
       >

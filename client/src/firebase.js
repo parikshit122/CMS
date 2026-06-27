@@ -1,4 +1,4 @@
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps } from "firebase/app";
 import {
   getAuth,
   GoogleAuthProvider,
@@ -6,9 +6,7 @@ import {
   TwitterAuthProvider,
   FacebookAuthProvider,
   browserLocalPersistence,
-  indexedDBLocalPersistence,
   setPersistence,
-  initializeAuth,
 } from "firebase/auth";
 
 const cleanEnv = (value) => {
@@ -30,21 +28,13 @@ const firebaseConfig = {
   measurementId: cleanEnv(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID),
 };
 
-const app = initializeApp(firebaseConfig);
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
 
-let auth;
-try {
-  auth = initializeAuth(app, {
-    persistence: [indexedDBLocalPersistence, browserLocalPersistence],
-  });
-} catch (err) {
-  auth = getAuth(app);
-  setPersistence(auth, browserLocalPersistence).catch((e) =>
-    console.error("Persistence error:", e)
-  );
-}
+export const auth = getAuth(app);
 
-export { auth };
+setPersistence(auth, browserLocalPersistence).catch((err) => {
+  console.error("Persistence error:", err);
+});
 
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope("email");

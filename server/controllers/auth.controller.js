@@ -140,8 +140,10 @@ const login = async (req, res) => {
 
 const socialLogin = async (req, res) => {
   try {
-    console.log("Social login request received from:", req.headers.origin);
-
+    console.log(
+      "Token verified for:",
+      decoded.email || decoded.uid || "unknown",
+    );
     const {
       idToken,
       email: clientEmail,
