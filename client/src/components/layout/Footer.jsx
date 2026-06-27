@@ -1,20 +1,31 @@
 import "../../styles/Footer.css";
+import { FaFacebookF, FaTwitter, FaInstagram, FaLinkedinIn } from "react-icons/fa";
 
 function Footer() {
   return (
     <footer className="footer">
       <div className="footer-container">
-        {/* Column 1: Brand & Copyright */}
+
         <div className="footer-col footer-brand">
           <h3 className="footer-logo">ComplaintSync</h3>
           <p className="footer-desc">
             Streamlining complaint management for organizations worldwide with
             modern technology.
           </p>
-          <p className="copyright">© 2026 Complaint Management System. All rights reserved.</p>
+
+          {/* ✅ Social Icons */}
+          <div className="footer-social">
+            <a href="#"><FaFacebookF /></a>
+            <a href="#"><FaTwitter /></a>
+            <a href="#"><FaInstagram /></a>
+            <a href="#"><FaLinkedinIn /></a>
+          </div>
+
+          <p className="copyright">
+            © 2026 Complaint Management System. All rights reserved.
+          </p>
         </div>
 
-        {/* Column 2: Features */}
         <div className="footer-col">
           <h4 className="footer-title">Features</h4>
           <ul className="footer-links">
@@ -26,7 +37,6 @@ function Footer() {
           </ul>
         </div>
 
-        {/* Column 3: Company & Legal */}
         <div className="footer-col">
           <h4 className="footer-title">Company</h4>
           <ul className="footer-links">
@@ -37,6 +47,7 @@ function Footer() {
             <li><a href="#">Rules & Regulations</a></li>
           </ul>
         </div>
+
       </div>
     </footer>
   );
