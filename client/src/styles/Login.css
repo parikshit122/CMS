@@ -30,7 +30,9 @@
   text-align: center;
   padding: 0px 40px 60px;
   z-index: 1;
-  transition: 0.6s ease-in-out 1.2s, visibility 0s 1s;
+  transition:
+    0.6s ease-in-out 1.2s,
+    visibility 0s 1s;
 }
 
 .form-box.register {
@@ -138,49 +140,64 @@ form {
 .social-icons {
   display: flex;
   justify-content: center;
-  margin-bottom: 50px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 30px;
+  flex-wrap: wrap;
 }
 
 .social-icons a:hover {
-  transform: translateY(-5px);
-  box-shadow: 8px 5px 5px rgba(0, 0, 0, 0.6);
+  transform: translateY(-3px);
+  border-color: var(--primary-color, #2563eb);
+  color: var(--primary-color, #2563eb);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
 }
 
 .social-icons a {
   display: inline-flex;
-  padding: 10px;
+  align-items: center;
+  justify-content: center;
+  width: 50px;
+  height: 50px;
+  padding: 0;
   border: 2px solid #ccc;
-  border-radius: 8px;
-  font-size: 27px;
+  border-radius: 10px;
+  font-size: 26px;
   background: transparent;
   color: #333;
   text-decoration: none;
-  margin: 0 8px;
-  transition: all 0.4s ease-in;
+  transition: all 0.3s ease;
 }
 
 .social-btn {
   display: inline-flex;
-  padding: 10px;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  margin: 0;
   border: 2px solid #ccc;
-  border-radius: 8px;
+  border-radius: 10px;
   background: transparent;
-  font-size: 27px;
+  font-size: 26px;
   color: #333;
   text-decoration: none;
-  margin: 0 8px;
-  transition: all 0.4s ease-in;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-family: inherit;
 }
 
 .social-btn:hover {
-  transform: translateY(-5px);
-  box-shadow: 8px 5px 5px rgba(0, 0, 0, 0.6);
+  transform: translateY(-3px);
+  border-color: var(--primary-color, #2563eb);
+  color: var(--primary-color, #2563eb);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
 }
 
-.toggle-box {
-  position: absolute;
-  width: 100%;
-  height: 100%;
+.social-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .toggle-box::before {
@@ -737,16 +754,35 @@ html[data-bs-theme="dark"] .forgot-btn {
   transition: background 0.3s ease;
 }
 
-.strength-bar.weak { background: #ef4444; }
-.strength-bar.fair { background: #f59e0b; }
-.strength-bar.good { background: #3b82f6; }
-.strength-bar.strong { background: #22c55e; }
+.strength-bar.weak {
+  background: #ef4444;
+}
+.strength-bar.fair {
+  background: #f59e0b;
+}
+.strength-bar.good {
+  background: #3b82f6;
+}
+.strength-bar.strong {
+  background: #22c55e;
+}
 
-.strength-label { font-size: 12px; font-weight: 700; }
-.strength-label.weak { color: #ef4444; }
-.strength-label.fair { color: #f59e0b; }
-.strength-label.good { color: #3b82f6; }
-.strength-label.strong { color: #22c55e; }
+.strength-label {
+  font-size: 12px;
+  font-weight: 700;
+}
+.strength-label.weak {
+  color: #ef4444;
+}
+.strength-label.fair {
+  color: #f59e0b;
+}
+.strength-label.good {
+  color: #3b82f6;
+}
+.strength-label.strong {
+  color: #22c55e;
+}
 
 .pw-match {
   font-size: 12px;
@@ -757,8 +793,12 @@ html[data-bs-theme="dark"] .forgot-btn {
   gap: 4px;
 }
 
-.pw-match.ok { color: #22c55e; }
-.pw-match.bad { color: #ef4444; }
+.pw-match.ok {
+  color: #22c55e;
+}
+.pw-match.bad {
+  color: #ef4444;
+}
 
 .pw-requirements {
   background: #f9fafb;
@@ -795,7 +835,9 @@ html[data-bs-theme="dark"] .forgot-btn {
   transition: color 0.2s;
 }
 
-.pw-requirements li.met { color: #22c55e; }
+.pw-requirements li.met {
+  color: #22c55e;
+}
 
 .pw-requirements li i {
   font-size: 15px;
@@ -968,15 +1010,18 @@ html[data-bs-theme="dark"] .auth-eye-btn:hover {
   }
 
   .social-icons {
-    gap: 10px;
+    display: flex;
     justify-content: center;
+    align-items: center;
+    gap: 12px;
     margin-bottom: 30px;
+    flex-wrap: wrap;
   }
 
   .social-btn {
-    width: 44px;
-    height: 44px;
-    font-size: 20px;
+    width: 46px;
+    height: 46px;
+    font-size: 22px;
     margin: 0;
     padding: 0;
     display: flex;
@@ -1048,7 +1093,19 @@ html[data-bs-theme="dark"] .auth-eye-btn:hover {
   }
 
   .social-icons {
-    margin-bottom: 30px;
+    margin-bottom: 25px;
+    gap: 12px;
+  }
+
+  .social-btn {
+    width: 48px;
+    height: 48px;
+    font-size: 24px;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .toggle-panel {
@@ -1106,13 +1163,14 @@ html[data-bs-theme="dark"] .auth-eye-btn:hover {
   }
 
   .social-icons {
-    margin-bottom: 80px;
+    margin-bottom: 60px;
+    gap: 10px;
   }
 
   .social-btn {
-    width: 40px;
-    height: 40px;
-    font-size: 18px;
+    width: 44px;
+    height: 44px;
+    font-size: 21px;
   }
 
   .logincontainer.active .toggle-panel.toggle-right {
@@ -1153,9 +1211,9 @@ html[data-bs-theme="dark"] .auth-eye-btn:hover {
   }
 
   .social-btn {
-    width: 38px;
-    height: 38px;
-    font-size: 17px;
+    width: 42px;
+    height: 42px;
+    font-size: 20px;
   }
 
   .logincontainer .login-btn,
