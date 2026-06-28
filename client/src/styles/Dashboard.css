@@ -394,8 +394,8 @@ html[data-bs-theme="dark"] .logout-btn:hover {
     position: fixed;
     top: 64px;
     left: 0;
-    height: calc(100vh - 64px);
-    max-height: calc(100vh - 64px);
+    height: calc(100dvh - 64px);
+    max-height: calc(100dvh - 64px);
     transform: translateX(-100%);
     background: var(--surface-color);
     z-index: 150;
@@ -457,8 +457,8 @@ html[data-bs-theme="dark"] .logout-btn:hover {
 
   .sidebar {
     top: 60px;
-    height: calc(100vh - 60px);
-    max-height: calc(100vh - 60px);
+    height: calc(100dvh - 60px);
+    max-height: calc(100dvh - 60px);
     width: 270px;
   }
 }
@@ -489,8 +489,8 @@ html[data-bs-theme="dark"] .logout-btn:hover {
 
   .sidebar {
     top: 58px;
-    height: calc(100vh - 58px);
-    max-height: calc(100vh - 58px);
+    height: calc(100dvh - 58px);
+    max-height: calc(100dvh - 58px);
     width: 250px;
   }
 
