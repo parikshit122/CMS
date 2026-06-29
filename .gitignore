@@ -1,54 +1,157 @@
-﻿.env
-.env.*
-*.pem
-*.key
-serviceAccountKey.json
-secrets.json
-
+﻿# ─────────────────────────────────────────
+# DEPENDENCIES
+# ─────────────────────────────────────────
 node_modules/
-bower_components/
-vendor/
+**/node_modules/
+.pnp
+.pnp.js
+.yarn/install-state.gz
 
+# ─────────────────────────────────────────
+# ENVIRONMENT VARIABLES (CRITICAL — contains secrets!)
+# ─────────────────────────────────────────
+.env
+.env.local
+.env.development
+.env.development.local
+.env.production
+.env.production.local
+.env.test
+.env.test.local
+**/.env
+**/.env.*
+!.env.example
+
+# ─────────────────────────────────────────
+# LOGS
+# ─────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+debug.log
+
+# ─────────────────────────────────────────
+# BUILD OUTPUTS
+# ─────────────────────────────────────────
 dist/
+dist-ssr/
 build/
 out/
 .next/
 .nuxt/
 .cache/
+.parcel-cache/
 .vite/
-client/dist/
+.turbo/
 
+# ─────────────────────────────────────────
+# FIREBASE / GOOGLE CLOUD (CRITICAL!)
+# ─────────────────────────────────────────
+firebase-debug.log
+firebase-debug.*.log
 .firebase/
+serviceAccountKey.json
+firebase-adminsdk-*.json
+google-services.json
+GoogleService-Info.plist
+*-firebase-adminsdk-*.json
+firebase.json.local
 
-server/uploads/*
-!server/uploads/.gitkeep
+# ─────────────────────────────────────────
+# UPLOADS / USER CONTENT
+# ─────────────────────────────────────────
+uploads/
+public/uploads/
+server/uploads/
+temp/
+tmp/
 
-.DS_Store
-Thumbs.db
-desktop.ini
-.AppleDouble
-.LSOverride
-
-.vscode/
+# ─────────────────────────────────────────
+# IDE & EDITOR
+# ─────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
 .idea/
+*.iml
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 *.swp
 *.swo
-.project
-.classpath
-.settings/
+*~
 
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.eslintcache
-.stylelintcache
+# ─────────────────────────────────────────
+# OS GENERATED FILES
+# ─────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
 
+# ─────────────────────────────────────────
+# TEMP / TEST / COVERAGE
+# ─────────────────────────────────────────
 coverage/
+*.lcov
 .nyc_output/
-
+.jest/
 *.tmp
 *.temp
-pids
-*.pid
-*.seed
+*.bak
+*.backup
+
+# ─────────────────────────────────────────
+# DEPLOYMENT / HOSTING
+# ─────────────────────────────────────────
+.vercel
+.netlify
+.serverless/
+.fusebox/
+.dynamodb/
+
+# ─────────────────────────────────────────
+# CERTIFICATES & KEYS (CRITICAL!)
+# ─────────────────────────────────────────
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+private.key
+public.key
+
+# ─────────────────────────────────────────
+# DATABASE
+# ─────────────────────────────────────────
+*.sqlite
+*.sqlite3
+*.db
+data/
+mongodb-data/
+
+# ─────────────────────────────────────────
+# MISC
+# ─────────────────────────────────────────
+*.local
+.eslintcache
+.stylelintcache
+.history/
+.husky/_/
+*.tgz
+*.zip
+*.tar.gz
+.npm/
+package-lock.json.bak
