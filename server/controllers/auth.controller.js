@@ -35,10 +35,67 @@ const register = async (req, res) => {
   try {
     const { name, email, phone, password, course, year } = req.body;
 
+    if (!name || name.trim().length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: "Name must be at least 2 characters long.",
+      });
+    }
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid email address.",
+      });
+    }
+
     if (!phone || !/^[0-9]{10}$/.test(phone)) {
       return res.status(400).json({
         success: false,
-        message: "Phone number must be exactly 10 digits",
+        message: "Phone number must be exactly 10 digits.",
+      });
+    }
+
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: "Password is required.",
+      });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 8 characters long.",
+      });
+    }
+
+    if (!/[A-Z]/.test(password)) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must contain at least one uppercase letter (A-Z).",
+      });
+    }
+
+    if (!/[a-z]/.test(password)) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must contain at least one lowercase letter (a-z).",
+      });
+    }
+
+    if (!/\d/.test(password)) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must contain at least one number (0-9).",
+      });
+    }
+
+    if (!/[@$!%*?&#]/.test(password)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Password must contain at least one special character (@$!%*?&#).",
       });
     }
 
@@ -46,7 +103,15 @@ const register = async (req, res) => {
     if (exists) {
       return res.status(400).json({
         success: false,
-        message: "Email already registered",
+        message: "This email is already registered. Please login instead.",
+      });
+    }
+
+    const phoneExists = await User.findOne({ phone });
+    if (phoneExists) {
+      return res.status(400).json({
+        success: false,
+        message: "This phone number is already registered.",
       });
     }
 
@@ -54,7 +119,13 @@ const register = async (req, res) => {
     if (email.endsWith("@staff.com")) role = "staff";
     if (email.endsWith("@admin.com")) role = "admin";
 
-    const userData = { name, email, phone, password, role };
+    const userData = {
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
+      phone,
+      password,
+      role,
+    };
 
     if (role === "user") {
       if (course) userData.course = course;
@@ -73,9 +144,25 @@ const register = async (req, res) => {
       user: buildUserResponse(user),
     });
   } catch (err) {
+    if (err.name === "ValidationError") {
+      const firstError = Object.values(err.errors)[0];
+      return res.status(400).json({
+        success: false,
+        message: firstError.message,
+      });
+    }
+
+    if (err.code === 11000) {
+      const field = Object.keys(err.keyPattern)[0];
+      return res.status(400).json({
+        success: false,
+        message: `This ${field} is already registered.`,
+      });
+    }
+
     res.status(500).json({
       success: false,
-      message: "Register failed",
+      message: "Registration failed. Please try again.",
       error: err.message,
     });
   }
@@ -85,11 +172,35 @@ const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email }).select("+password");
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required.",
+      });
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid email address.",
+      });
+    }
+
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: "Password is required.",
+      });
+    }
+
+    const user = await User.findOne({
+      email: email.toLowerCase().trim(),
+    }).select("+password");
+
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "Invalid credentials",
+        message: "No account found with this email. Please register first.",
       });
     }
 
@@ -99,7 +210,7 @@ const login = async (req, res) => {
       );
       return res.status(403).json({
         success: false,
-        message: `Account suspended. Try again in ${daysLeft} day(s).`,
+        message: `Your account is suspended. Try again in ${daysLeft} day(s).`,
         suspendedUntil: user.suspendedUntil,
         reason: user.suspensionReason || "",
       });
@@ -108,7 +219,14 @@ const login = async (req, res) => {
     if (user.isActive === false) {
       return res.status(403).json({
         success: false,
-        message: "Account is deactivated. Contact admin.",
+        message: "Your account has been deactivated. Please contact admin.",
+      });
+    }
+
+    if (user.provider && user.provider !== "local") {
+      return res.status(400).json({
+        success: false,
+        message: `This account uses ${user.provider} login. Please sign in with ${user.provider}.`,
       });
     }
 
@@ -116,7 +234,7 @@ const login = async (req, res) => {
     if (!match) {
       return res.status(401).json({
         success: false,
-        message: "Invalid credentials",
+        message: "Incorrect password. Please try again or reset your password.",
       });
     }
 
@@ -132,7 +250,7 @@ const login = async (req, res) => {
   } catch (err) {
     res.status(500).json({
       success: false,
-      message: "Login failed",
+      message: "Login failed. Please try again.",
       error: err.message,
     });
   }
@@ -334,7 +452,14 @@ const forgotPassword = async (req, res) => {
     if (!email) {
       return res.status(400).json({
         success: false,
-        message: "Email is required.",
+        message: "Please enter your email address.",
+      });
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a valid email address.",
       });
     }
 
@@ -343,15 +468,38 @@ const forgotPassword = async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "This email is not registered. Please register first.",
+        message: "No account found with this email. Please register first.",
+      });
+    }
+
+    if (user.provider && user.provider !== "local") {
+      return res.status(400).json({
+        success: false,
+        message: `This account uses ${user.provider} login. Password reset is not available. Please sign in with ${user.provider}.`,
       });
     }
 
     if (user.suspendedUntil && user.suspendedUntil > new Date()) {
       return res.status(403).json({
         success: false,
-        message: "Your account is suspended. Contact admin.",
+        message:
+          "Your account is suspended. Please contact admin to reset your password.",
       });
+    }
+
+    if (
+      user.passwordResetOTPExpiry &&
+      user.passwordResetOTPExpiry > new Date()
+    ) {
+      const secondsLeft = Math.ceil(
+        (user.passwordResetOTPExpiry - new Date()) / 1000,
+      );
+      if (secondsLeft > 540) {
+        return res.status(429).json({
+          success: false,
+          message: `OTP already sent. Please wait ${Math.ceil((secondsLeft - 540) / 60)} minute(s) before requesting a new one.`,
+        });
+      }
     }
 
     const otp = String(Math.floor(100000 + crypto.randomInt(900000)));
@@ -368,12 +516,13 @@ const forgotPassword = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "If this email is registered, an OTP has been sent.",
+      message:
+        "OTP sent to your email. Please check your inbox (and spam folder).",
     });
   } catch (err) {
     res.status(500).json({
       success: false,
-      message: "Server error. Try again.",
+      message: "Failed to send OTP. Please try again.",
       error: err.message,
     });
   }
@@ -383,17 +532,24 @@ const verifyOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    if (!email || !otp) {
+    if (!email) {
       return res.status(400).json({
         success: false,
-        message: "Email and OTP are required.",
+        message: "Email is required.",
+      });
+    }
+
+    if (!otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter the 6-digit OTP.",
       });
     }
 
     if (!/^\d{6}$/.test(otp)) {
       return res.status(400).json({
         success: false,
-        message: "OTP must be exactly 6 digits.",
+        message: "OTP must be exactly 6 digits (numbers only).",
       });
     }
 
@@ -402,7 +558,14 @@ const verifyOTP = async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "This email is not registered. Please register first.",
+        message: "No account found with this email.",
+      });
+    }
+
+    if (!user.passwordResetOTP) {
+      return res.status(400).json({
+        success: false,
+        message: "No active OTP found. Please request a new OTP first.",
       });
     }
 
@@ -422,7 +585,7 @@ const verifyOTP = async (req, res) => {
     if (!isMatch) {
       return res.status(400).json({
         success: false,
-        message: "Invalid OTP. Please check and try again.",
+        message: "Incorrect OTP. Please check your email and try again.",
       });
     }
 
@@ -438,14 +601,14 @@ const verifyOTP = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "OTP verified successfully.",
+      message: "OTP verified successfully. You can now set a new password.",
       resetToken: rawToken,
       email: user.email,
     });
   } catch (err) {
     res.status(500).json({
       success: false,
-      message: "Server error. Try again.",
+      message: "Verification failed. Please try again.",
       error: err.message,
     });
   }
@@ -455,37 +618,85 @@ const resetPassword = async (req, res) => {
   try {
     const { email, resetToken, newPassword, confirmPassword } = req.body;
 
-    if (!email || !resetToken || !newPassword || !confirmPassword) {
+    if (!email || !resetToken) {
       return res.status(400).json({
         success: false,
-        message: "All fields are required.",
+        message:
+          "Invalid reset session. Please start over from forgot password.",
+      });
+    }
+
+    if (!newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter a new password.",
+      });
+    }
+
+    if (!confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Please confirm your new password.",
       });
     }
 
     if (newPassword !== confirmPassword) {
       return res.status(400).json({
         success: false,
-        message: "Passwords do not match.",
+        message:
+          "Passwords do not match. Please make sure both fields are identical.",
       });
     }
 
-    const strongPassword =
-      /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 8 characters long.",
+      });
+    }
 
-    if (!strongPassword.test(newPassword)) {
+    if (!/[A-Z]/.test(newPassword)) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must contain at least one uppercase letter (A-Z).",
+      });
+    }
+
+    if (!/[a-z]/.test(newPassword)) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must contain at least one lowercase letter (a-z).",
+      });
+    }
+
+    if (!/\d/.test(newPassword)) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must contain at least one number (0-9).",
+      });
+    }
+
+    if (!/[@$!%*?&#]/.test(newPassword)) {
       return res.status(400).json({
         success: false,
         message:
-          "Password must be at least 8 characters and include uppercase, lowercase, number, and special character (@$!%*?&).",
+          "Password must contain at least one special character (@$!%*?&#).",
       });
     }
 
     const user = await User.findOne({ email: email.toLowerCase().trim() });
 
-    if (!user || !user.passwordResetToken || !user.passwordResetTokenExpiry) {
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Account not found. Please start over.",
+      });
+    }
+
+    if (!user.passwordResetToken || !user.passwordResetTokenExpiry) {
       return res.status(400).json({
         success: false,
-        message: "Invalid or expired reset session. Start over.",
+        message: "Reset session not found. Please request a new OTP.",
       });
     }
 
@@ -496,7 +707,7 @@ const resetPassword = async (req, res) => {
 
       return res.status(400).json({
         success: false,
-        message: "Reset session expired. Request a new OTP.",
+        message: "Your reset session has expired. Please request a new OTP.",
       });
     }
 
@@ -508,7 +719,7 @@ const resetPassword = async (req, res) => {
     if (!isTokenValid) {
       return res.status(400).json({
         success: false,
-        message: "Invalid reset token. Start the process again.",
+        message: "Invalid reset token. Please start the process again.",
       });
     }
 
@@ -516,7 +727,8 @@ const resetPassword = async (req, res) => {
     if (isSamePassword) {
       return res.status(400).json({
         success: false,
-        message: "New password cannot be the same as your current password.",
+        message:
+          "New password cannot be the same as your current password. Please choose a different one.",
       });
     }
 
@@ -529,16 +741,18 @@ const resetPassword = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Password reset successful. You can now log in.",
+      message:
+        "Password reset successful! You can now log in with your new password.",
     });
   } catch (err) {
     res.status(500).json({
       success: false,
-      message: "Server error. Try again.",
+      message: "Password reset failed. Please try again.",
       error: err.message,
     });
   }
 };
+
 
 module.exports = {
   register,

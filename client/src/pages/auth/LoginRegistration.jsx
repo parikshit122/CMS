@@ -417,8 +417,27 @@ function Login() {
       setLoading(false);
     }
   };
+
   const handleLogin = async (e) => {
     e.preventDefault();
+
+    const { email, password } = loginData;
+
+    if (!email) {
+      alert.error("Please enter your email address.");
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      alert.error("Please enter a valid email address.");
+      return;
+    }
+
+    if (!password) {
+      alert.error("Please enter your password.");
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await loginUser(loginData);
@@ -428,21 +447,23 @@ function Login() {
         alert.success("Login successful!");
         navigate(getRoleRedirect(user.role), { replace: true });
       } else {
-        alert.error(response.message || "Login failed");
+        alert.error(response.message || "Login failed. Please try again.");
       }
     } catch (err) {
       const isSuspended = checkSuspension(err.response, loginData.email);
       if (isSuspended) return;
 
-      if (err.response?.status === 404) {
-        alert.error("User not registered. Please register first.");
+      if (err.code === "ERR_NETWORK" || err.message === "Network Error") {
+        alert.error(
+          "Cannot connect to server. Please check your internet connection.",
+        );
         return;
       }
 
       alert.error(
         err.response?.data?.message ||
           err.response?.data?.errors?.[0] ||
-          "Login failed",
+          "Login failed. Please try again.",
       );
     } finally {
       setLoading(false);
@@ -451,6 +472,56 @@ function Login() {
 
   const handleRegister = async (e) => {
     e.preventDefault();
+
+    const { name, email, phone, password } = registerData;
+
+    if (!name || name.trim().length < 2) {
+      alert.error("Name must be at least 2 characters long.");
+      return;
+    }
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      alert.error("Please enter a valid email address.");
+      return;
+    }
+
+    if (!phone || !/^[0-9]{10}$/.test(phone)) {
+      alert.error("Phone number must be exactly 10 digits.");
+      return;
+    }
+
+    if (!password) {
+      alert.error("Password is required.");
+      return;
+    }
+
+    if (password.length < 8) {
+      alert.error("Password must be at least 8 characters long.");
+      return;
+    }
+
+    if (!/[A-Z]/.test(password)) {
+      alert.error("Password must contain at least one uppercase letter (A-Z).");
+      return;
+    }
+
+    if (!/[a-z]/.test(password)) {
+      alert.error("Password must contain at least one lowercase letter (a-z).");
+      return;
+    }
+
+    if (!/\d/.test(password)) {
+      alert.error("Password must contain at least one number (0-9).");
+      return;
+    }
+
+    if (!/[@$!%*?&#]/.test(password)) {
+      alert.error(
+        "Password must contain at least one special character (@$!%*?&#).",
+      );
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await registerUser(registerData);
@@ -472,7 +543,6 @@ function Login() {
       setLoading(false);
     }
   };
-
   return (
     <div className="outer-container">
       <Button
