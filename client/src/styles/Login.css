@@ -1126,13 +1126,13 @@ html[data-bs-theme="dark"] .resend-countdown-text {
 
 .auth-eye-btn {
   position: absolute;
-  right: 12px;
+  right: 10px;
   top: 50%;
   transform: translateY(-50%);
   background: none;
   border: none;
   cursor: pointer;
-  padding: 6px;
+  padding: 8px;
   color: #9ca3af;
   font-size: 20px;
   line-height: 1;
@@ -1142,8 +1142,23 @@ html[data-bs-theme="dark"] .resend-countdown-text {
   border-radius: 6px;
   transition: all 0.2s;
   z-index: 2;
+  height: 32px;
+  width: 32px;
 }
 
+@media (max-width: 480px) {
+  .auth-eye-btn {
+    right: 8px;
+    font-size: 18px;
+    width: 28px;
+    height: 28px;
+  }
+
+  .auth-input.has-toggle,
+  .auth-input-password {
+    padding-right: 40px;
+  }
+}
 .auth-eye-btn:hover {
   color: #0ea0e9;
   background: rgba(14, 160, 233, 0.08);
@@ -1180,5 +1195,61 @@ html[data-bs-theme="dark"] .auth-eye-btn:hover {
 
   .otp-row {
     gap: 8px;
+  }
+}
+
+.auth-page {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #021135, #0ea0e9, #083849, #086ead);
+  padding: 80px 16px 40px;
+  position: relative;
+  overflow-y: auto;
+}
+
+.auth-back-btn {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 10px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  transition: all 0.2s;
+  font-family: inherit;
+  backdrop-filter: blur(8px);
+}
+
+.auth-back-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateX(-3px);
+}
+
+.auth-back-btn i {
+  font-size: 16px;
+}
+
+@media (max-width: 480px) {
+  .auth-page {
+    padding: 70px 12px 30px;
+  }
+
+  .auth-back-btn {
+    top: 14px;
+    left: 14px;
+    font-size: 13px;
+    padding: 8px 12px;
   }
 }

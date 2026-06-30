@@ -45,73 +45,133 @@ export default function StudentDash() {
 
   const total = complaints.length;
   const pending = complaints.filter((c) => c.status === "pending").length;
-  const inProgress = complaints.filter((c) => c.status === "in-progress").length;
+  const inProgress = complaints.filter(
+    (c) => c.status === "in-progress",
+  ).length;
   const resolved = complaints.filter((c) => c.status === "resolved").length;
 
   const now = new Date();
-  const oneMonthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-  const oneWeekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+  const startThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const startPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const endPrevMonth = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    0,
+    23,
+    59,
+    59,
+  );
 
-  const lastMonthTotal = complaints.filter(
-    (c) => new Date(c.createdAt) < oneMonthAgo
+  const startThisWeek = new Date(now);
+  startThisWeek.setDate(now.getDate() - 6);
+  startThisWeek.setHours(0, 0, 0, 0);
+
+  const endPrevWeek = new Date(startThisWeek.getTime() - 1);
+  const startPrevWeek = new Date(startThisWeek);
+  startPrevWeek.setDate(startPrevWeek.getDate() - 7);
+
+  const totalThisMonth = complaints.filter(
+    (c) => new Date(c.createdAt) >= startThisMonth,
   ).length;
 
-  const lastWeekPending = complaints.filter(
-    (c) => c.status === "pending" && new Date(c.createdAt) < oneWeekAgo
+  const totalPrevMonth = complaints.filter((c) => {
+    const d = new Date(c.createdAt);
+    return d >= startPrevMonth && d <= endPrevMonth;
+  }).length;
+
+  const pendingThisWeek = complaints.filter(
+    (c) => c.status === "pending" && new Date(c.createdAt) >= startThisWeek,
   ).length;
 
-  const activeInProgress = complaints.filter(
-    (c) => c.status === "in-progress" && new Date(c.createdAt) >= oneWeekAgo
+  const pendingPrevWeek = complaints.filter((c) => {
+    const d = new Date(c.createdAt);
+    return c.status === "pending" && d >= startPrevWeek && d <= endPrevWeek;
+  }).length;
+
+  const inProgressThisWeek = complaints.filter(
+    (c) =>
+      c.status === "in-progress" &&
+      new Date(c.updatedAt || c.createdAt) >= startThisWeek,
   ).length;
 
-  const thisWeekResolved = complaints.filter(
-    (c) => c.status === "resolved" && new Date(c.createdAt) >= oneWeekAgo
+  const inProgressPrevWeek = complaints.filter((c) => {
+    const d = new Date(c.updatedAt || c.createdAt);
+    return c.status === "in-progress" && d >= startPrevWeek && d <= endPrevWeek;
+  }).length;
+
+  const resolvedThisWeek = complaints.filter(
+    (c) =>
+      c.status === "resolved" &&
+      new Date(c.updatedAt || c.createdAt) >= startThisWeek,
   ).length;
+
+  const resolvedPrevWeek = complaints.filter((c) => {
+    const d = new Date(c.updatedAt || c.createdAt);
+    return c.status === "resolved" && d >= startPrevWeek && d <= endPrevWeek;
+  }).length;
 
   const calcTrend = (current, previous) => {
-    if (previous === 0) return current > 0 ? 100 : 0;
-    return Math.round(((current - previous) / previous) * 1000) / 10;
+    if (previous === 0 && current === 0) return { value: 0, isNew: false };
+    if (previous === 0 && current > 0) return { value: 0, isNew: true };
+    return {
+      value: Math.round(((current - previous) / previous) * 1000) / 10,
+      isNew: false,
+    };
   };
 
-  const totalChange = calcTrend(total, lastMonthTotal);
-  const pendingChange = calcTrend(pending, lastWeekPending);
-  const progressChange = calcTrend(inProgress, activeInProgress);
-  const resolvedChange = calcTrend(resolved, thisWeekResolved);
+  const totalTrend = calcTrend(totalThisMonth, totalPrevMonth);
+  const pendingTrend = calcTrend(pendingThisWeek, pendingPrevWeek);
+  const progressTrend = calcTrend(inProgressThisWeek, inProgressPrevWeek);
+  const resolvedTrend = calcTrend(resolvedThisWeek, resolvedPrevWeek);
 
   const stats = [
     {
       title: "Total Complaints",
       value: total,
-      trend: totalChange >= 0 ? "up" : "down",
-      trendValue: Math.abs(totalChange),
-      context: `${lastMonthTotal} last month`,
+      trend: totalTrend.isNew ? "new" : totalTrend.value >= 0 ? "up" : "down",
+      trendValue: totalTrend.isNew ? "NEW" : Math.abs(totalTrend.value),
+      context: `${totalPrevMonth} last month`,
     },
     {
       title: "Pending",
       value: pending,
-      trend: pendingChange >= 0 ? "up" : "down",
-      trendValue: Math.abs(pendingChange),
-      context: `${lastWeekPending} last week`,
+      trend: pendingTrend.isNew
+        ? "new"
+        : pendingTrend.value <= 0
+          ? "up"
+          : "down",
+      trendValue: pendingTrend.isNew ? "NEW" : Math.abs(pendingTrend.value),
+      context: `${pendingPrevWeek} last week`,
     },
     {
       title: "In Progress",
       value: inProgress,
-      trend: progressChange >= 0 ? "up" : "down",
-      trendValue: Math.abs(progressChange),
-      context: `${activeInProgress} active`,
+      trend: progressTrend.isNew
+        ? "new"
+        : progressTrend.value >= 0
+          ? "up"
+          : "down",
+      trendValue: progressTrend.isNew ? "NEW" : Math.abs(progressTrend.value),
+      context: `${inProgressThisWeek} active this week`,
     },
     {
       title: "Resolved",
       value: resolved,
-      trend: resolvedChange >= 0 ? "up" : "down",
-      trendValue: Math.abs(resolvedChange),
-      context: `${thisWeekResolved} this week`,
+      trend: resolvedTrend.isNew
+        ? "new"
+        : resolvedTrend.value >= 0
+          ? "up"
+          : "down",
+      trendValue: resolvedTrend.isNew ? "NEW" : Math.abs(resolvedTrend.value),
+      context: `${resolvedThisWeek} this week`,
     },
   ];
 
   const trendMap = {};
   complaints.forEach((c) => {
-    const month = new Date(c.createdAt).toLocaleString("default", { month: "short" });
+    const month = new Date(c.createdAt).toLocaleString("default", {
+      month: "short",
+    });
     trendMap[month] = (trendMap[month] || 0) + 1;
   });
 
@@ -164,7 +224,12 @@ export default function StudentDash() {
               <XAxis dataKey="month" />
               <YAxis />
               <Tooltip />
-              <Line type="monotone" dataKey="value" stroke="#6C5CE7" strokeWidth={3} />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke="#6C5CE7"
+                strokeWidth={3}
+              />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -220,7 +285,8 @@ export default function StudentDash() {
               </div>
               <h4>{item.title}</h4>
               <p>
-                {item.category} • {new Date(item.createdAt).toLocaleDateString()}
+                {item.category} •{" "}
+                {new Date(item.createdAt).toLocaleDateString()}
               </p>
             </div>
           </div>
@@ -255,7 +321,8 @@ export default function StudentDash() {
 
         <div className="help-footer">
           <p>
-            <strong>Office Hours:</strong> Monday - Friday, 9:00 AM - 6:00 PM EST
+            <strong>Office Hours:</strong> Monday - Friday, 9:00 AM - 6:00 PM
+            EST
           </p>
           <p>
             <strong>Emergency Support:</strong> Available 24/7

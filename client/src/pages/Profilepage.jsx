@@ -97,34 +97,40 @@ const Profile = () => {
       let updatedUser = response.data.data;
 
       if (formData.avatarFile) {
-        const token = localStorage.getItem("accessToken");
         const form = new FormData();
         form.append("avatar", formData.avatarFile);
 
-        const uploadRes = await fetch(
-          "http://localhost:5000/api/users/upload-avatar",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-            body: form,
-          }
-        );
+        const uploadRes = await API.post("/users/upload-avatar", form, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        });
 
-        const uploadData = await uploadRes.json();
-
-        if (uploadData.success) {
-          updatedUser = { ...updatedUser, avatar: uploadData.avatar };
+        if (uploadRes.data.success) {
+          updatedUser = { ...updatedUser, avatar: uploadRes.data.avatar };
+        } else {
+          alert.error("Avatar upload failed");
         }
       }
 
       localStorage.setItem("user", JSON.stringify(updatedUser));
+      window.dispatchEvent(new Event("user-updated"));
       alert.success("Profile updated successfully");
-      setTimeout(() => window.location.reload(), 1000);
+      setIsEditing(false);
 
-    } catch {
-      alert.error("Update failed");
+      setFormData((prev) => ({
+        ...prev,
+        avatar: updatedUser.avatar,
+        avatarFile: null,
+      }));
+      setOriginalData((prev) => ({
+        ...prev,
+        avatar: updatedUser.avatar,
+        avatarFile: null,
+      }));
+    } catch (err) {
+      console.error("Update failed:", err);
+      alert.error(err.response?.data?.message || "Update failed");
     } finally {
       setSaving(false);
     }
@@ -150,7 +156,6 @@ const Profile = () => {
 
   return (
     <div className="student-profile-page">
-
       {showMissingPopup && (
         <div className="profile-missing-overlay">
           <div className="profile-missing-modal">
@@ -255,7 +260,6 @@ const Profile = () => {
         </div>
 
         <div className="form-grid">
-
           <div className="form-field">
             <label>First Name</label>
             <input
@@ -332,7 +336,6 @@ const Profile = () => {
               onChange={(e) => handleChange("bio", e.target.value)}
             />
           </div>
-
         </div>
       </div>
     </div>

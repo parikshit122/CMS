@@ -13,6 +13,121 @@ import {
 import API from "../../services/api";
 import "../../styles/AdminDashboard.css";
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+// ✅ NEW: percentage of total = (this month / lifetime total) * 100
+const calcShareOfTotal = (current, total) => {
+  if (!total || total === 0) return { value: 0, type: "none" };
+  if (current === 0) return { value: 0, type: "none" };
+  const share = (current / total) * 100;
+  return { value: Math.round(share * 10) / 10, type: "share" };
+};
+
+const formatShare = (trend) => {
+  if (trend.type === "none") return "—";
+  if (trend.value === 0) return "0%";
+  const absValue = Math.abs(trend.value);
+  const cleanValue = Number.isInteger(absValue)
+    ? absValue
+    : absValue.toFixed(1);
+  return `${cleanValue}%`;
+};
+
+// Color logic: positive = growth, neutral = no activity
+const getShareColor = (trend, lowerIsBetter = false) => {
+  if (trend.type === "none") return "neutral";
+  if (lowerIsBetter) {
+    // For pending: high % means lots of new unresolved = bad
+    return trend.value > 50 ? "negative" : "positive";
+  }
+  // For total/resolved: any new activity is good
+  return "positive";
+};
+
+const formatLastUpdated = (value) => {
+  if (!value) return "Just now";
+  return new Date(value).toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+// ─── Sub Components ──────────────────────────────────────────────────────────
+
+const MetricCard = ({ title, value, change, color, hint }) => (
+  <div className="metric-card">
+    <span className="metric-title">{title}</span>
+    <div className="metric-value">
+      <h2>{value}</h2>
+      <span className={`change ${color}`}>{change}</span>
+    </div>
+    {hint && <span className="metric-hint">{hint}</span>}
+  </div>
+);
+
+const CategoryCard = ({ icon, label, value }) => {
+  // Pick a color based on category name (consistent per category)
+  const getColorClass = (label) => {
+    const colors = {
+      technical: "cat-blue",
+      it: "cat-blue",
+      software: "cat-blue",
+      hardware: "cat-blue",
+      network: "cat-blue",
+
+      electrical: "cat-yellow",
+      plumbing: "cat-cyan",
+      infrastructure: "cat-gray",
+      maintenance: "cat-gray",
+      cleanliness: "cat-green",
+
+      hostel: "cat-purple",
+      accommodation: "cat-purple",
+      food: "cat-orange",
+      mess: "cat-orange",
+
+      academic: "cat-indigo",
+      exam: "cat-indigo",
+      library: "cat-indigo",
+      faculty: "cat-indigo",
+
+      billing: "cat-pink",
+      payment: "cat-pink",
+      transport: "cat-teal",
+      parking: "cat-teal",
+
+      safety: "cat-red",
+      security: "cat-red",
+      medical: "cat-red",
+      emergency: "cat-red",
+
+      service: "cat-violet",
+      feedback: "cat-violet",
+      other: "cat-gray",
+    };
+    return colors[label?.toLowerCase()] || "cat-gray";
+  };
+
+  const colorClass = getColorClass(label);
+
+  return (
+    <div className={`category-card ${colorClass}`}>
+      <div className="category-icon">
+        <i className={icon}></i>
+      </div>
+      <div className="category-info">
+        <h3>{value}</h3>
+        <p>{label?.charAt(0).toUpperCase() + label?.slice(1)}</p>
+      </div>
+    </div>
+  );
+};
+
+// ─── Main Component ──────────────────────────────────────────────────────────
+
 const AdminDashboard = () => {
   const [stats, setStats] = useState({
     totalComplaints: 0,
@@ -47,103 +162,96 @@ const AdminDashboard = () => {
     fetchAdminStats();
   }, []);
 
-  const calcTrend = (current, previous) => {
-    if (!previous) return current > 0 ? 100 : 0;
-    return Math.round(((current - previous) / previous) * 1000) / 10;
-  };
-
-  const formatTrend = (value) => {
-    const absValue = Math.abs(value);
-    const cleanValue = Number.isInteger(absValue) ? absValue : absValue.toFixed(1);
-    return `${value >= 0 ? "+" : "-"}${cleanValue}%`;
-  };
-
-  const formatLastUpdated = (value) => {
-    if (!value) return "Just now";
-
-    return new Date(value).toLocaleString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
+  // ── Metric Cards ───────────────────────────────────────────────────────────
   const metricCards = useMemo(() => {
     const meta = stats.trendMeta || {};
 
-    const totalTrend = calcTrend(
-      meta.totalComplaints?.current || 0,
-      meta.totalComplaints?.previous || 0
-    );
+    const total = stats.totalComplaints || 0;
+    const totalPending = stats.pending || 0;
+    const totalResolved = stats.resolved || 0;
 
-    const pendingTrend = calcTrend(
-      meta.pending?.current || 0,
-      meta.pending?.previous || 0
-    );
+    // This month counts (added/changed in this month)
+    const totalCurrent = meta.totalComplaints?.current || 0;
+    const pendingCurrent = meta.pending?.current || 0;
+    const resolvedCurrent = meta.resolved?.current || 0;
+    const responseCurrent = meta.avgResponseTime?.current || 0;
 
-    const resolvedTrend = calcTrend(
-      meta.resolved?.current || 0,
-      meta.resolved?.previous || 0
-    );
-
-    const responseTrend = calcTrend(
-      meta.avgResponseTime?.current || 0,
-      meta.avgResponseTime?.previous || 0
-    );
+    // % share of THIS MONTH out of TOTAL
+    const totalShare = calcShareOfTotal(totalCurrent, total);
+    const pendingShare = calcShareOfTotal(pendingCurrent, totalPending);
+    const resolvedShare = calcShareOfTotal(resolvedCurrent, totalResolved);
 
     return [
       {
         title: "Total Complaints",
-        value: stats.totalComplaints || stats.total || 0, 
-        change: formatTrend(totalTrend),
-        positive: totalTrend >= 0,
+        value: total,
+        change: formatShare(totalShare),
+        color: getShareColor(totalShare, false),
+        hint:
+          totalCurrent === 0
+            ? "No new complaints this month"
+            : `${totalCurrent} of ${total} added this month`,
       },
       {
         title: "Pending Review",
-        value: stats.pending,
-        change: formatTrend(pendingTrend),
-        positive: pendingTrend <= 0,
+        value: totalPending,
+        change: formatShare(pendingShare),
+        color: getShareColor(pendingShare, true),
+        hint:
+          pendingCurrent === 0
+            ? "No new pending this month"
+            : `${pendingCurrent} of ${totalPending} new this month`,
       },
       {
         title: "Resolved",
-        value: stats.resolved,
-        change: formatTrend(resolvedTrend),
-        positive: resolvedTrend >= 0,
+        value: totalResolved,
+        change: formatShare(resolvedShare),
+        color: getShareColor(resolvedShare, false),
+        hint:
+          resolvedCurrent === 0
+            ? "Nothing resolved this month"
+            : `${resolvedCurrent} of ${totalResolved} resolved this month`,
       },
       {
         title: "Avg Response Time",
         value: `${stats.avgResponseTime || 0}h`,
-        change: formatTrend(responseTrend),
-        positive: responseTrend <= 0,
+        change: responseCurrent > 0 ? `${responseCurrent}h` : "—",
+        color: responseCurrent === 0 ? "neutral" : "positive",
+        hint:
+          responseCurrent === 0
+            ? "No resolutions this month"
+            : `${responseCurrent}h avg this month`,
       },
     ];
   }, [stats]);
 
-  const weeklyData = stats.weeklyData?.length ? stats.weeklyData : [
-    { day: "Mon", submitted: 0, resolved: 0 },
-    { day: "Tue", submitted: 0, resolved: 0 },
-    { day: "Wed", submitted: 0, resolved: 0 },
-    { day: "Thu", submitted: 0, resolved: 0 },
-    { day: "Fri", submitted: 0, resolved: 0 },
-    { day: "Sat", submitted: 0, resolved: 0 },
-    { day: "Sun", submitted: 0, resolved: 0 },
-  ];
+  // ── Chart Data Fallbacks ───────────────────────────────────────────────────
+  const weeklyData = stats.weeklyData?.length
+    ? stats.weeklyData
+    : [
+        { day: "Mon", submitted: 0, resolved: 0 },
+        { day: "Tue", submitted: 0, resolved: 0 },
+        { day: "Wed", submitted: 0, resolved: 0 },
+        { day: "Thu", submitted: 0, resolved: 0 },
+        { day: "Fri", submitted: 0, resolved: 0 },
+        { day: "Sat", submitted: 0, resolved: 0 },
+        { day: "Sun", submitted: 0, resolved: 0 },
+      ];
 
-  const monthlyData = stats.monthlyData?.length ? stats.monthlyData : [
-    { month: "Jan", value: 0 },
-    { month: "Feb", value: 0 },
-    { month: "Mar", value: 0 },
-    { month: "Apr", value: 0 },
-  ];
+  const monthlyData = stats.monthlyData?.length
+    ? stats.monthlyData
+    : [
+        { month: "Jan", value: 0 },
+        { month: "Feb", value: 0 },
+        { month: "Mar", value: 0 },
+        { month: "Apr", value: 0 },
+      ];
 
   const categoryBreakdown = stats.categoryBreakdown?.length
     ? stats.categoryBreakdown
-    : [
-      { icon: "bx bx-category", label: "No Data", value: 0 },
-    ];
+    : [{ icon: "bx bx-category", label: "No Data", value: 0 }];
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="admin-dashboard">
       <div className="dashboard-header-row">
@@ -151,7 +259,6 @@ const AdminDashboard = () => {
           <h1>System Overview</h1>
           <p>Real-time complaint management metrics</p>
         </div>
-
         <div className="update-info">
           <span>Last updated</span>
           <strong>{formatLastUpdated(stats.lastUpdated)}</strong>
@@ -165,7 +272,8 @@ const AdminDashboard = () => {
             title={item.title}
             value={loading ? "..." : item.value}
             change={item.change}
-            positive={item.positive}
+            color={item.color}
+            hint={item.hint}
           />
         ))}
       </div>
@@ -222,29 +330,5 @@ const AdminDashboard = () => {
     </div>
   );
 };
-
-const MetricCard = ({ title, value, change, positive }) => (
-  <div className="metric-card">
-    <span>{title}</span>
-    <div className="metric-value">
-      <h2>{value}</h2>
-      <span className={`change ${positive ? "positive" : "negative"}`}>
-        {change}
-      </span>
-    </div>
-  </div>
-);
-
-const CategoryCard = ({ icon, label, value }) => (
-  <div className="category-card">
-    <div className="category-icon">
-      <i className={icon}></i>
-    </div>
-    <div>
-      <h3>{value}</h3>
-      <p>{label}</p>
-    </div>
-  </div>
-);
 
 export default AdminDashboard;

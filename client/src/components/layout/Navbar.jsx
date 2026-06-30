@@ -1,13 +1,29 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import Button from "../common/Button";
-import "../../styles/Navbar.css"
+import "../../styles/Navbar.css";
 
 export default function Navbar({ menuOpen, setMenuOpen }) {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleNavigation = (panel) => {
     navigate("/auth", { state: { panel } });
     setMenuOpen(false);
+  };
+
+  const handleSectionScroll = (sectionId) => {
+    setMenuOpen(false);
+
+    if (location.pathname !== "/") {
+      navigate(`/#${sectionId}`);
+      setTimeout(() => {
+        const el = document.getElementById(sectionId);
+        if (el) el.scrollIntoView({ behavior: "smooth" });
+      }, 300);
+    } else {
+      const el = document.getElementById(sectionId);
+      if (el) el.scrollIntoView({ behavior: "smooth" });
+    }
   };
 
   return (
@@ -24,23 +40,32 @@ export default function Navbar({ menuOpen, setMenuOpen }) {
       <nav className={`navbar ${menuOpen ? "active" : ""}`}>
         <ul className="nav-links">
           <li>
-            <a href="#features" onClick={() => setMenuOpen(false)}>
-              Features
-            </a>
-          </li>
-
-          <li>
-            <a href="#workflow" onClick={() => setMenuOpen(false)}>
-              Workflow
-            </a>
+            <button
+              type="button"
+              className="nav-link-btn"
+              onClick={() => handleSectionScroll("features")}
+            >
+              <i className="bx bx-star" /> Features
+            </button>
           </li>
 
           <li>
             <button
+              type="button"
+              className="nav-link-btn"
+              onClick={() => handleSectionScroll("workflow")}
+            >
+              <i className="bx bx-git-branch" /> Workflow
+            </button>
+          </li>
+
+          <li>
+            <button
+              type="button"
               className="nav-link-btn"
               onClick={() => handleNavigation("login")}
             >
-              Login
+              <i className="bx bx-log-in" /> Login
             </button>
           </li>
 
@@ -49,7 +74,7 @@ export default function Navbar({ menuOpen, setMenuOpen }) {
               className="register-btn"
               onClick={() => handleNavigation("register")}
             >
-              Register
+              <i className="bx bx-user-plus" /> Register
             </Button>
           </li>
         </ul>

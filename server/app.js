@@ -12,14 +12,13 @@ app.use((req, res, next) => {
 app.use(
   cors({
     origin: function (origin, callback) {
-      console.log("CORS check for origin:", origin);
       callback(null, true);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
     exposedHeaders: ["Set-Cookie"],
-  })
+  }),
 );
 
 app.use(express.json());

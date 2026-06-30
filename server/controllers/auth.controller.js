@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 const admin = require("../config/firebaseadmin");
+const Settings = require("../models/Settings");
 const {
   sendPasswordResetOTPEmail,
   sendPasswordResetSuccessEmail,
@@ -63,35 +64,31 @@ const register = async (req, res) => {
       });
     }
 
-    if (password.length < 8) {
+    const settings = await Settings.getSingleton();
+    const minLength = settings.passwordMinLength || 8;
+
+    if (password.length < minLength) {
       return res.status(400).json({
         success: false,
-        message: "Password must be at least 8 characters long.",
+        message: `Password must be at least ${minLength} characters long.`,
       });
     }
 
-    if (!/[A-Z]/.test(password)) {
+    if (settings.passwordRequireUppercase && !/[A-Z]/.test(password)) {
       return res.status(400).json({
         success: false,
-        message: "Password must contain at least one uppercase letter (A-Z).",
+        message: "Password must contain at least one uppercase letter.",
       });
     }
 
-    if (!/[a-z]/.test(password)) {
+    if (settings.passwordRequireNumber && !/\d/.test(password)) {
       return res.status(400).json({
         success: false,
-        message: "Password must contain at least one lowercase letter (a-z).",
+        message: "Password must contain at least one number.",
       });
     }
 
-    if (!/\d/.test(password)) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must contain at least one number (0-9).",
-      });
-    }
-
-    if (!/[@$!%*?&#]/.test(password)) {
+    if (settings.passwordRequireSpecial && !/[@$!%*?&#]/.test(password)) {
       return res.status(400).json({
         success: false,
         message:
@@ -167,7 +164,6 @@ const register = async (req, res) => {
     });
   }
 };
-
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -463,6 +459,15 @@ const forgotPassword = async (req, res) => {
       });
     }
 
+    const settings = await Settings.getSingleton();
+
+    if (!settings.emailEnabled) {
+      return res.status(503).json({
+        success: false,
+        message: "Email service is currently disabled. Please contact admin.",
+      });
+    }
+
     const user = await User.findOne({ email: email.toLowerCase().trim() });
 
     if (!user) {
@@ -475,36 +480,21 @@ const forgotPassword = async (req, res) => {
     if (user.provider && user.provider !== "local") {
       return res.status(400).json({
         success: false,
-        message: `This account uses ${user.provider} login. Password reset is not available. Please sign in with ${user.provider}.`,
+        message: `This account uses ${user.provider} login. Password reset is not available.`,
       });
     }
 
     if (user.suspendedUntil && user.suspendedUntil > new Date()) {
       return res.status(403).json({
         success: false,
-        message:
-          "Your account is suspended. Please contact admin to reset your password.",
+        message: "Your account is suspended. Please contact admin.",
       });
     }
 
-    if (
-      user.passwordResetOTPExpiry &&
-      user.passwordResetOTPExpiry > new Date()
-    ) {
-      const secondsLeft = Math.ceil(
-        (user.passwordResetOTPExpiry - new Date()) / 1000,
-      );
-      if (secondsLeft > 540) {
-        return res.status(429).json({
-          success: false,
-          message: `OTP already sent. Please wait ${Math.ceil((secondsLeft - 540) / 60)} minute(s) before requesting a new one.`,
-        });
-      }
-    }
-
+    const otpExpiryMinutes = settings.otpExpiryMinutes || 10;
     const otp = String(Math.floor(100000 + crypto.randomInt(900000)));
     const hashedOTP = await bcrypt.hash(otp, 10);
-    const expiry = new Date(Date.now() + 10 * 60 * 1000);
+    const expiry = new Date(Date.now() + otpExpiryMinutes * 60 * 1000);
 
     user.passwordResetOTP = hashedOTP;
     user.passwordResetOTPExpiry = expiry;
@@ -512,12 +502,16 @@ const forgotPassword = async (req, res) => {
     user.passwordResetTokenExpiry = null;
     await user.save();
 
-    await sendPasswordResetOTPEmail(user, otp);
+    await sendPasswordResetOTPEmail(
+      user,
+      otp,
+      otpExpiryMinutes,
+      settings.emailSenderName,
+    );
 
     return res.status(200).json({
       success: true,
-      message:
-        "OTP sent to your email. Please check your inbox (and spam folder).",
+      message: `OTP sent to your email. Valid for ${otpExpiryMinutes} minutes.`,
     });
   } catch (err) {
     res.status(500).json({
@@ -621,62 +615,49 @@ const resetPassword = async (req, res) => {
     if (!email || !resetToken) {
       return res.status(400).json({
         success: false,
-        message:
-          "Invalid reset session. Please start over from forgot password.",
+        message: "Invalid reset session. Please start over.",
       });
     }
 
-    if (!newPassword) {
+    if (!newPassword || !confirmPassword) {
       return res.status(400).json({
         success: false,
-        message: "Please enter a new password.",
-      });
-    }
-
-    if (!confirmPassword) {
-      return res.status(400).json({
-        success: false,
-        message: "Please confirm your new password.",
+        message: "Please fill in both password fields.",
       });
     }
 
     if (newPassword !== confirmPassword) {
       return res.status(400).json({
         success: false,
-        message:
-          "Passwords do not match. Please make sure both fields are identical.",
+        message: "Passwords do not match.",
       });
     }
 
-    if (newPassword.length < 8) {
+    const settings = await Settings.getSingleton();
+    const minLength = settings.passwordMinLength || 8;
+
+    if (newPassword.length < minLength) {
       return res.status(400).json({
         success: false,
-        message: "Password must be at least 8 characters long.",
+        message: `Password must be at least ${minLength} characters long.`,
       });
     }
 
-    if (!/[A-Z]/.test(newPassword)) {
+    if (settings.passwordRequireUppercase && !/[A-Z]/.test(newPassword)) {
       return res.status(400).json({
         success: false,
-        message: "Password must contain at least one uppercase letter (A-Z).",
+        message: "Password must contain at least one uppercase letter.",
       });
     }
 
-    if (!/[a-z]/.test(newPassword)) {
+    if (settings.passwordRequireNumber && !/\d/.test(newPassword)) {
       return res.status(400).json({
         success: false,
-        message: "Password must contain at least one lowercase letter (a-z).",
+        message: "Password must contain at least one number.",
       });
     }
 
-    if (!/\d/.test(newPassword)) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must contain at least one number (0-9).",
-      });
-    }
-
-    if (!/[@$!%*?&#]/.test(newPassword)) {
+    if (settings.passwordRequireSpecial && !/[@$!%*?&#]/.test(newPassword)) {
       return res.status(400).json({
         success: false,
         message:
@@ -686,14 +667,7 @@ const resetPassword = async (req, res) => {
 
     const user = await User.findOne({ email: email.toLowerCase().trim() });
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "Account not found. Please start over.",
-      });
-    }
-
-    if (!user.passwordResetToken || !user.passwordResetTokenExpiry) {
+    if (!user || !user.passwordResetToken) {
       return res.status(400).json({
         success: false,
         message: "Reset session not found. Please request a new OTP.",
@@ -704,10 +678,9 @@ const resetPassword = async (req, res) => {
       user.passwordResetToken = null;
       user.passwordResetTokenExpiry = null;
       await user.save();
-
       return res.status(400).json({
         success: false,
-        message: "Your reset session has expired. Please request a new OTP.",
+        message: "Reset session expired. Please request a new OTP.",
       });
     }
 
@@ -715,11 +688,10 @@ const resetPassword = async (req, res) => {
       resetToken,
       user.passwordResetToken,
     );
-
     if (!isTokenValid) {
       return res.status(400).json({
         success: false,
-        message: "Invalid reset token. Please start the process again.",
+        message: "Invalid reset token. Please start over.",
       });
     }
 
@@ -727,8 +699,7 @@ const resetPassword = async (req, res) => {
     if (isSamePassword) {
       return res.status(400).json({
         success: false,
-        message:
-          "New password cannot be the same as your current password. Please choose a different one.",
+        message: "New password cannot be the same as your current password.",
       });
     }
 
@@ -737,12 +708,13 @@ const resetPassword = async (req, res) => {
     user.passwordResetTokenExpiry = null;
     await user.save();
 
-    await sendPasswordResetSuccessEmail(user);
+    if (settings.emailEnabled) {
+      await sendPasswordResetSuccessEmail(user, settings.emailSenderName);
+    }
 
     return res.status(200).json({
       success: true,
-      message:
-        "Password reset successful! You can now log in with your new password.",
+      message: "Password reset successful! You can now log in.",
     });
   } catch (err) {
     res.status(500).json({
@@ -752,7 +724,6 @@ const resetPassword = async (req, res) => {
     });
   }
 };
-
 
 module.exports = {
   register,

@@ -10,7 +10,6 @@ const transporter = nodemailer.createTransport({
 
 const sendStaffWelcomeEmail = async (staff, plainPassword) => {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn("Email credentials not configured. Skipping email.");
     return { success: false, skipped: true };
   }
 
@@ -43,21 +42,24 @@ const sendStaffWelcomeEmail = async (staff, plainPassword) => {
     await transporter.sendMail(mailOptions);
     return { success: true };
   } catch (err) {
-    console.error("Email send error:", err.message);
     return { success: false, error: err.message };
   }
 };
 
-const sendPasswordResetOTPEmail = async (user, otp) => {
+const sendPasswordResetOTPEmail = async (
+  user,
+  otp,
+  expiryMinutes = 10,
+  senderName = "ComplaintSync — MITM",
+) => {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn("Email credentials not configured. Skipping email.");
     return { success: false, skipped: true };
   }
 
   const mailOptions = {
-    from: `"ComplaintSync — MITM" <${process.env.EMAIL_USER}>`,
+    from: `"${senderName}" <${process.env.EMAIL_USER}>`,
     to: user.email,
-    subject: `${otp} is your ComplaintSync password reset code`,
+    subject: `${otp} is your ${senderName} password reset code`,
     replyTo: process.env.EMAIL_USER,
     headers: {
       "X-Priority": "1",
@@ -78,15 +80,14 @@ const sendPasswordResetOTPEmail = async (user, otp) => {
                 <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
                   <tr>
                     <td style="background:linear-gradient(135deg,#021135,#086ead);padding:32px 40px;text-align:center;">
-                      <h1 style="margin:0;color:#ffffff;font-size:24px;letter-spacing:1px;">ComplaintSync</h1>
-                      <p style="margin:6px 0 0;color:#a5f3fc;font-size:13px;">MITM — Jayawanti Babu Foundation</p>
+                      <h1 style="margin:0;color:#ffffff;font-size:24px;letter-spacing:1px;">${senderName}</h1>
                     </td>
                   </tr>
                   <tr>
                     <td style="padding:40px;">
                       <p style="font-size:16px;color:#333;margin:0 0 8px;">Hello <strong>${user.name}</strong>,</p>
                       <p style="font-size:15px;color:#555;margin:0 0 24px;line-height:1.6;">
-                        You requested to reset your ComplaintSync account password. Use the verification code below. This code expires in <strong>10 minutes</strong>.
+                        You requested to reset your password. Use the verification code below. This code expires in <strong>${expiryMinutes} minute${expiryMinutes !== 1 ? "s" : ""}</strong>.
                       </p>
                       <div style="text-align:center;margin:32px 0;">
                         <div style="display:inline-block;background:#f0f9ff;border:2px solid #0ea0e9;border-radius:12px;padding:24px 48px;">
@@ -95,20 +96,17 @@ const sendPasswordResetOTPEmail = async (user, otp) => {
                         </div>
                       </div>
                       <p style="font-size:14px;color:#555;line-height:1.6;margin:0 0 12px;">
-                        Enter this code on the ComplaintSync password reset page. Do not share this code with anyone.
+                        Enter this code on the password reset page. Do not share this code with anyone.
                       </p>
                       <p style="font-size:13px;color:#999;margin:0;">
-                        If you did not request this, you can safely ignore this email. Your password will not change.
+                        If you did not request this, you can safely ignore this email.
                       </p>
                     </td>
                   </tr>
                   <tr>
                     <td style="background:#f9f9f9;padding:20px 40px;border-top:1px solid #eee;text-align:center;">
                       <p style="margin:0;font-size:12px;color:#aaa;">
-                        © ${new Date().getFullYear()} ComplaintSync — Metropolitan Institute of Technology & Management
-                      </p>
-                      <p style="margin:6px 0 0;font-size:11px;color:#ccc;">
-                        This is an automated message. Please do not reply to this email.
+                        © ${new Date().getFullYear()} ${senderName}
                       </p>
                     </td>
                   </tr>
@@ -122,82 +120,53 @@ const sendPasswordResetOTPEmail = async (user, otp) => {
   };
 
   try {
-    await transporter.sendMail(mailOptions);
-    return { success: true };
+    const info = await transporter.sendMail(mailOptions);
+    return { success: true, messageId: info.messageId };
   } catch (err) {
-    console.error("Email send error:", err.message);
     return { success: false, error: err.message };
   }
 };
 
-const sendPasswordResetSuccessEmail = async (user) => {
+const sendPasswordResetSuccessEmail = async (
+  user,
+  senderName = "ComplaintSync — MITM",
+) => {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn("Email credentials not configured. Skipping email.");
     return { success: false, skipped: true };
   }
 
   const mailOptions = {
-    from: `"ComplaintSync — MITM" <${process.env.EMAIL_USER}>`,
+    from: `"${senderName}" <${process.env.EMAIL_USER}>`,
     to: user.email,
-    subject: "Your ComplaintSync password has been changed successfully",
+    subject: `Your password has been changed successfully`,
     replyTo: process.env.EMAIL_USER,
-    headers: {
-      "X-Priority": "1",
-      "X-MSMail-Priority": "High",
-      Importance: "high",
-    },
     html: `
       <!DOCTYPE html>
       <html>
-        <head>
-          <meta charset="UTF-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-        </head>
         <body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:40px 0;">
             <tr>
               <td align="center">
-                <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+                <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;">
                   <tr>
                     <td style="background:linear-gradient(135deg,#021135,#086ead);padding:32px 40px;text-align:center;">
-                      <h1 style="margin:0;color:#ffffff;font-size:24px;letter-spacing:1px;">ComplaintSync</h1>
-                      <p style="margin:6px 0 0;color:#a5f3fc;font-size:13px;">MITM — Jayawanti Babu Foundation</p>
+                      <h1 style="margin:0;color:#ffffff;font-size:24px;">${senderName}</h1>
                     </td>
                   </tr>
                   <tr>
-                    <td style="padding:40px;">
-                      <div style="text-align:center;margin-bottom:28px;">
-                        <div style="display:inline-block;background:#f0fdf4;border:2px solid #22c55e;border-radius:50%;width:64px;height:64px;line-height:64px;text-align:center;">
-                          <span style="font-size:32px;">✓</span>
-                        </div>
+                    <td style="padding:40px;text-align:center;">
+                      <div style="display:inline-block;background:#f0fdf4;border:2px solid #22c55e;border-radius:50%;width:64px;height:64px;line-height:64px;margin-bottom:20px;">
+                        <span style="font-size:32px;">✓</span>
                       </div>
-                      <p style="font-size:16px;color:#333;margin:0 0 12px;text-align:center;">
-                        Hello <strong>${user.name}</strong>,
+                      <p style="font-size:16px;color:#333;margin:0 0 12px;">Hello <strong>${user.name}</strong>,</p>
+                      <p style="font-size:15px;color:#555;line-height:1.6;">
+                        Your password has been successfully changed. You can now log in with your new password.
                       </p>
-                      <p style="font-size:15px;color:#555;margin:0 0 24px;line-height:1.6;text-align:center;">
-                        Your ComplaintSync account password has been successfully changed. You can now log in with your new password.
-                      </p>
-                      <div style="text-align:center;margin:24px 0;">
-                        <a href="${process.env.FRONTEND_URL || "http://localhost:5173"}/auth"
-                           style="background:linear-gradient(to right,#0f78c8,#3805d1);color:#ffffff;padding:14px 36px;border-radius:8px;text-decoration:none;font-size:15px;font-weight:700;display:inline-block;">
-                          Login to ComplaintSync
-                        </a>
-                      </div>
-                      <div style="background:#fff8f0;border:1px solid #fed7aa;border-radius:8px;padding:16px;margin-top:24px;">
-                        <p style="font-size:13px;color:#c2410c;margin:0;line-height:1.6;">
-                          <strong>⚠ Not you?</strong> If you did not make this change, contact your administrator immediately or request another password reset.
-                        </p>
-                      </div>
                     </td>
                   </tr>
                   <tr>
-                    <td style="background:#f9f9f9;padding:20px 40px;border-top:1px solid #eee;text-align:center;">
-                      <p style="margin:0;font-size:12px;color:#aaa;">
-                        © ${new Date().getFullYear()} ComplaintSync — Metropolitan Institute of Technology & Management
-                      </p>
-                      <p style="margin:6px 0 0;font-size:11px;color:#ccc;">
-                        This is an automated message. Please do not reply to this email.
-                      </p>
+                    <td style="background:#f9f9f9;padding:20px 40px;text-align:center;border-top:1px solid #eee;">
+                      <p style="margin:0;font-size:12px;color:#aaa;">© ${new Date().getFullYear()} ${senderName}</p>
                     </td>
                   </tr>
                 </table>
@@ -213,10 +182,10 @@ const sendPasswordResetSuccessEmail = async (user) => {
     await transporter.sendMail(mailOptions);
     return { success: true };
   } catch (err) {
-    console.error("Email send error:", err.message);
     return { success: false, error: err.message };
   }
 };
+
 module.exports = {
   sendStaffWelcomeEmail,
   sendPasswordResetOTPEmail,

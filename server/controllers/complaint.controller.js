@@ -205,7 +205,10 @@ const getStaffStats = async (req, res) => {
       await Promise.all([
         Complaint.countDocuments({ assignedTo: staffId }),
         Complaint.countDocuments({ assignedTo: staffId, status: "pending" }),
-        Complaint.countDocuments({ assignedTo: staffId, status: "in-progress" }),
+        Complaint.countDocuments({
+          assignedTo: staffId,
+          status: "in-progress",
+        }),
         Complaint.countDocuments({ assignedTo: staffId, status: "resolved" }),
         Complaint.countDocuments({ assignedTo: staffId, status: "rejected" }),
       ]);
@@ -326,9 +329,15 @@ const getStaffStats = async (req, res) => {
         weeklyTrend,
         statusBreakdown,
         trendMeta: {
-          totalAssigned: { current: assignedThisWeek, previous: assignedPrevWeek },
+          totalAssigned: {
+            current: assignedThisWeek,
+            previous: assignedPrevWeek,
+          },
           pending: { current: pendingThisWeek, previous: pendingPrevWeek },
-          inProgress: { current: inProgressThisWeek, previous: inProgressPrevWeek },
+          inProgress: {
+            current: inProgressThisWeek,
+            previous: inProgressPrevWeek,
+          },
           resolved: { current: resolvedThisWeek, previous: resolvedPrevWeek },
           rejected: { current: rejectedThisWeek, previous: rejectedPrevWeek },
         },
@@ -343,54 +352,100 @@ const getAdminStats = async (req, res) => {
   try {
     const now = new Date();
 
-    const startThisWeek = new Date(now);
-    startThisWeek.setDate(startThisWeek.getDate() - 6);
-    startThisWeek.setHours(0, 0, 0, 0);
-
-    const endPrevWeek = new Date(startThisWeek.getTime() - 1);
-    const startPrevWeek = new Date(startThisWeek);
-    startPrevWeek.setDate(startPrevWeek.getDate() - 7);
-    startPrevWeek.setHours(0, 0, 0, 0);
+    const startThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endPrevMonth = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      0,
+      23,
+      59,
+      59,
+      999,
+    );
 
     const [
       totalComplaints,
       pending,
       resolved,
       inProgress,
-      submittedThisWeek,
-      submittedPrevWeek,
-      pendingThisWeek,
-      pendingPrevWeek,
-      resolvedThisWeek,
-      resolvedPrevWeek,
+      totalThisMonth,
+      totalPrevMonth,
+      pendingThisMonth,
+      pendingPrevMonth,
+      resolvedThisMonth,
+      resolvedPrevMonth,
     ] = await Promise.all([
       Complaint.countDocuments(),
       Complaint.countDocuments({ status: "pending" }),
       Complaint.countDocuments({ status: "resolved" }),
       Complaint.countDocuments({ status: "in-progress" }),
-      Complaint.countDocuments({ createdAt: { $gte: startThisWeek, $lte: now } }),
-      Complaint.countDocuments({ createdAt: { $gte: startPrevWeek, $lte: endPrevWeek } }),
-      Complaint.countDocuments({ status: "pending", createdAt: { $gte: startThisWeek, $lte: now } }),
-      Complaint.countDocuments({ status: "pending", createdAt: { $gte: startPrevWeek, $lte: endPrevWeek } }),
-      Complaint.countDocuments({ status: "resolved", updatedAt: { $gte: startThisWeek, $lte: now } }),
-      Complaint.countDocuments({ status: "resolved", updatedAt: { $gte: startPrevWeek, $lte: endPrevWeek } }),
+      Complaint.countDocuments({
+        createdAt: { $gte: startThisMonth, $lte: now },
+      }),
+      Complaint.countDocuments({
+        createdAt: { $gte: startPrevMonth, $lte: endPrevMonth },
+      }),
+      Complaint.countDocuments({
+        status: "pending",
+        createdAt: { $gte: startThisMonth, $lte: now },
+      }),
+      Complaint.countDocuments({
+        status: "pending",
+        createdAt: { $gte: startPrevMonth, $lte: endPrevMonth },
+      }),
+      Complaint.countDocuments({
+        status: "resolved",
+        updatedAt: { $gte: startThisMonth, $lte: now },
+      }),
+      Complaint.countDocuments({
+        status: "resolved",
+        updatedAt: { $gte: startPrevMonth, $lte: endPrevMonth },
+      }),
     ]);
 
-    const avgResponseResult = await Complaint.aggregate([
+    const avgResponseThisMonth = await Complaint.aggregate([
       {
         $match: {
           status: "resolved",
-          createdAt: { $exists: true },
-          updatedAt: { $exists: true },
+          updatedAt: { $gte: startThisMonth, $lte: now },
         },
       },
-      { $project: { responseTime: { $subtract: ["$updatedAt", "$createdAt"] } } },
-      { $group: { _id: null, avgResponseTime: { $avg: "$responseTime" } } },
+      {
+        $project: { responseTime: { $subtract: ["$updatedAt", "$createdAt"] } },
+      },
+      { $group: { _id: null, avg: { $avg: "$responseTime" } } },
     ]);
 
-    const avgResponseTime = avgResponseResult[0]?.avgResponseTime
-      ? Number((avgResponseResult[0].avgResponseTime / (1000 * 60 * 60)).toFixed(1))
-      : 0;
+    const avgResponsePrevMonth = await Complaint.aggregate([
+      {
+        $match: {
+          status: "resolved",
+          updatedAt: { $gte: startPrevMonth, $lte: endPrevMonth },
+        },
+      },
+      {
+        $project: { responseTime: { $subtract: ["$updatedAt", "$createdAt"] } },
+      },
+      { $group: { _id: null, avg: { $avg: "$responseTime" } } },
+    ]);
+
+    const avgResponseAll = await Complaint.aggregate([
+      {
+        $match: { status: "resolved" },
+      },
+      {
+        $project: { responseTime: { $subtract: ["$updatedAt", "$createdAt"] } },
+      },
+      { $group: { _id: null, avg: { $avg: "$responseTime" } } },
+    ]);
+
+    const toHours = (ms) =>
+      ms ? Number((ms / (1000 * 60 * 60)).toFixed(1)) : 0;
+
+    const avgResponseTime = toHours(avgResponseAll[0]?.avg);
+    const avgResponseThis = toHours(avgResponseThisMonth[0]?.avg);
+    const avgResponsePrev = toHours(avgResponsePrevMonth[0]?.avg);
 
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -403,10 +458,17 @@ const getAdminStats = async (req, res) => {
 
         const [submitted, resolvedCount] = await Promise.all([
           Complaint.countDocuments({ createdAt: { $gte: start, $lte: end } }),
-          Complaint.countDocuments({ status: "resolved", updatedAt: { $gte: start, $lte: end } }),
+          Complaint.countDocuments({
+            status: "resolved",
+            updatedAt: { $gte: start, $lte: end },
+          }),
         ]);
 
-        return { day: days[start.getDay()], submitted, resolved: resolvedCount };
+        return {
+          day: days[start.getDay()],
+          submitted,
+          resolved: resolvedCount,
+        };
       }),
     );
 
@@ -414,7 +476,15 @@ const getAdminStats = async (req, res) => {
       Array.from({ length: 6 }).map(async (_, i) => {
         const date = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
         const start = new Date(date.getFullYear(), date.getMonth(), 1);
-        const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+        const end = new Date(
+          date.getFullYear(),
+          date.getMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999,
+        );
 
         const value = await Complaint.countDocuments({
           createdAt: { $gte: start, $lte: end },
@@ -433,19 +503,57 @@ const getAdminStats = async (req, res) => {
     ]);
 
     const iconMap = {
+      // Technical & IT
       technical: "bx bx-cog",
-      service: "bx bx-support",
-      infrastructure: "bx bx-building",
-      billing: "bx bx-credit-card",
-      academic: "bx bx-book",
-      hostel: "bx bx-home",
-      transport: "bx bx-bus",
+      it: "bx bx-laptop",
+      software: "bx bx-code-alt",
+      hardware: "bx bx-chip",
+      network: "bx bx-wifi",
+      internet: "bx bx-globe",
+
+      // Facilities
+      infrastructure: "bx bx-buildings",
+      electrical: "bx bxs-bolt",
+      plumbing: "bx bx-droplet",
+      cleanliness: "bx bxs-spray-can",
+      maintenance: "bx bx-wrench",
+
+      // Living
+      hostel: "bx bxs-home-heart",
+      accommodation: "bx bxs-bed",
+      food: "bx bxs-bowl-rice",
+      mess: "bx bxs-dish",
+
+      // Academic
+      academic: "bx bxs-graduation",
+      exam: "bx bxs-edit",
+      faculty: "bx bxs-user-voice",
+      library: "bx bxs-book-reader",
+
+      // Services
+      service: "bx bxs-bell",
+      billing: "bx bxs-credit-card",
+      payment: "bx bxs-wallet",
+      transport: "bx bxs-bus",
+      parking: "bx bxs-car",
+
+      // Safety & Security
+      safety: "bx bxs-shield",
+      security: "bx bxs-lock-alt",
+      medical: "bx bxs-first-aid",
+      emergency: "bx bxs-error-circle",
+
+      // Misc
+      noise: "bx bxs-volume-full",
+      harassment: "bx bxs-user-x",
+      feedback: "bx bxs-message-rounded-dots",
+      other: "bx bxs-category",
     };
 
     const categoryBreakdown = categoryResult.map((item) => ({
       label: item._id || "Other",
       value: item.value,
-      icon: iconMap[(item._id || "other").toLowerCase()] || "bx bx-category",
+      icon: iconMap[(item._id || "other").toLowerCase()] || "bx bxs-category",
     }));
 
     res.json({
@@ -460,9 +568,16 @@ const getAdminStats = async (req, res) => {
         monthlyData,
         categoryBreakdown,
         trendMeta: {
-          totalComplaints: { current: submittedThisWeek, previous: submittedPrevWeek },
-          pending: { current: pendingThisWeek, previous: pendingPrevWeek },
-          resolved: { current: resolvedThisWeek, previous: resolvedPrevWeek },
+          totalComplaints: {
+            current: totalThisMonth,
+            previous: totalPrevMonth,
+          },
+          pending: { current: pendingThisMonth, previous: pendingPrevMonth },
+          resolved: { current: resolvedThisMonth, previous: resolvedPrevMonth },
+          avgResponseTime: {
+            current: avgResponseThis,
+            previous: avgResponsePrev,
+          },
         },
         lastUpdated: now,
       },
