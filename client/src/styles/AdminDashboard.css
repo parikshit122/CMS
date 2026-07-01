@@ -457,3 +457,13 @@ html[data-bs-theme="dark"] .category-card:hover {
 html[data-bs-theme="dark"] .category-icon {
   background: rgba(255, 255, 255, 0.05);
 }
+
+.avatar.avatar-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--border-color, #e5e7eb);
+  padding: 0;
+  display: block;
+}

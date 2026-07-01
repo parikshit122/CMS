@@ -1,23 +1,25 @@
 import { useNavigate } from "react-router-dom";
-import { useDispatch } from "react-redux";
-import { resetNotifications } from "../../redux/notificationSlice";
 import NotificationBell from "../notification/NotificationBell";
+import { useCurrentUser } from "../../hooks/useCurrentUser";
 import "../../styles/AdminDashboard.css";
 import "boxicons/css/boxicons.min.css";
 
 const AppHeader = ({ userName, role }) => {
   const navigate = useNavigate();
-  const dispatch = useDispatch();
+  const user = useCurrentUser();
 
   const handleProfileClick = () => {
     navigate("/profile");
   };
 
-  const initials = userName
+  const displayName = user.name || userName || "User";
+
+  const initials = displayName
     ?.split(" ")
     .map((n) => n[0])
     .join("")
-    .toUpperCase();
+    .toUpperCase()
+    .slice(0, 2);
 
   return (
     <header className="dashboard-header">
@@ -34,13 +36,19 @@ const AppHeader = ({ userName, role }) => {
 
         <NotificationBell />
 
-        <div
-          className="header-user clickable"
-          onClick={handleProfileClick}
-        >
-          <div className="avatar">{initials}</div>
+        <div className="header-user clickable" onClick={handleProfileClick}>
+          {user.avatar ? (
+            <img
+              src={user.avatar}
+              alt="Profile"
+              className="avatar avatar-img"
+              key={user.avatar}
+            />
+          ) : (
+            <div className="avatar">{initials}</div>
+          )}
           <div>
-            <div className="user-name">{userName}</div>
+            <div className="user-name">{displayName}</div>
             <small className="user-role">{role}</small>
           </div>
         </div>

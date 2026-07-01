@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { useAlert } from "../components/common/Alert";
+import { useAuth } from "../context/AuthContext";
 import API from "../services/api";
 import "../styles/Profilepage.css";
 
 const Profile = () => {
   const fileInputRef = useRef(null);
   const alert = useAlert();
+  const { updateUser } = useAuth();
 
   const [user, setUser] = useState(null);
   const [formData, setFormData] = useState(null);
@@ -15,24 +17,25 @@ const Profile = () => {
   const [saving, setSaving] = useState(false);
   const [popupClosed, setPopupClosed] = useState(false);
 
+  const buildFormData = (u) => ({
+    firstName: u.name?.split(" ")[0] || "",
+    lastName: u.name?.split(" ")[1] || "",
+    email: u.email,
+    phone: u.phone || "",
+    course: u.course || "",
+    year: u.year || "",
+    bio: u.bio || "",
+    avatar: u.avatar || null,
+    avatarFile: null,
+  });
+
   useEffect(() => {
     const loadUser = () => {
       const storedUser = JSON.parse(localStorage.getItem("user"));
       if (storedUser) {
-        const profileData = {
-          firstName: storedUser.name?.split(" ")[0] || "",
-          lastName: storedUser.name?.split(" ")[1] || "",
-          email: storedUser.email,
-          phone: storedUser.phone || "",
-          course: storedUser.course || "",
-          year: storedUser.year || "",
-          bio: storedUser.bio || "",
-          avatar: storedUser.avatar || null,
-          avatarFile: null,
-        };
         setUser(storedUser);
-        setFormData(profileData);
-        setOriginalData(profileData);
+        setFormData(buildFormData(storedUser));
+        setOriginalData(buildFormData(storedUser));
       }
     };
 
@@ -43,7 +46,15 @@ const Profile = () => {
 
   useEffect(() => {
     if (!formData || !originalData) return;
-    setIsDirty(JSON.stringify(formData) !== JSON.stringify(originalData));
+    const cleanForm = { ...formData };
+    const cleanOrig = { ...originalData };
+    delete cleanForm.avatarFile;
+    delete cleanForm.avatar;
+    delete cleanOrig.avatarFile;
+    delete cleanOrig.avatar;
+    const hasFieldChanges = JSON.stringify(cleanForm) !== JSON.stringify(cleanOrig);
+    const hasNewAvatar = !!formData.avatarFile;
+    setIsDirty(hasFieldChanges || hasNewAvatar);
   }, [formData, originalData]);
 
   if (!formData || !user) return null;
@@ -77,8 +88,23 @@ const Profile = () => {
   const handleSave = async () => {
     try {
       setSaving(true);
-
       const fullName = `${formData.firstName} ${formData.lastName}`.trim();
+      let avatarUrl = formData.avatar;
+
+      if (formData.avatarFile) {
+        const uploadForm = new FormData();
+        uploadForm.append("avatar", formData.avatarFile);
+
+        const uploadRes = await API.post("/users/upload-avatar", uploadForm);
+
+        if (uploadRes.data.success) {
+          avatarUrl = uploadRes.data.avatar;
+        } else {
+          alert.error("Avatar upload failed");
+          setSaving(false);
+          return;
+        }
+      }
 
       const response = await API.patch("/users/profile", {
         name: fullName,
@@ -94,40 +120,16 @@ const Profile = () => {
         return;
       }
 
-      let updatedUser = response.data.data;
+      const updatedUser = { ...response.data.data, avatar: avatarUrl };
 
-      if (formData.avatarFile) {
-        const form = new FormData();
-        form.append("avatar", formData.avatarFile);
+      updateUser(updatedUser);
 
-        const uploadRes = await API.post("/users/upload-avatar", form, {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        });
-
-        if (uploadRes.data.success) {
-          updatedUser = { ...updatedUser, avatar: uploadRes.data.avatar };
-        } else {
-          alert.error("Avatar upload failed");
-        }
-      }
-
-      localStorage.setItem("user", JSON.stringify(updatedUser));
-      window.dispatchEvent(new Event("user-updated"));
-      alert.success("Profile updated successfully");
+      setUser(updatedUser);
+      setFormData(buildFormData(updatedUser));
+      setOriginalData(buildFormData(updatedUser));
       setIsEditing(false);
 
-      setFormData((prev) => ({
-        ...prev,
-        avatar: updatedUser.avatar,
-        avatarFile: null,
-      }));
-      setOriginalData((prev) => ({
-        ...prev,
-        avatar: updatedUser.avatar,
-        avatarFile: null,
-      }));
+      alert.success("Profile updated successfully");
     } catch (err) {
       console.error("Update failed:", err);
       alert.error(err.response?.data?.message || "Update failed");
@@ -140,6 +142,15 @@ const Profile = () => {
     const file = e.target.files[0];
     if (!file) return;
 
+    if (!file.type.startsWith("image/")) {
+      alert.error("Please upload an image file");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert.error("Image must be less than 5MB");
+      return;
+    }
+
     setFormData((prev) => ({
       ...prev,
       avatar: URL.createObjectURL(file),
@@ -151,8 +162,8 @@ const Profile = () => {
     user.role === "admin"
       ? "Admin Profile"
       : user.role === "staff"
-        ? "Staff Profile"
-        : "Student Profile";
+      ? "Staff Profile"
+      : "Student Profile";
 
   return (
     <div className="student-profile-page">
@@ -181,10 +192,7 @@ const Profile = () => {
 
               <button
                 className="btn-cancel"
-                onClick={() => {
-                  setPopupClosed(true);
-                  setTimeout(() => window.location.reload(), 200);
-                }}
+                onClick={() => setPopupClosed(true)}
               >
                 Close
               </button>
@@ -223,7 +231,12 @@ const Profile = () => {
         <div className="profile-top">
           <div className="avatar-wrapper">
             {formData.avatar ? (
-              <img src={formData.avatar} alt="Profile" className="avatar-img" />
+              <img
+                src={formData.avatar}
+                alt="Profile"
+                className="avatar-img"
+                key={formData.avatar}
+              />
             ) : (
               <div className="avatar-initials">
                 {formData.firstName?.[0]}
@@ -234,8 +247,9 @@ const Profile = () => {
             {isEditing && (
               <>
                 <button
+                  type="button"
                   className="avatar-upload-btn"
-                  onClick={() => fileInputRef.current.click()}
+                  onClick={() => fileInputRef.current?.click()}
                 >
                   <i className="bx bx-camera"></i>
                 </button>

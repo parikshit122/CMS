@@ -25,7 +25,7 @@ const uploadAvatar = async (req, res) => {
       stream.end(req.file.buffer);
     });
 
-    const user = await User.findByIdAndUpdate(
+    await User.findByIdAndUpdate(
       req.user.id,
       { avatar: result.secure_url },
       { returnDocument: "after" }
@@ -36,6 +36,7 @@ const uploadAvatar = async (req, res) => {
       avatar: result.secure_url,
     });
   } catch (err) {
+    console.error("Avatar upload failed:", err.message);
     res.status(500).json({
       success: false,
       message: err.message || "Upload failed",

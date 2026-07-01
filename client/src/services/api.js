@@ -3,9 +3,6 @@ import axios from "axios";
 const API = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
   withCredentials: false,
-  headers: {
-    "Content-Type": "application/json",
-  },
 });
 
 API.interceptors.request.use((config) => {
@@ -13,6 +10,13 @@ API.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
+  if (config.data instanceof FormData) {
+    delete config.headers["Content-Type"];
+  } else if (!config.headers["Content-Type"]) {
+    config.headers["Content-Type"] = "application/json";
+  }
+
   return config;
 });
 
@@ -22,7 +26,8 @@ API.interceptors.response.use(
     const originalRequest = error.config;
 
     if (error.response?.status === 503 && error.response?.data?.maintenance) {
-      const message = error.response.data.message || "Site is under maintenance.";
+      const message =
+        error.response.data.message || "Site is under maintenance.";
       localStorage.setItem("maintenanceMessage", message);
 
       if (!window.location.pathname.includes("/maintenance")) {
@@ -47,7 +52,7 @@ API.interceptors.response.use(
 
         const response = await axios.post(
           `${import.meta.env.VITE_API_URL}/auth/refresh-token`,
-          { refreshToken }
+          { refreshToken },
         );
 
         const newAccessToken = response.data.accessToken;
@@ -68,7 +73,7 @@ API.interceptors.response.use(
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export default API;

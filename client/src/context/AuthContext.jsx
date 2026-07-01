@@ -29,6 +29,25 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
+  useEffect(() => {
+    const reloadUser = () => {
+      try {
+        const stored = JSON.parse(localStorage.getItem("user"));
+        if (stored) setUser(stored);
+      } catch (err) {
+        console.error("Failed to reload user:", err);
+      }
+    };
+
+    window.addEventListener("user-updated", reloadUser);
+    window.addEventListener("storage", reloadUser);
+
+    return () => {
+      window.removeEventListener("user-updated", reloadUser);
+      window.removeEventListener("storage", reloadUser);
+    };
+  }, []);
+
   const login = (userData, accessToken, refreshToken) => {
     if (!userData || !accessToken || !refreshToken) {
       console.error("Invalid login data");
@@ -39,6 +58,13 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem("user", JSON.stringify(userData));
     setUser(userData);
     console.log("✅ Login data saved to localStorage");
+  };
+
+  const updateUser = (userData) => {
+    if (!userData) return;
+    localStorage.setItem("user", JSON.stringify(userData));
+    setUser(userData);
+    window.dispatchEvent(new Event("user-updated"));
   };
 
   const logout = () => {
@@ -66,7 +92,7 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, login, logout, refreshAccessToken }}
+      value={{ user, loading, login, logout, updateUser, refreshAccessToken }}
     >
       {children}
     </AuthContext.Provider>

@@ -13,7 +13,12 @@ const userSchema = new mongoose.Schema(
       trim: true,
     },
 
-    phone: { type: String, unique: true, sparse: true },
+    phone: {
+      type: String,
+      unique: true,
+      sparse: true,
+      set: (v) => (v === "" ? undefined : v),
+    },
 
     password: { type: String },
 
@@ -34,7 +39,7 @@ const userSchema = new mongoose.Schema(
     bio: { type: String, trim: true },
 
     course: { type: String, trim: true },
-    year:   { type: String, trim: true },
+    year: { type: String, trim: true },
 
     category: {
       type: String,
@@ -50,19 +55,19 @@ const userSchema = new mongoose.Schema(
       ],
     },
 
-    isActive:          { type: Boolean, default: true },
-    suspendedUntil:    { type: Date },
-    suspensionReason:  { type: String },
+    isActive: { type: Boolean, default: true },
+    suspendedUntil: { type: Date },
+    suspensionReason: { type: String },
 
     loginAttempts: { type: Number, default: 0 },
-    lockUntil:     { type: Date },
+    lockUntil: { type: Date },
 
-    passwordResetOTP:          { type: String, default: null },
-    passwordResetOTPExpiry:    { type: Date,   default: null },
-    passwordResetToken:        { type: String, default: null },
-    passwordResetTokenExpiry:  { type: Date,   default: null },
+    passwordResetOTP: { type: String, default: null },
+    passwordResetOTPExpiry: { type: Date, default: null },
+    passwordResetToken: { type: String, default: null },
+    passwordResetTokenExpiry: { type: Date, default: null },
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
 userSchema.pre("save", async function () {
