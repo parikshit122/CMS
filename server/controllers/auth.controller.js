@@ -164,6 +164,7 @@ const register = async (req, res) => {
     });
   }
 };
+
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -254,9 +255,6 @@ const login = async (req, res) => {
 
 const socialLogin = async (req, res) => {
   try {
-    console.log("=".repeat(50));
-    console.log("Social login request received from:", req.headers.origin);
-
     const {
       idToken,
       email: clientEmail,
@@ -264,13 +262,6 @@ const socialLogin = async (req, res) => {
       avatar: clientAvatar,
       provider: clientProvider,
     } = req.body;
-
-    console.log("Payload:", {
-      hasIdToken: !!idToken,
-      idTokenLength: idToken?.length,
-      clientEmail,
-      clientProvider,
-    });
 
     if (!idToken && !clientEmail) {
       return res.status(400).json({
@@ -284,21 +275,14 @@ const socialLogin = async (req, res) => {
     if (idToken) {
       try {
         decoded = await admin.auth().verifyIdToken(idToken);
-        console.log("✅ Token verified for:", decoded.email || decoded.uid);
       } catch (verifyErr) {
-        console.error(
-          "⚠️ Token verification failed:",
-          verifyErr.code,
-          verifyErr.message,
-        );
-        console.log("⚠️ Falling back to client-provided email");
+        console.warn("Token verification failed, using client email fallback");
       }
     }
 
     const email = decoded?.email || clientEmail || "";
 
     if (!email) {
-      console.error("❌ No email available");
       return res.status(400).json({
         success: false,
         message: "No email found. Please try another login method.",
@@ -324,43 +308,21 @@ const socialLogin = async (req, res) => {
 
     const provider = providerMap[rawProvider] || "google";
 
-    let user;
-    try {
-      user = await User.findOne({ email });
-      console.log(user ? "✅ Existing user" : "🆕 New user needed");
-    } catch (dbErr) {
-      console.error("❌ DB error finding user:", dbErr.message);
-      return res.status(500).json({
-        success: false,
-        message: "Database error. Try again.",
-        error: dbErr.message,
-      });
-    }
+    let user = await User.findOne({ email });
 
     if (!user) {
-      try {
-        console.log("Creating new user:", email);
-        let role = "user";
-        if (email.endsWith("@staff.com")) role = "staff";
-        if (email.endsWith("@admin.com")) role = "admin";
+      let role = "user";
+      if (email.endsWith("@staff.com")) role = "staff";
+      if (email.endsWith("@admin.com")) role = "admin";
 
-        user = await User.create({
-          name,
-          email,
-          password: crypto.randomBytes(32).toString("hex"),
-          role,
-          provider,
-          avatar,
-        });
-        console.log("✅ User created:", user._id);
-      } catch (createErr) {
-        console.error("❌ User creation failed:", createErr.message);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to create user.",
-          error: createErr.message,
-        });
-      }
+      user = await User.create({
+        name,
+        email,
+        password: crypto.randomBytes(32).toString("hex"),
+        role,
+        provider,
+        avatar,
+      });
     }
 
     if (user.suspendedUntil && user.suspendedUntil > new Date()) {
@@ -382,21 +344,8 @@ const socialLogin = async (req, res) => {
       });
     }
 
-    let accessToken, refreshToken;
-    try {
-      accessToken = generateAccessToken(user._id);
-      refreshToken = generateRefreshToken(user._id);
-    } catch (tokenErr) {
-      console.error("❌ Token generation failed:", tokenErr.message);
-      return res.status(500).json({
-        success: false,
-        message: "Token generation failed.",
-        error: tokenErr.message,
-      });
-    }
-
-    console.log("✅ Login successful for:", email);
-    console.log("=".repeat(50));
+    const accessToken = generateAccessToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
 
     return res.json({
       success: true,
@@ -405,12 +354,10 @@ const socialLogin = async (req, res) => {
       user: buildUserResponse(user),
     });
   } catch (err) {
-    console.error("❌ FATAL Social login error:", err.message);
-    console.error("Stack:", err.stack);
+    console.error("Social login failed:", err.message);
     return res.status(500).json({
       success: false,
       message: "Social login failed.",
-      error: err.message,
     });
   }
 };

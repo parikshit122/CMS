@@ -12,6 +12,12 @@ const {
   resetPassword,
 } = require("../controllers/auth.controller");
 const { protect } = require("../middlewares/auth.middleware");
+const {
+  authLimiter,
+  registerLimiter,
+  otpLimiter,
+  passwordResetLimiter,
+} = require("../middlewares/rateLimiters");
 const User = require("../models/User");
 
 const validate = (req, res, next) => {
@@ -27,6 +33,7 @@ const validate = (req, res, next) => {
 
 router.post(
   "/register",
+  registerLimiter,
   body("name").trim().notEmpty().isLength({ min: 3 }),
   body("email").trim().notEmpty().isEmail().normalizeEmail(),
   body("phone")
@@ -41,28 +48,24 @@ router.post(
     .matches(/[0-9]/)
     .matches(/[!@#$%^&*(),.?":{}|<>]/),
   validate,
-  register,
+  register
 );
 
 router.post(
   "/login",
+  authLimiter,
   body("email").trim().notEmpty().isEmail().normalizeEmail(),
   body("password").notEmpty(),
   validate,
-  login,
+  login
 );
 
 router.post("/refresh-token", refreshToken);
-
 router.get("/me", protect, getMe);
-
-router.post("/social-login", socialLogin);
-
-router.post("/forgot-password", forgotPassword);
-
-router.post("/verify-otp", verifyOTP);
-
-router.post("/reset-password", resetPassword);
+router.post("/social-login", authLimiter, socialLogin);
+router.post("/forgot-password", otpLimiter, forgotPassword);
+router.post("/verify-otp", passwordResetLimiter, verifyOTP);
+router.post("/reset-password", passwordResetLimiter, resetPassword);
 
 router.patch("/profile", protect, async (req, res) => {
   try {
