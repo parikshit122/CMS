@@ -2,9 +2,6 @@ const sanitizeValue = (value) => {
   if (value === null || value === undefined) return value;
 
   if (typeof value === "string") {
-    if (value.startsWith("$") || value.includes(".")) {
-      return value.replace(/^\$/g, "_").replace(/\./g, "_");
-    }
     return value;
   }
 
