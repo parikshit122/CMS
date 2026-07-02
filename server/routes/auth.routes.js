@@ -20,12 +20,15 @@ const {
 } = require("../middlewares/rateLimiters");
 const User = require("../models/User");
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const validate = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({
       success: false,
       errors: errors.array().map((err) => err.msg),
+      message: errors.array()[0].msg,
     });
   }
   next();
@@ -34,19 +37,26 @@ const validate = (req, res, next) => {
 router.post(
   "/register",
   registerLimiter,
-  body("name").trim().notEmpty().isLength({ min: 3 }),
-  body("email").trim().notEmpty().isEmail().normalizeEmail(),
+  body("name")
+    .trim()
+    .notEmpty().withMessage("Name is required")
+    .isLength({ min: 3 }).withMessage("Name must be at least 3 characters"),
+  body("email")
+    .trim()
+    .notEmpty().withMessage("Email is required")
+    .matches(EMAIL_REGEX).withMessage("Please enter a valid email address")
+    .toLowerCase(),
   body("phone")
     .trim()
-    .notEmpty()
-    .matches(/^[0-9]{10}$/),
+    .notEmpty().withMessage("Phone number is required")
+    .matches(/^[0-9]{10}$/).withMessage("Phone must be exactly 10 digits"),
   body("password")
-    .notEmpty()
-    .isLength({ min: 8 })
-    .matches(/[a-z]/)
-    .matches(/[A-Z]/)
-    .matches(/[0-9]/)
-    .matches(/[!@#$%^&*(),.?":{}|<>]/),
+    .notEmpty().withMessage("Password is required")
+    .isLength({ min: 8 }).withMessage("Password must be at least 8 characters")
+    .matches(/[a-z]/).withMessage("Password must include a lowercase letter")
+    .matches(/[A-Z]/).withMessage("Password must include an uppercase letter")
+    .matches(/[0-9]/).withMessage("Password must include a number")
+    .matches(/[!@#$%^&*(),.?":{}|<>]/).withMessage("Password must include a special character"),
   validate,
   register
 );
@@ -54,8 +64,13 @@ router.post(
 router.post(
   "/login",
   authLimiter,
-  body("email").trim().notEmpty().isEmail().normalizeEmail(),
-  body("password").notEmpty(),
+  body("email")
+    .trim()
+    .notEmpty().withMessage("Email is required")
+    .matches(EMAIL_REGEX).withMessage("Please enter a valid email address")
+    .toLowerCase(),
+  body("password")
+    .notEmpty().withMessage("Password is required"),
   validate,
   login
 );
