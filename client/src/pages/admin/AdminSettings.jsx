@@ -14,11 +14,11 @@ import "../../styles/AdminSettings.css";
 import "boxicons/css/boxicons.min.css";
 
 const TABS = [
-  { key: "general",    label: "General",    icon: "bx-cog" },
-  { key: "security",   label: "Security",   icon: "bx-shield-quarter" },
-  { key: "email",      label: "Email",      icon: "bx-envelope" },
+  { key: "general", label: "General", icon: "bx-cog" },
+  { key: "security", label: "Security", icon: "bx-shield-quarter" },
+  { key: "email", label: "Email", icon: "bx-envelope" },
   { key: "categories", label: "Categories", icon: "bx-category" },
-  { key: "danger",     label: "Danger Zone", icon: "bx-error" },
+  { key: "danger", label: "Danger Zone", icon: "bx-error" },
 ];
 
 export default function AdminSettings() {
@@ -41,10 +41,7 @@ export default function AdminSettings() {
   const loadAll = async () => {
     try {
       setLoading(true);
-      const [s, st] = await Promise.all([
-        fetchSettings(),
-        fetchSystemStats(),
-      ]);
+      const [s, st] = await Promise.all([fetchSettings(), fetchSystemStats()]);
       setSettings(s.data);
       setStats(st.data);
     } catch (err) {
@@ -183,11 +180,36 @@ export default function AdminSettings() {
 
       {stats && (
         <div className="settings-stats-row">
-          <StatBox icon="bx-user"        label="Total Users"     value={stats.totalUsers}     color="#3b82f6" />
-          <StatBox icon="bx-graduation"  label="Students"        value={stats.totalStudents}  color="#8b5cf6" />
-          <StatBox icon="bx-id-card"     label="Staff"           value={stats.totalStaff}     color="#f59e0b" />
-          <StatBox icon="bx-file"        label="Complaints"      value={stats.totalComplaints} color="#10b981" />
-          <StatBox icon="bx-bell"        label="Notifications"   value={stats.totalNotifications} color="#ef4444" />
+          <StatBox
+            icon="bx-user"
+            label="Total Users"
+            value={stats.totalUsers}
+            color="#3b82f6"
+          />
+          <StatBox
+            icon="bxs-graduation"
+            label="Students"
+            value={stats.totalStudents}
+            color="#8b5cf6"
+          />{" "}
+          <StatBox
+            icon="bx-id-card"
+            label="Staff"
+            value={stats.totalStaff}
+            color="#f59e0b"
+          />
+          <StatBox
+            icon="bx-file"
+            label="Complaints"
+            value={stats.totalComplaints}
+            color="#10b981"
+          />
+          <StatBox
+            icon="bx-bell"
+            label="Notifications"
+            value={stats.totalNotifications}
+            color="#ef4444"
+          />
         </div>
       )}
 
@@ -247,7 +269,9 @@ export default function AdminSettings() {
                 <select
                   className="setting-input"
                   value={settings.defaultPriority}
-                  onChange={(e) => handleChange("defaultPriority", e.target.value)}
+                  onChange={(e) =>
+                    handleChange("defaultPriority", e.target.value)
+                  }
                 >
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
@@ -259,7 +283,9 @@ export default function AdminSettings() {
               <div className="setting-row">
                 <div className="setting-info">
                   <label>Auto Close Resolved After (Days)</label>
-                  <span>Automatically archive complaints resolved this long ago</span>
+                  <span>
+                    Automatically archive complaints resolved this long ago
+                  </span>
                 </div>
                 <input
                   type="number"
@@ -268,7 +294,10 @@ export default function AdminSettings() {
                   max="365"
                   value={settings.autoCloseResolvedDays}
                   onChange={(e) =>
-                    handleChange("autoCloseResolvedDays", parseInt(e.target.value))
+                    handleChange(
+                      "autoCloseResolvedDays",
+                      parseInt(e.target.value),
+                    )
                   }
                 />
               </div>
@@ -306,7 +335,9 @@ export default function AdminSettings() {
           {activeTab === "security" && (
             <div className="settings-section">
               <h2>Security Settings</h2>
-              <p className="section-desc">Password policies and authentication</p>
+              <p className="section-desc">
+                Password policies and authentication
+              </p>
 
               <div className="setting-row">
                 <div className="setting-info">
@@ -370,7 +401,10 @@ export default function AdminSettings() {
                   max="240"
                   value={settings.sessionTimeoutMinutes}
                   onChange={(e) =>
-                    handleChange("sessionTimeoutMinutes", parseInt(e.target.value))
+                    handleChange(
+                      "sessionTimeoutMinutes",
+                      parseInt(e.target.value),
+                    )
                   }
                 />
               </div>
@@ -436,7 +470,9 @@ export default function AdminSettings() {
                   type="text"
                   className="setting-input"
                   value={settings.emailSenderName}
-                  onChange={(e) => handleChange("emailSenderName", e.target.value)}
+                  onChange={(e) =>
+                    handleChange("emailSenderName", e.target.value)
+                  }
                 />
               </div>
 
@@ -499,7 +535,9 @@ export default function AdminSettings() {
           {activeTab === "categories" && (
             <div className="settings-section">
               <h2>Complaint Categories</h2>
-              <p className="section-desc">Manage available complaint categories</p>
+              <p className="section-desc">
+                Manage available complaint categories
+              </p>
 
               <div className="add-category-row">
                 <input
@@ -616,8 +654,10 @@ export default function AdminSettings() {
               <button
                 className="settings-btn danger"
                 onClick={() => {
-                  if (confirmAction === "clear-resolved") handleClearOldResolved();
-                  if (confirmAction === "clear-notifications") handleClearAllNotifications();
+                  if (confirmAction === "clear-resolved")
+                    handleClearOldResolved();
+                  if (confirmAction === "clear-notifications")
+                    handleClearAllNotifications();
                 }}
               >
                 Yes, Delete
@@ -632,10 +672,7 @@ export default function AdminSettings() {
 
 const StatBox = ({ icon, label, value, color }) => (
   <div className="settings-stat-box">
-    <div
-      className="stat-box-icon"
-      style={{ background: `${color}18`, color }}
-    >
+    <div className="stat-box-icon" style={{ background: `${color}18`, color }}>
       <i className={`bx ${icon}`} />
     </div>
     <div>
