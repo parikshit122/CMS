@@ -3,61 +3,63 @@ import API from "../services/api";
 
 const AuthContext = createContext();
 
+const isDev = import.meta.env.DEV;
+
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const [user, setUser]       = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // ── Restore session from localStorage on mount ────────
   useEffect(() => {
     try {
-      const storedUser = localStorage.getItem("user");
+      const storedUser  = localStorage.getItem("user");
       const storedToken = localStorage.getItem("accessToken");
 
       if (
-        storedUser &&
-        storedUser !== "undefined" &&
-        storedUser !== "null" &&
+        storedUser  &&
+        storedUser  !== "undefined" &&
+        storedUser  !== "null"      &&
         storedToken
       ) {
         setUser(JSON.parse(storedUser));
-        console.log("✅ Restored user from localStorage");
       }
     } catch (err) {
-      console.error("Failed to parse user from localStorage:", err);
+      if (isDev) console.error("Failed to restore session:", err);
       localStorage.removeItem("user");
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // ── Listen for user-updated events ───────────────────
   useEffect(() => {
     const reloadUser = () => {
       try {
         const stored = JSON.parse(localStorage.getItem("user"));
         if (stored) setUser(stored);
       } catch (err) {
-        console.error("Failed to reload user:", err);
+        if (isDev) console.error("Failed to reload user:", err);
       }
     };
 
     window.addEventListener("user-updated", reloadUser);
-    window.addEventListener("storage", reloadUser);
+    window.addEventListener("storage",      reloadUser);
 
     return () => {
       window.removeEventListener("user-updated", reloadUser);
-      window.removeEventListener("storage", reloadUser);
+      window.removeEventListener("storage",      reloadUser);
     };
   }, []);
 
   const login = (userData, accessToken, refreshToken) => {
     if (!userData || !accessToken || !refreshToken) {
-      console.error("Invalid login data");
+      if (isDev) console.error("Invalid login data");
       return;
     }
-    localStorage.setItem("accessToken", accessToken);
+    localStorage.setItem("accessToken",  accessToken);
     localStorage.setItem("refreshToken", refreshToken);
-    localStorage.setItem("user", JSON.stringify(userData));
+    localStorage.setItem("user",         JSON.stringify(userData));
     setUser(userData);
-    console.log("✅ Login data saved to localStorage");
   };
 
   const updateUser = (userData) => {
@@ -77,11 +79,9 @@ export const AuthProvider = ({ children }) => {
   const refreshAccessToken = async () => {
     try {
       const refreshToken = localStorage.getItem("refreshToken");
+      if (!refreshToken) throw new Error("No refresh token");
 
-      const response = await API.post("/auth/refresh-token", {
-        refreshToken,
-      });
-
+      const response = await API.post("/auth/refresh-token", { refreshToken });
       localStorage.setItem("accessToken", response.data.accessToken);
       return response.data.accessToken;
     } catch {

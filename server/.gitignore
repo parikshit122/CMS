@@ -71,3 +71,4 @@ build/
 *.bak
 *.backup
 .eslintcache
+.env.test

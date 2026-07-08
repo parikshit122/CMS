@@ -1,18 +1,16 @@
 import { useNavigate } from "react-router-dom";
 import NotificationBell from "../notification/NotificationBell";
-import { useCurrentUser } from "../../hooks/useCurrentUser";
+import { useAuth } from "../../context/AuthContext";
 import "../../styles/AdminDashboard.css";
 import "boxicons/css/boxicons.min.css";
 
 const AppHeader = ({ userName, role }) => {
   const navigate = useNavigate();
-  const user = useCurrentUser();
+  const { user } = useAuth();
 
-  const handleProfileClick = () => {
-    navigate("/profile");
-  };
+  const handleProfileClick = () => navigate("/profile");
 
-  const displayName = user.name || userName || "User";
+  const displayName = user?.name || userName || "User";
 
   const initials = displayName
     ?.split(" ")
@@ -28,16 +26,10 @@ const AppHeader = ({ userName, role }) => {
       </h2>
 
       <div className="header-right">
-        <input
-          type="text"
-          placeholder="Search complaints..."
-          className="header-search"
-        />
-
         <NotificationBell />
 
         <div className="header-user clickable" onClick={handleProfileClick}>
-          {user.avatar ? (
+          {user?.avatar ? (
             <img
               src={user.avatar}
               alt="Profile"

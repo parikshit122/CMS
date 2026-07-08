@@ -25,9 +25,10 @@ const ManageUsers = () => {
   const [deletePreviewLoading, setDeletePreviewLoading] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText]       = useState("");
 
+  // ── Helpers ───────────────────────────────────────────
   const getCurrentUserId = () => {
     try {
-      const raw = localStorage.getItem("user") || localStorage.getItem("user");
+      const raw = localStorage.getItem("user");
       if (!raw) return null;
       return JSON.parse(raw)?._id ?? null;
     } catch {
@@ -36,11 +37,13 @@ const ManageUsers = () => {
   };
 
   const forceLogout = () => {
-    localStorage.clear();
-    localStorage.clear();
-    navigate("/login", { replace: true });
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    localStorage.removeItem("user");
+    navigate("/auth", { replace: true });
   };
 
+  // ── Data fetching ─────────────────────────────────────
   const fetchStudents = useCallback(async () => {
     try {
       setLoading(true);
@@ -70,12 +73,13 @@ const ManageUsers = () => {
     else fetchStaff();
   }, [activeTab, fetchStudents, fetchStaff]);
 
+  // ── Student actions ───────────────────────────────────
   const handleSuspend = async (userId, days, reason) => {
     try {
-      const res = await API.patch(`/admin/users/students/${userId}/suspend`, {
-        days,
-        reason,
-      });
+      const res = await API.patch(
+        `/admin/users/students/${userId}/suspend`,
+        { days, reason }
+      );
       if (res.data.success) {
         alert.success(`Student suspended for ${days} day(s)`);
         setSuspendTarget(null);
@@ -88,16 +92,17 @@ const ManageUsers = () => {
 
   const handleReactivate = (student) => {
     setConfirmAction({
-      type: "reactivate",
-      target: student,
-      title: "Reactivate Student?",
-      message: `Are you sure you want to reactivate ${student.name}? They will regain immediate access.`,
+      type:        "reactivate",
+      target:      student,
+      title:       "Reactivate Student?",
+      message:     `Are you sure you want to reactivate ${student.name}? They will regain immediate access.`,
       confirmText: "Yes, Reactivate",
-      modalType: "success",
-      icon: "bx-check-circle",
+      modalType:   "success",
+      icon:        "bx-check-circle",
     });
   };
 
+  // ── Delete preview ────────────────────────────────────
   const openDeletePreview = async (user, type, previewEndpoint) => {
     setDeletePreview(null);
     setDeleteConfirmText("");
@@ -105,18 +110,22 @@ const ManageUsers = () => {
 
     setConfirmAction({
       type,
-      target: user,
-      title: type === "delete" ? "Delete Staff Member?" : "Delete Student?",
+      target:      user,
+      title:       type === "delete" ? "Delete Staff Member?" : "Delete Student?",
       confirmText: "Delete",
-      modalType: "danger",
-      icon: "bx-trash",
+      modalType:   "danger",
+      icon:        "bx-trash",
     });
 
     try {
       const res = await API.get(previewEndpoint);
       if (res.data.success) setDeletePreview(res.data.data);
     } catch {
-      setDeletePreview({ complaints: 0, notificationsReceived: 0, notificationsSent: 0 });
+      setDeletePreview({
+        complaints:            0,
+        notificationsReceived: 0,
+        notificationsSent:     0,
+      });
     } finally {
       setDeletePreviewLoading(false);
     }
@@ -136,6 +145,7 @@ const ManageUsers = () => {
       `/admin/users/students/${student._id}/delete-preview`
     );
 
+  // ── Execute confirmed action ──────────────────────────
   const executeConfirmedAction = async () => {
     if (!confirmAction) return;
     setConfirmLoading(true);
@@ -181,6 +191,7 @@ const ManageUsers = () => {
     }
   };
 
+  // ── Add staff ─────────────────────────────────────────
   const handleAddStaff = async (formData) => {
     try {
       const res = await API.post("/admin/users/staff", formData);
@@ -202,6 +213,7 @@ const ManageUsers = () => {
     setDeleteConfirmText("");
   };
 
+  // ── Build delete modal message ────────────────────────
   const buildDeleteMessage = () => {
     if (
       confirmAction?.type !== "delete" &&
@@ -210,7 +222,8 @@ const ManageUsers = () => {
       return confirmAction?.message;
     }
 
-    const name = confirmAction.target?.name;
+    const name    = confirmAction.target?.name;
+    const isStaff = confirmAction.type === "delete";
 
     if (deletePreviewLoading) {
       return (
@@ -237,23 +250,52 @@ const ManageUsers = () => {
             <i className="bx bx-user-x" />
             The account for <strong>{name}</strong>
           </span>
-          <span className="delete-preview__list-item">
-            <i className="bx bx-file" />
-            <strong>{deletePreview?.complaints ?? 0}</strong> complaint
-            {deletePreview?.complaints !== 1 ? "s" : ""} submitted by them
-          </span>
+
+          {/* Staff: active complaints warning */}
+          {isStaff && deletePreview?.activeComplaints > 0 && (
+            <span
+              className="delete-preview__list-item"
+              style={{ color: "#f59e0b" }}
+            >
+              <i className="bx bx-transfer" />
+              <strong>{deletePreview.activeComplaints}</strong> active
+              complaint{deletePreview.activeComplaints !== 1 ? "s" : ""} will
+              be <strong>unassigned</strong> and reset to pending
+            </span>
+          )}
+
+          {/* Staff: resolved complaints */}
+          {isStaff && deletePreview?.resolvedComplaints > 0 && (
+            <span className="delete-preview__list-item">
+              <i className="bx bx-file" />
+              <strong>{deletePreview.resolvedComplaints}</strong> resolved
+              complaint
+              {deletePreview.resolvedComplaints !== 1 ? "s" : ""} will lose
+              staff reference
+            </span>
+          )}
+
+          {/* Student: complaints */}
+          {!isStaff && (
+            <span className="delete-preview__list-item">
+              <i className="bx bx-file" />
+              <strong>{deletePreview?.complaints ?? 0}</strong> complaint
+              {deletePreview?.complaints !== 1 ? "s" : ""} submitted by them
+            </span>
+          )}
+
           <span className="delete-preview__list-item">
             <i className="bx bx-bell" />
             <strong>{deletePreview?.notificationsReceived ?? 0}</strong>{" "}
             notification
-            {deletePreview?.notificationsReceived !== 1 ? "s" : ""} received by
-            them
+            {deletePreview?.notificationsReceived !== 1 ? "s" : ""} received
           </span>
+
           <span className="delete-preview__list-item">
             <i className="bx bx-send" />
             <strong>{deletePreview?.notificationsSent ?? 0}</strong>{" "}
             notification
-            {deletePreview?.notificationsSent !== 1 ? "s" : ""} they sent
+            {deletePreview?.notificationsSent !== 1 ? "s" : ""} sent
           </span>
         </span>
 
@@ -281,6 +323,7 @@ const ManageUsers = () => {
     );
   };
 
+  // ── Render ────────────────────────────────────────────
   return (
     <div className="users-page">
       <div className="users-header">
@@ -305,6 +348,7 @@ const ManageUsers = () => {
         )}
       </div>
 
+      {/* Tabs */}
       <div
         className="users-tabs"
         role="tablist"
@@ -315,17 +359,10 @@ const ManageUsers = () => {
           onClick={() => setActiveTab("students")}
           role="tab"
           aria-selected={activeTab === "students"}
-          aria-controls="tab-panel-students"
-          id="tab-students"
         >
           <i className="bx bx-user" aria-hidden="true" />
           <span>Students</span>
-          <span
-            className="users-tab__count"
-            aria-label={`${students.length} students`}
-          >
-            {students.length}
-          </span>
+          <span className="users-tab__count">{students.length}</span>
         </button>
 
         <button
@@ -333,27 +370,15 @@ const ManageUsers = () => {
           onClick={() => setActiveTab("staff")}
           role="tab"
           aria-selected={activeTab === "staff"}
-          aria-controls="tab-panel-staff"
-          id="tab-staff"
         >
           <i className="bx bx-shield-quarter" aria-hidden="true" />
           <span>Staff</span>
-          <span
-            className="users-tab__count"
-            aria-label={`${staff.length} staff members`}
-          >
-            {staff.length}
-          </span>
+          <span className="users-tab__count">{staff.length}</span>
         </button>
       </div>
 
-      <div
-        className="users-content"
-        role="tabpanel"
-        id={`tab-panel-${activeTab}`}
-        aria-labelledby={`tab-${activeTab}`}
-        tabIndex={0}
-      >
+      {/* Tab content */}
+      <div className="users-content">
         {activeTab === "students" ? (
           <StudentsTab
             students={students}
@@ -373,6 +398,7 @@ const ManageUsers = () => {
         )}
       </div>
 
+      {/* Modals */}
       {showAddStaff && (
         <AddStaffModal
           onClose={() => setShowAddStaff(false)}

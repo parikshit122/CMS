@@ -12,18 +12,53 @@ const submitComplaint = async (req, res) => {
   try {
     const { title, description, category, priority, location } = req.body;
 
+    if (!title || !description || !category) {
+      return res.status(400).json({
+        success: false,
+        message: "Title, description, and category are required",
+      });
+    }
+
+    // ── Handle file attachments ───────────────────────────
+    let attachments = [];
+
+    if (req.files && req.files.length > 0) {
+      const { uploadMultipleFiles } = require("../services/cloudinary.service");
+
+      try {
+        const uploaded = await uploadMultipleFiles(
+          req.files,
+          "complaint-sync/complaints",
+        );
+
+        attachments = uploaded.map((result, idx) => ({
+          url: result.secure_url,
+          publicId: result.public_id,
+          originalName: req.files[idx].originalname,
+          mimeType: req.files[idx].mimetype,
+          size: req.files[idx].size,
+        }));
+      } catch (uploadErr) {
+        console.error("Attachment upload failed:", uploadErr.message);
+        return res.status(500).json({
+          success: false,
+          message: "Failed to upload attachments. Please try again.",
+        });
+      }
+    }
+
     const complaint = await Complaint.create({
       title,
       description,
       category,
-      priority,
+      priority: priority || "medium",
       location,
       student: req.user.id,
+      attachments,
     });
 
     const student = await User.findById(req.user.id);
-    await notifyComplaintSubmitted(complaint, student);
-
+    await notifyComplaintSubmitted(complaint, student, req.app);
     res.status(201).json({ success: true, data: complaint });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -71,12 +106,55 @@ const getAssignedComplaints = async (req, res) => {
 
 const getAllComplaints = async (req, res) => {
   try {
-    const complaints = await Complaint.find()
-      .sort({ createdAt: -1 })
-      .populate("student", "name email phone course year")
-      .populate("assignedTo", "name email phone category");
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, parseInt(req.query.limit) || 100);
+    const skip = (page - 1) * limit;
 
-    res.json({ success: true, data: complaints });
+    // ── Build filter from query params ───────────────────
+    const filter = {};
+
+    if (req.query.status && req.query.status !== "all") {
+      filter.status = req.query.status;
+    }
+    if (req.query.priority && req.query.priority !== "all") {
+      filter.priority = req.query.priority;
+    }
+    if (req.query.category && req.query.category !== "all") {
+      filter.category = req.query.category;
+    }
+    if (req.query.from || req.query.to) {
+      filter.createdAt = {};
+      if (req.query.from) {
+        filter.createdAt.$gte = new Date(req.query.from);
+      }
+      if (req.query.to) {
+        const to = new Date(req.query.to);
+        to.setHours(23, 59, 59, 999);
+        filter.createdAt.$lte = to;
+      }
+    }
+
+    // ── Run query + count in parallel ────────────────────
+    const [complaints, total] = await Promise.all([
+      Complaint.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("student", "name email phone course year")
+        .populate("assignedTo", "name email phone category"),
+      Complaint.countDocuments(filter),
+    ]);
+
+    res.json({
+      success: true,
+      data: complaints,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -96,13 +174,17 @@ const updateComplaintStatus = async (req, res) => {
       });
     }
 
-    if (complaint.assignedTo.toString() !== req.user.id) {
-      return res.status(403).json({
-        success: false,
-        message: "Not authorized",
-      });
+    if (req.user.role !== "admin") {
+      if (
+        !complaint.assignedTo ||
+        complaint.assignedTo.toString() !== req.user.id
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "Not authorized to update this complaint",
+        });
+      }
     }
-
     const locked = ["resolved", "rejected"];
     if (locked.includes(complaint.status)) {
       return res.status(400).json({
@@ -133,11 +215,11 @@ const updateComplaintStatus = async (req, res) => {
     const student = updated.student;
 
     if (status === "resolved") {
-      await notifyComplaintResolved(updated, student, staff);
+      await notifyComplaintResolved(updated, student, staff, req.app);
     } else if (status === "rejected") {
-      await notifyComplaintRejected(updated, student, staff);
+      await notifyComplaintRejected(updated, student, staff, req.app);
     } else if (status === "in-progress") {
-      await notifyComplaintInProgress(updated, student, staff);
+      await notifyComplaintInProgress(updated, student, staff, req.app);
     }
 
     const formatted = {

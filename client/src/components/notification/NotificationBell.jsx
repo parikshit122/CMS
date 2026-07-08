@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
+import { onSocketEvent } from "../../services/socketService";
 import {
   loadNotifications,
   loadUnreadCount,
@@ -12,7 +13,7 @@ import {
 import NotificationList from "./NotificationList";
 import "boxicons/css/boxicons.min.css";
 
-const POLL_INTERVAL = 10000;
+const POLL_INTERVAL = 60000;
 
 export default function NotificationBell() {
   const dispatch = useDispatch();
@@ -37,12 +38,50 @@ export default function NotificationBell() {
 
   useEffect(() => {
     if (!token) return;
+
+    // Load immediately on mount
     dispatch(loadNotifications());
-    pollRef.current = setInterval(() => {
-      dispatch(loadUnreadCount());
-    }, POLL_INTERVAL);
-    return () => clearInterval(pollRef.current);
+
+    const startPolling = () => {
+      pollRef.current = setInterval(() => {
+        // Only poll when tab is visible
+        if (document.visibilityState === "visible") {
+          dispatch(loadUnreadCount());
+        }
+      }, POLL_INTERVAL);
+    };
+
+    startPolling();
+
+    // Pause polling when tab hidden, resume when visible
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        // Immediately fetch when tab becomes visible again
+        dispatch(loadUnreadCount());
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      clearInterval(pollRef.current);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [dispatch, token]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    // When a new notification arrives via socket
+    const offNew = onSocketEvent("new_notification", () => {
+      dispatch(loadUnreadCount());
+      if (open) {
+        dispatch(loadNotifications());
+      }
+    });
+
+    return () => offNew();
+  }, [dispatch, token, open]);
 
   useEffect(() => {
     if (open && token) {

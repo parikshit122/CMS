@@ -9,11 +9,7 @@ import SuspendedScreen from "../../components/auth/SuspendedScreen";
 import "../../styles/Login.css";
 import "boxicons/css/boxicons.min.css";
 
-import {
-  signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
-} from "firebase/auth";
+import { signInWithPopup, getRedirectResult } from "firebase/auth";
 
 import {
   auth,
@@ -22,15 +18,25 @@ import {
   githubProvider,
   twitterProvider,
   facebookProvider,
-  isMobileDevice,
 } from "../../firebase";
 
-console.log("🔥 Firebase auth loaded:", !!auth, auth?.app?.name);
+// ✅ Only log in development
+const isDev = import.meta.env.DEV;
+const devLog = (...args) => {
+  if (isDev) console.log(...args);
+};
 
 const getRoleRedirect = (role) => {
-  if (role === "admin") return "/admin";
-  if (role === "staff") return "/staff";
+  const r = role?.toLowerCase();
+  if (r === "admin") return "/admin";
+  if (r === "staff") return "/staff";
   return "/dashboard";
+};
+
+// ✅ Sanitize input before sending to API
+const sanitizeInput = (value) => {
+  if (typeof value !== "string") return value;
+  return value.trim().replace(/<[^>]*>/g, "");
 };
 
 const SOCIAL_PROVIDERS = ["google", "github", "twitter", "facebook"];
@@ -57,10 +63,7 @@ function SocialButtons({ onSocialClick, loading }) {
           key={provider}
           type="button"
           className="social-btn"
-          onClick={() => {
-            console.log("🔴 Button clicked:", provider);
-            onSocialClick(provider);
-          }}
+          onClick={() => onSocialClick(provider)}
           disabled={loading}
           aria-label={PROVIDER_LABELS[provider]}
           title={PROVIDER_LABELS[provider]}
@@ -92,19 +95,6 @@ function Login() {
   const { login } = useAuth();
 
   useEffect(() => {
-    const testIDB = async () => {
-      try {
-        const req = indexedDB.open("test-db", 1);
-        req.onsuccess = () => console.log("✅ IndexedDB works");
-        req.onerror = () => console.log("❌ IndexedDB blocked");
-      } catch (e) {
-        console.log("❌ IndexedDB error:", e);
-      }
-    };
-    testIDB();
-  }, []);
-
-  useEffect(() => {
     const panel = location.state?.panel;
     setIsActive(panel === "register");
   }, [location.state]);
@@ -122,19 +112,17 @@ function Login() {
         const firebaseAvatar =
           user.photoURL || user.providerData?.[0]?.photoURL || "";
 
-        console.log("📧 Email:", firebaseEmail);
-
         if (!firebaseEmail) {
           alert.error("Email not shared. Please try another method.");
           await auth.signOut().catch(() => {});
           return;
         }
 
-        console.log("🔑 Getting ID token...");
+        // ✅ Don't log the actual token
+        devLog("🔑 Getting ID token...");
         const idToken = await user.getIdToken(true);
-        console.log("✅ Got token, length:", idToken.length);
+        devLog("✅ Got token successfully");
 
-        console.log("🌐 Calling backend...");
         const response = await API.post("/auth/social-login", {
           idToken,
           email: firebaseEmail,
@@ -143,13 +131,10 @@ function Login() {
           provider: providerName,
         });
 
-        console.log("✅ Backend response:", response.data);
-
         try {
           await auth.signOut();
-          console.log("✅ Firebase session cleared");
         } catch (signOutErr) {
-          console.warn("Sign out warning:", signOutErr);
+          devLog("Sign out warning:", signOutErr);
         }
 
         if (response.data.success && mounted) {
@@ -159,7 +144,7 @@ function Login() {
           navigate(getRoleRedirect(userData.role), { replace: true });
         }
       } catch (err) {
-        console.error("❌ Process error:", err);
+        devLog("❌ Process error:", err);
 
         try {
           await auth.signOut();
@@ -173,7 +158,7 @@ function Login() {
         } else if (message) {
           alert.error(message);
         } else {
-          alert.error("Login failed");
+          alert.error("Login failed. Please try again.");
         }
       } finally {
         if (mounted) setLoading(false);
@@ -181,14 +166,10 @@ function Login() {
     };
 
     const handleRedirectResult = async () => {
-      if (redirectHandledRef.current) {
-        console.log("⏭️ Already handled");
-        return;
-      }
+      if (redirectHandledRef.current) return;
 
       const alreadyProcessed = localStorage.getItem(REDIRECT_PROCESSED_KEY);
       if (alreadyProcessed) {
-        console.log("⏭️ Already processed");
         localStorage.removeItem(REDIRECT_PROCESSED_KEY);
         await auth.signOut().catch(() => {});
         return;
@@ -198,58 +179,29 @@ function Login() {
 
       try {
         await authReady;
-        console.log("✅ Auth persistence ready");
 
-        if (!auth) {
-          console.error("❌ Auth not initialized!");
-          return;
-        }
-
-        console.log("🔍 Checking redirect result...");
-        console.log(
-          "📋 localStorage flag:",
-          localStorage.getItem(REDIRECT_PROVIDER_KEY),
-        );
-        console.log(
-          "👤 auth.currentUser before:",
-          auth.currentUser?.email || "null",
-        );
+        if (!auth) return;
 
         await new Promise((resolve) => setTimeout(resolve, 2000));
-        console.log("⏰ After 2s wait");
-        console.log(
-          "👤 auth.currentUser after wait:",
-          auth.currentUser?.email || "null",
-        );
 
         const result = await getRedirectResult(auth);
-        console.log(
-          "📦 Redirect result:",
-          result ? `Found: ${result.user.email}` : "None",
-        );
-
         const providerName =
           localStorage.getItem(REDIRECT_PROVIDER_KEY) || "google";
 
         if (result?.user && mounted) {
-          console.log("✅ Processing via getRedirectResult");
           localStorage.setItem(REDIRECT_PROCESSED_KEY, "true");
           localStorage.removeItem(REDIRECT_PROVIDER_KEY);
           await processSocialLogin(result.user, providerName);
         } else if (auth.currentUser && mounted) {
           const hasFlag = localStorage.getItem(REDIRECT_PROVIDER_KEY);
           if (hasFlag) {
-            console.log("⚠️ Processing via currentUser fallback");
             localStorage.setItem(REDIRECT_PROCESSED_KEY, "true");
             localStorage.removeItem(REDIRECT_PROVIDER_KEY);
             await processSocialLogin(auth.currentUser, providerName);
           }
-        } else {
-          console.log("❌ No user found anywhere");
         }
       } catch (err) {
-        console.error("❌ Redirect handler error:", err);
-        console.error("Code:", err?.code);
+        devLog("❌ Redirect handler error:", err?.code);
       }
     };
 
@@ -281,10 +233,9 @@ function Login() {
   };
 
   const handleSocialLogin = async (providerName) => {
-    console.log("🔴 handleSocialLogin called:", providerName);
+    devLog("🔴 handleSocialLogin called:", providerName);
 
     await authReady;
-    console.log("✅ Auth ready for sign-in");
 
     const providers = {
       google: googleProvider,
@@ -294,74 +245,48 @@ function Login() {
     };
 
     const provider = providers[providerName];
-    if (!provider) {
-      console.error("❌ Provider not found:", providerName);
-      return;
-    }
+    if (!provider) return;
 
     let firebaseEmail = "";
 
     try {
       setLoading(true);
 
-      console.log("🪟 Opening popup...");
-
       let result;
       try {
         result = await signInWithPopup(auth, provider);
-        console.log("✅ Popup login succeeded");
-        console.log("👤 User email:", result.user.email);
       } catch (popupErr) {
-        console.warn("Popup error:", popupErr.code, popupErr.message);
-
-        if (popupErr.code === "auth/popup-closed-by-user") {
-          return;
-        }
-        if (popupErr.code === "auth/cancelled-popup-request") {
+        if (
+          popupErr.code === "auth/popup-closed-by-user" ||
+          popupErr.code === "auth/cancelled-popup-request"
+        ) {
           return;
         }
         if (popupErr.code === "auth/popup-blocked") {
-          alert.error(
-            "Popup blocked! Please allow popups for this site in browser settings, then try again.",
-          );
+          alert.error("Popup blocked! Please allow popups for this site.");
           return;
         }
-
         throw popupErr;
       }
 
       firebaseEmail =
         result.user.email || result.user.providerData?.[0]?.email || "";
-
       const firebaseName =
         result.user.displayName ||
         result.user.providerData?.[0]?.displayName ||
         "";
-
       const firebaseAvatar =
         result.user.photoURL || result.user.providerData?.[0]?.photoURL || "";
 
-      console.log("📧 Email:", firebaseEmail);
-      console.log("👤 Name:", firebaseName);
-
       if (!firebaseEmail) {
         alert.error(
-          `${providerName.charAt(0).toUpperCase() + providerName.slice(1)} did not share your email.`,
+          `${providerName} did not share your email. Please try another method.`,
         );
         await auth.signOut().catch(() => {});
         return;
       }
 
-      console.log("🔑 Getting ID token...");
       const idToken = await result.user.getIdToken(true);
-      console.log("✅ Got token, length:", idToken.length);
-
-      console.log("🌐 ABOUT TO CALL BACKEND");
-      console.log("📍 API base URL:", import.meta.env.VITE_API_URL);
-      console.log(
-        "📍 Full URL will be:",
-        `${import.meta.env.VITE_API_URL}/auth/social-login`,
-      );
 
       const response = await API.post("/auth/social-login", {
         idToken,
@@ -371,26 +296,16 @@ function Login() {
         provider: providerName,
       });
 
-      console.log("✅ Backend responded:", response.status);
-      console.log("📦 Response data:", response.data);
-
       await auth.signOut().catch(() => {});
 
       if (response.data.success) {
         const { accessToken, refreshToken, user } = response.data;
         login(user, accessToken, refreshToken);
         alert.success("Login successful");
-        console.log("🚀 Navigating to:", getRoleRedirect(user.role));
         navigate(getRoleRedirect(user.role), { replace: true });
       }
     } catch (err) {
-      console.error("❌ Social login error:");
-      console.error("  Error type:", err.constructor.name);
-      console.error("  Error code:", err?.code);
-      console.error("  Error message:", err?.message);
-      console.error("  Error response status:", err?.response?.status);
-      console.error("  Error response data:", err?.response?.data);
-      console.error("  Full error:", err);
+      devLog("❌ Social login error:", err?.code);
 
       await auth.signOut().catch(() => {});
 
@@ -408,11 +323,11 @@ function Login() {
       }
 
       if (err.code === "ERR_NETWORK" || err.message === "Network Error") {
-        alert.error("Network error. Please check your internet and try again.");
+        alert.error("Network error. Please check your internet connection.");
         return;
       }
 
-      alert.error(message || "Social login failed");
+      alert.error(message || "Social login failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -438,9 +353,14 @@ function Login() {
       return;
     }
 
+    const sanitizedData = {
+      email: sanitizeInput(email),
+      password: password,
+    };
+
     setLoading(true);
     try {
-      const response = await loginUser(loginData);
+      const response = await loginUser(sanitizedData);
       if (response.success) {
         const { accessToken, refreshToken, user } = response;
         login(user, accessToken, refreshToken);
@@ -450,13 +370,22 @@ function Login() {
         alert.error(response.message || "Login failed. Please try again.");
       }
     } catch (err) {
+      // ✅ Redirect to verify email if not verified
+      if (err.response?.data?.requiresVerification) {
+        alert.error("Please verify your email first.");
+        navigate("/auth/verify-email", {
+          state: { email: loginData.email },
+        });
+        return;
+      }
+
+      // ✅ Check suspension
       const isSuspended = checkSuspension(err.response, loginData.email);
       if (isSuspended) return;
 
+      // ✅ Check network error
       if (err.code === "ERR_NETWORK" || err.message === "Network Error") {
-        alert.error(
-          "Cannot connect to server. Please check your internet connection.",
-        );
+        alert.error("Cannot connect to server. Please check your connection.");
         return;
       }
 
@@ -501,31 +430,43 @@ function Login() {
     }
 
     if (!/[A-Z]/.test(password)) {
-      alert.error("Password must contain at least one uppercase letter (A-Z).");
+      alert.error("Password must contain at least one uppercase letter.");
       return;
     }
 
     if (!/[a-z]/.test(password)) {
-      alert.error("Password must contain at least one lowercase letter (a-z).");
+      alert.error("Password must contain at least one lowercase letter.");
       return;
     }
 
     if (!/\d/.test(password)) {
-      alert.error("Password must contain at least one number (0-9).");
+      alert.error("Password must contain at least one number.");
       return;
     }
 
     if (!/[@$!%*?&#]/.test(password)) {
-      alert.error(
-        "Password must contain at least one special character (@$!%*?&#).",
-      );
+      alert.error("Password must contain at least one special character.");
       return;
     }
 
+    // ✅ Sanitize before sending
+    const sanitizedData = {
+      name: sanitizeInput(name),
+      email: sanitizeInput(email),
+      phone: sanitizeInput(phone),
+      password: password, // don't sanitize passwords
+    };
+
     setLoading(true);
     try {
-      const response = await registerUser(registerData);
-      if (response.success) {
+      const response = await registerUser(sanitizedData);
+      if (response.requiresVerification) {
+        // ✅ Redirect to OTP verification page
+        alert.success("Registration successful! Please verify your email.");
+        navigate("/auth/verify-email", {
+          state: { email: sanitizedData.email },
+        });
+      } else if (response.success) {
         const { accessToken, refreshToken, user } = response;
         login(user, accessToken, refreshToken);
         alert.success("Registration successful!");
@@ -537,12 +478,13 @@ function Login() {
       alert.error(
         err.response?.data?.message ||
           err.response?.data?.errors?.[0] ||
-          "Registration failed",
+          "Registration failed. Please try again.",
       );
     } finally {
       setLoading(false);
     }
   };
+
   return (
     <div className="outer-container">
       <Button
@@ -585,6 +527,7 @@ function Login() {
                 onChange={handleLoginChange}
                 autoComplete="email"
                 aria-required="true"
+                maxLength={100}
               />
               <i className="bx bxs-envelope" aria-hidden="true" />
             </div>
@@ -603,6 +546,7 @@ function Login() {
                 onChange={handleLoginChange}
                 autoComplete="current-password"
                 aria-required="true"
+                maxLength={128}
               />
               <i className="bx bxs-lock-alt" aria-hidden="true" />
             </div>
@@ -653,6 +597,7 @@ function Login() {
                 onChange={handleRegisterChange}
                 autoComplete="name"
                 aria-required="true"
+                maxLength={50}
               />
               <i className="bx bxs-user" aria-hidden="true" />
             </div>
@@ -671,6 +616,7 @@ function Login() {
                 onChange={handleRegisterChange}
                 autoComplete="email"
                 aria-required="true"
+                maxLength={100}
               />
               <i className="bx bxs-envelope" aria-hidden="true" />
             </div>
@@ -712,6 +658,7 @@ function Login() {
                 onChange={handleRegisterChange}
                 autoComplete="new-password"
                 aria-required="true"
+                maxLength={128}
               />
               <i className="bx bxs-lock-alt" aria-hidden="true" />
             </div>

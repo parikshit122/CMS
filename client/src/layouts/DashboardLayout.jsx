@@ -5,7 +5,7 @@ import Sidebar from "../components/layout/Sidebar";
 import NotificationBell from "../components/notification/NotificationBell";
 import useAuthSync from "../hooks/useAuthSync";
 import "../styles/Dashboard.css";
-
+import useSocket from "../hooks/useSocket";
 const DashboardLayout = ({
   menuItems = [],
   children,
@@ -18,8 +18,8 @@ const DashboardLayout = ({
   const { user } = useAuth();
   const searchId = useId();
 
-  useAuthSync(5000);
-
+  useAuthSync(120000);
+  useSocket();
   const [isMobile, setIsMobile] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [searchValue, setSearchValue] = useState("");
@@ -58,10 +58,7 @@ const DashboardLayout = ({
   useEffect(() => {
     if (!user) return;
 
-    if (
-      user.role === "user" &&
-      (!user.phone || !user.course || !user.year)
-    ) {
+    if (user.role === "user" && (!user.phone || !user.course || !user.year)) {
       if (location.pathname !== "/profile") {
         setShowProfileModal(true);
       } else {
@@ -96,9 +93,7 @@ const DashboardLayout = ({
               className="menu-btn"
               onClick={() => setIsSidebarOpen((prev) => !prev)}
               aria-label={
-                isSidebarOpen
-                  ? "Close navigation menu"
-                  : "Open navigation menu"
+                isSidebarOpen ? "Close navigation menu" : "Open navigation menu"
               }
               aria-expanded={isSidebarOpen}
               aria-controls="main-sidebar"
@@ -168,9 +163,7 @@ const DashboardLayout = ({
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
         />
-        <main className="layout-content">
-          {children}
-        </main>
+        <main className="layout-content">{children}</main>
       </div>
 
       {showProfileModal && (

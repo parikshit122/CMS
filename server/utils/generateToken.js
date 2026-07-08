@@ -1,19 +1,25 @@
 const jwt = require("jsonwebtoken");
 
-const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+const generateAccessToken = (userId) => {
+  if (!userId) throw new Error("userId is required");
+  return jwt.sign(
+    { id: userId },
+    process.env.JWT_SECRET,
+    { expiresIn: "15m" }
+  );
 };
 
-const generateRefreshToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_REFRESH_SECRET, { expiresIn: "30d" });
+// ── Refresh Token — longer lived ─────────────────────────
+const generateRefreshToken = (userId) => {
+  if (!userId) throw new Error("userId is required");
+  return jwt.sign(
+    { id: userId },
+    process.env.JWT_REFRESH_SECRET,
+    { expiresIn: "7d" }
+  );
 };
 
-const generateAccessToken = async (userId) => {
-  const settings = await Settings.getSingleton();
-  const timeoutMinutes = settings.sessionTimeoutMinutes || 15;
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET, {
-    expiresIn: `${timeoutMinutes}m`,
-  });
+module.exports = {
+  generateAccessToken,
+  generateRefreshToken,
 };
-
-module.exports = { generateToken, generateRefreshToken };

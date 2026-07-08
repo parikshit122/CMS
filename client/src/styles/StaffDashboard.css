@@ -1,8 +1,4 @@
-/* ============================================================
-   STAFF DASHBOARD — Enhanced Stylesheet
-   ============================================================ */
 
-/* ── CSS Variables (fallback if not set globally) ── */
 :root {
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
@@ -1464,4 +1460,10 @@
     width: 100%;
     justify-content: center;
   }
+}
+
+.ssd-priority--urgent {
+  background: #fee2e2;
+  color:      #dc2626;
+  border:     1px solid #fecaca;
 }

@@ -10,4 +10,15 @@ const authorizeRoles = (...roles) => {
   };
 };
 
-module.exports = { authorizeRoles };
+// ── Single adminOnly export used across all routes ────────
+const adminOnly = (req, res, next) => {
+  if (req.user?.role !== "admin") {
+    return res.status(403).json({
+      success: false,
+      message: "Admin access required",
+    });
+  }
+  next();
+};
+
+module.exports = { authorizeRoles, adminOnly };

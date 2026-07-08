@@ -750,3 +750,160 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Inline status edit (added to AdminReports) ─────── */
+.reports-status-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.reports-status-edit-icon {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.reports-table tbody tr:hover .reports-status-edit-icon {
+  opacity: 1;
+}
+
+.reports-status-edit {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* ── Fix: Inline status edit dropdown colors ───────────── */
+.reports-status-edit select {
+  padding: 0.35rem 0.6rem;
+  border: 1.5px solid #6366f1;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  background-color: #ffffff;
+  color: #0f172a;
+  outline: none;
+  cursor: pointer;
+  appearance: auto;
+  -webkit-appearance: auto;
+  min-width: 120px;
+}
+
+.reports-status-edit select:focus {
+  border-color: #4f46e5;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.reports-status-edit select option {
+  background-color: #ffffff;
+  color: #0f172a;
+  padding: 8px;
+}
+
+[data-bs-theme="dark"] .reports-filters__row select,
+[data-bs-theme="dark"] .reports-date-input {
+  background-color: #1e293b;
+  color: #e2e8f0;
+  border-color: #334155;
+}
+
+[data-bs-theme="dark"] .reports-filters__row select:focus,
+[data-bs-theme="dark"] .reports-date-input:focus {
+  border-color: #6366f1;
+}
+
+[data-bs-theme="dark"] .reports-filters__row select option {
+  background-color: #1e293b;
+  color: #e2e8f0;
+}
+
+[data-bs-theme="dark"] .reports-status-edit select {
+  background-color: #1e293b;
+  color: #e2e8f0;
+  border-color: #6366f1;
+}
+
+[data-bs-theme="dark"] .reports-status-edit select option {
+  background-color: #1e293b;
+  color: #e2e8f0;
+}
+
+/* ── Fix status button text visibility ────────────────── */
+.reports-status-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+}
+
+/* ── Fix save/cancel button alignment ──────────────────── */
+.reports-status-edit {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.reports-status-save,
+.reports-status-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.reports-status-save {
+  background: #dcfce7;
+  color: #16a34a;
+}
+.reports-status-save:hover {
+  background: #bbf7d0;
+}
+.reports-status-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.reports-status-cancel {
+  background: #fee2e2;
+  color: #dc2626;
+}
+.reports-status-cancel:hover {
+  background: #fecaca;
+}
+
+.reports-status-edit-icon {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  opacity: 0;
+  transition: opacity 0.15s;
+  margin-left: 2px;
+}
+
+.reports-table tbody tr:hover .reports-status-edit-icon {
+  opacity: 1;
+}
+/* ── Modal footer ────────────────────────────────────── */
+.modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #e2e8f0;
+}

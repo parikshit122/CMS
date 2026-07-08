@@ -1,37 +1,44 @@
-const User = require("../models/User");
-const jwt = require("jsonwebtoken");
-const bcrypt = require("bcryptjs");
-const crypto = require("crypto");
-const admin = require("../config/firebaseadmin");
+const User     = require("../models/User");
 const Settings = require("../models/Settings");
+const jwt      = require("jsonwebtoken");
+const crypto   = require("crypto");
+const bcrypt   = require("bcryptjs");
+
+const { validateEmail } = require("../utils/emailValidator");
+const {
+  generateOTP,
+  hashOTP,
+  verifyOTP: verifyOTPCode,
+  getOTPExpiry,
+  canResendOTP,
+} = require("../utils/otpGenerator");
 const {
   sendPasswordResetOTPEmail,
   sendPasswordResetSuccessEmail,
+  sendEmailVerificationOTP,
+  sendEmailVerifiedSuccessEmail,
 } = require("../services/email.service");
+const {
+  generateAccessToken,
+  generateRefreshToken,
+} = require("../utils/generateToken");
 
-const generateAccessToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_SECRET, { expiresIn: "15m" });
-};
-
-const generateRefreshToken = (userId) => {
-  return jwt.sign({ id: userId }, process.env.JWT_REFRESH_SECRET, {
-    expiresIn: "7d",
-  });
-};
-
+// ── Build safe user response object ──────────────────────
 const buildUserResponse = (user) => ({
-  id: user._id,
-  name: user.name,
-  email: user.email,
-  role: user.role,
-  avatar: user.avatar,
-  phone: user.phone,
-  bio: user.bio,
-  course: user.course,
-  year: user.year,
+  id:       user._id,
+  name:     user.name,
+  email:    user.email,
+  role:     user.role,
+  avatar:   user.avatar,
+  phone:    user.phone,
+  bio:      user.bio,
+  course:   user.course,
+  year:     user.year,
   category: user.category,
+  provider: user.provider,
 });
 
+// ── Register ──────────────────────────────────────────────
 const register = async (req, res) => {
   try {
     const { name, email, phone, password, course, year } = req.body;
@@ -43,12 +50,14 @@ const register = async (req, res) => {
       });
     }
 
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    const emailCheck = validateEmail(email);
+    if (!emailCheck.valid) {
       return res.status(400).json({
         success: false,
-        message: "Please enter a valid email address.",
+        message: emailCheck.reason,
       });
     }
+    const cleanEmail = emailCheck.email;
 
     if (!phone || !/^[0-9]{10}$/.test(phone)) {
       return res.status(400).json({
@@ -64,7 +73,7 @@ const register = async (req, res) => {
       });
     }
 
-    const settings = await Settings.getSingleton();
+    const settings  = await Settings.getSingleton();
     const minLength = settings.passwordMinLength || 8;
 
     if (password.length < minLength) {
@@ -91,12 +100,11 @@ const register = async (req, res) => {
     if (settings.passwordRequireSpecial && !/[@$!%*?&#]/.test(password)) {
       return res.status(400).json({
         success: false,
-        message:
-          "Password must contain at least one special character (@$!%*?&#).",
+        message: "Password must contain at least one special character (@$!%*?&#).",
       });
     }
 
-    const exists = await User.findOne({ email });
+    const exists = await User.findOne({ email: cleanEmail });
     if (exists) {
       return res.status(400).json({
         success: false,
@@ -112,33 +120,45 @@ const register = async (req, res) => {
       });
     }
 
-    let role = "user";
-    if (email.endsWith("@staff.com")) role = "staff";
-    if (email.endsWith("@admin.com")) role = "admin";
-
+    // ✅ Role is always "user" — never assigned from email domain
     const userData = {
-      name: name.trim(),
-      email: email.toLowerCase().trim(),
+      name:            name.trim(),
+      email:           cleanEmail,
       phone,
       password,
-      role,
+      role:            "user",
+      isEmailVerified: false,
     };
 
-    if (role === "user") {
-      if (course) userData.course = course;
-      if (year) userData.year = year;
-    }
+    // Only add course/year for student accounts
+    if (course) userData.course = course;
+    if (year)   userData.year   = year;
+
+    const otpExpiryMinutes = settings.otpExpiryMinutes || 10;
+    const otp              = generateOTP();
+    const hashedOTP        = await hashOTP(otp);
+
+    userData.emailVerificationOTP        = hashedOTP;
+    userData.emailVerificationOTPExpiry  = getOTPExpiry(otpExpiryMinutes);
+    userData.lastOTPSentAt               = new Date();
 
     const user = await User.create(userData);
 
-    const accessToken = generateAccessToken(user._id);
-    const refreshToken = generateRefreshToken(user._id);
+    if (settings.emailEnabled) {
+      await sendEmailVerificationOTP(
+        user,
+        otp,
+        otpExpiryMinutes,
+        settings.emailSenderName
+      );
+    }
 
     res.status(201).json({
-      success: true,
-      accessToken,
-      refreshToken,
-      user: buildUserResponse(user),
+      success:              true,
+      message:              "Registration successful! Please check your email for the verification code.",
+      requiresVerification: true,
+      email:                cleanEmail,
+      otpExpiryMinutes,
     });
   } catch (err) {
     if (err.name === "ValidationError") {
@@ -148,7 +168,6 @@ const register = async (req, res) => {
         message: firstError.message,
       });
     }
-
     if (err.code === 11000) {
       const field = Object.keys(err.keyPattern)[0];
       return res.status(400).json({
@@ -156,15 +175,14 @@ const register = async (req, res) => {
         message: `This ${field} is already registered.`,
       });
     }
-
     res.status(500).json({
       success: false,
       message: "Registration failed. Please try again.",
-      error: err.message,
     });
   }
 };
 
+// ── Login ─────────────────────────────────────────────────
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -201,15 +219,25 @@ const login = async (req, res) => {
       });
     }
 
+    if (user.lockUntil && user.lockUntil > new Date()) {
+      const minutesLeft = Math.ceil(
+        (user.lockUntil - new Date()) / (1000 * 60)
+      );
+      return res.status(423).json({
+        success: false,
+        message: `Account locked. Try again in ${minutesLeft} minute(s).`,
+      });
+    }
+
     if (user.suspendedUntil && user.suspendedUntil > new Date()) {
       const daysLeft = Math.ceil(
-        (user.suspendedUntil - new Date()) / (1000 * 60 * 60 * 24),
+        (user.suspendedUntil - new Date()) / (1000 * 60 * 60 * 24)
       );
       return res.status(403).json({
         success: false,
-        message: `Your account is suspended. Try again in ${daysLeft} day(s).`,
+        message:        `Your account is suspended. Try again in ${daysLeft} day(s).`,
         suspendedUntil: user.suspendedUntil,
-        reason: user.suspensionReason || "",
+        reason:         user.suspensionReason || "",
       });
     }
 
@@ -228,14 +256,43 @@ const login = async (req, res) => {
     }
 
     const match = await user.matchPassword(password);
+
     if (!match) {
+      user.loginAttempts = (user.loginAttempts || 0) + 1;
+
+      if (user.loginAttempts >= 5) {
+        user.lockUntil     = new Date(Date.now() + 30 * 60 * 1000);
+        user.loginAttempts = 0;
+        await user.save();
+        return res.status(423).json({
+          success: false,
+          message: "Too many failed attempts. Account locked for 30 minutes.",
+        });
+      }
+
+      await user.save();
       return res.status(401).json({
         success: false,
-        message: "Incorrect password. Please try again or reset your password.",
+        message: `Incorrect password. ${5 - user.loginAttempts} attempt(s) remaining.`,
       });
     }
 
-    const accessToken = generateAccessToken(user._id);
+    if (!user.isEmailVerified) {
+      return res.status(403).json({
+        success: false,
+        message:              "Please verify your email address to login.",
+        requiresVerification: true,
+        email:                user.email,
+      });
+    }
+
+    user.loginAttempts = 0;
+    user.lockUntil     = null;
+    user.lastLoginAt   = new Date();
+    user.lastLoginIP   = req.ip;
+    await user.save();
+
+    const accessToken  = generateAccessToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
 
     res.json({
@@ -248,18 +305,18 @@ const login = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Login failed. Please try again.",
-      error: err.message,
     });
   }
 };
 
+// ── Social Login ──────────────────────────────────────────
 const socialLogin = async (req, res) => {
   try {
     const {
       idToken,
-      email: clientEmail,
-      name: clientName,
-      avatar: clientAvatar,
+      email:    clientEmail,
+      name:     clientName,
+      avatar:   clientAvatar,
       provider: clientProvider,
     } = req.body;
 
@@ -274,9 +331,10 @@ const socialLogin = async (req, res) => {
 
     if (idToken) {
       try {
-        decoded = await admin.auth().verifyIdToken(idToken);
-      } catch (verifyErr) {
-        console.warn("Token verification failed, using client email fallback");
+        const admin = require("../config/firebaseadmin");
+        decoded     = await admin.auth().verifyIdToken(idToken);
+      } catch {
+        // Silent fallback to client-provided data
       }
     }
 
@@ -289,21 +347,21 @@ const socialLogin = async (req, res) => {
       });
     }
 
-    const name = decoded?.name || clientName || email.split("@")[0];
+    const name   = decoded?.name    || clientName   || email.split("@")[0];
     const avatar = decoded?.picture || clientAvatar || "";
 
-    const rawProvider =
-      clientProvider || decoded?.firebase?.sign_in_provider || "google";
+    const rawProvider = clientProvider ||
+      decoded?.firebase?.sign_in_provider || "google";
 
     const providerMap = {
-      "google.com": "google",
-      "github.com": "github",
+      "google.com":   "google",
+      "github.com":   "github",
       "facebook.com": "facebook",
-      "twitter.com": "twitter",
-      google: "google",
-      github: "github",
-      facebook: "facebook",
-      twitter: "twitter",
+      "twitter.com":  "twitter",
+      google:         "google",
+      github:         "github",
+      facebook:       "facebook",
+      twitter:        "twitter",
     };
 
     const provider = providerMap[rawProvider] || "google";
@@ -311,29 +369,29 @@ const socialLogin = async (req, res) => {
     let user = await User.findOne({ email });
 
     if (!user) {
-      let role = "user";
-      if (email.endsWith("@staff.com")) role = "staff";
-      if (email.endsWith("@admin.com")) role = "admin";
-
+      // ✅ Always create as "user" — no email domain role check
       user = await User.create({
         name,
         email,
-        password: crypto.randomBytes(32).toString("hex"),
-        role,
+        // ✅ Use crypto for random password — this is correct usage
+        // Social login users never use this password
+        password:        crypto.randomBytes(32).toString("hex"),
+        role:            "user",
         provider,
         avatar,
+        isEmailVerified: true,
       });
     }
 
     if (user.suspendedUntil && user.suspendedUntil > new Date()) {
       const daysLeft = Math.ceil(
-        (user.suspendedUntil - new Date()) / (1000 * 60 * 60 * 24),
+        (user.suspendedUntil - new Date()) / (1000 * 60 * 60 * 24)
       );
       return res.status(403).json({
         success: false,
-        message: `Account suspended. Try again in ${daysLeft} day(s).`,
+        message:        `Account suspended. Try again in ${daysLeft} day(s).`,
         suspendedUntil: user.suspendedUntil,
-        reason: user.suspensionReason || "",
+        reason:         user.suspensionReason || "",
       });
     }
 
@@ -344,7 +402,7 @@ const socialLogin = async (req, res) => {
       });
     }
 
-    const accessToken = generateAccessToken(user._id);
+    const accessToken  = generateAccessToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
 
     return res.json({
@@ -354,7 +412,6 @@ const socialLogin = async (req, res) => {
       user: buildUserResponse(user),
     });
   } catch (err) {
-    console.error("Social login failed:", err.message);
     return res.status(500).json({
       success: false,
       message: "Social login failed.",
@@ -362,32 +419,35 @@ const socialLogin = async (req, res) => {
   }
 };
 
+// ── Refresh Token ─────────────────────────────────────────
 const refreshTokenController = async (req, res) => {
   try {
     const { refreshToken } = req.body;
-
     if (!refreshToken) {
-      return res.status(401).json({ success: false });
+      return res.status(401).json({ success: false, message: "No refresh token" });
     }
-
-    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+    const decoded     = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
     const accessToken = generateAccessToken(decoded.id);
-
     res.json({ success: true, accessToken });
   } catch {
-    res.status(401).json({ success: false });
+    res.status(401).json({
+      success: false,
+      message: "Invalid or expired refresh token",
+    });
   }
 };
 
+// ── Get current user ──────────────────────────────────────
 const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select("-password");
     res.json({ success: true, user });
   } catch {
-    res.status(500).json({ success: false });
+    res.status(500).json({ success: false, message: "Failed to get user" });
   }
 };
 
+// ── Forgot Password ───────────────────────────────────────
 const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
@@ -415,7 +475,11 @@ const forgotPassword = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    const user = await User.findOne({
+      email: email.toLowerCase().trim(),
+    }).select(
+      "+passwordResetOTP +passwordResetOTPExpiry +passwordResetToken +passwordResetTokenExpiry"
+    );
 
     if (!user) {
       return res.status(404).json({
@@ -439,21 +503,23 @@ const forgotPassword = async (req, res) => {
     }
 
     const otpExpiryMinutes = settings.otpExpiryMinutes || 10;
-    const otp = String(Math.floor(100000 + crypto.randomInt(900000)));
-    const hashedOTP = await bcrypt.hash(otp, 10);
-    const expiry = new Date(Date.now() + otpExpiryMinutes * 60 * 1000);
 
-    user.passwordResetOTP = hashedOTP;
-    user.passwordResetOTPExpiry = expiry;
-    user.passwordResetToken = null;
-    user.passwordResetTokenExpiry = null;
+    // ✅ Use utility functions — consistent with rest of app
+    const otp       = generateOTP();
+    const hashedOTP = await hashOTP(otp);
+    const expiry    = getOTPExpiry(otpExpiryMinutes);
+
+    user.passwordResetOTP          = hashedOTP;
+    user.passwordResetOTPExpiry    = expiry;
+    user.passwordResetToken        = null;
+    user.passwordResetTokenExpiry  = null;
     await user.save();
 
     await sendPasswordResetOTPEmail(
       user,
       otp,
       otpExpiryMinutes,
-      settings.emailSenderName,
+      settings.emailSenderName
     );
 
     return res.status(200).json({
@@ -464,11 +530,11 @@ const forgotPassword = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to send OTP. Please try again.",
-      error: err.message,
     });
   }
 };
 
+// ── Verify OTP ────────────────────────────────────────────
 const verifyOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
@@ -494,7 +560,11 @@ const verifyOTP = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    const user = await User.findOne({
+      email: email.toLowerCase().trim(),
+    }).select(
+      "+passwordResetOTP +passwordResetOTPExpiry +passwordResetToken +passwordResetTokenExpiry"
+    );
 
     if (!user) {
       return res.status(404).json({
@@ -511,10 +581,9 @@ const verifyOTP = async (req, res) => {
     }
 
     if (user.passwordResetOTPExpiry < new Date()) {
-      user.passwordResetOTP = null;
-      user.passwordResetOTPExpiry = null;
+      user.passwordResetOTP         = null;
+      user.passwordResetOTPExpiry   = null;
       await user.save();
-
       return res.status(400).json({
         success: false,
         message: "OTP has expired. Please request a new one.",
@@ -530,31 +599,32 @@ const verifyOTP = async (req, res) => {
       });
     }
 
-    const rawToken = crypto.randomBytes(32).toString("hex");
+    // ✅ crypto used correctly here — generating secure reset token
+    const rawToken    = crypto.randomBytes(32).toString("hex");
     const hashedToken = await bcrypt.hash(rawToken, 10);
     const tokenExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
-    user.passwordResetOTP = null;
-    user.passwordResetOTPExpiry = null;
-    user.passwordResetToken = hashedToken;
-    user.passwordResetTokenExpiry = tokenExpiry;
+    user.passwordResetOTP          = null;
+    user.passwordResetOTPExpiry    = null;
+    user.passwordResetToken        = hashedToken;
+    user.passwordResetTokenExpiry  = tokenExpiry;
     await user.save();
 
     return res.status(200).json({
-      success: true,
-      message: "OTP verified successfully. You can now set a new password.",
+      success:    true,
+      message:    "OTP verified successfully. You can now set a new password.",
       resetToken: rawToken,
-      email: user.email,
+      email:      user.email,
     });
   } catch (err) {
     res.status(500).json({
       success: false,
       message: "Verification failed. Please try again.",
-      error: err.message,
     });
   }
 };
 
+// ── Reset Password ────────────────────────────────────────
 const resetPassword = async (req, res) => {
   try {
     const { email, resetToken, newPassword, confirmPassword } = req.body;
@@ -580,7 +650,7 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    const settings = await Settings.getSingleton();
+    const settings  = await Settings.getSingleton();
     const minLength = settings.passwordMinLength || 8;
 
     if (newPassword.length < minLength) {
@@ -607,12 +677,13 @@ const resetPassword = async (req, res) => {
     if (settings.passwordRequireSpecial && !/[@$!%*?&#]/.test(newPassword)) {
       return res.status(400).json({
         success: false,
-        message:
-          "Password must contain at least one special character (@$!%*?&#).",
+        message: "Password must contain at least one special character (@$!%*?&#).",
       });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    const user = await User.findOne({
+      email: email.toLowerCase().trim(),
+    }).select("+password +passwordResetToken +passwordResetTokenExpiry");
 
     if (!user || !user.passwordResetToken) {
       return res.status(400).json({
@@ -622,8 +693,8 @@ const resetPassword = async (req, res) => {
     }
 
     if (user.passwordResetTokenExpiry < new Date()) {
-      user.passwordResetToken = null;
-      user.passwordResetTokenExpiry = null;
+      user.passwordResetToken        = null;
+      user.passwordResetTokenExpiry  = null;
       await user.save();
       return res.status(400).json({
         success: false,
@@ -631,10 +702,7 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    const isTokenValid = await bcrypt.compare(
-      resetToken,
-      user.passwordResetToken,
-    );
+    const isTokenValid = await bcrypt.compare(resetToken, user.passwordResetToken);
     if (!isTokenValid) {
       return res.status(400).json({
         success: false,
@@ -650,9 +718,9 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    user.password = newPassword;
-    user.passwordResetToken = null;
-    user.passwordResetTokenExpiry = null;
+    user.password                  = newPassword;
+    user.passwordResetToken        = null;
+    user.passwordResetTokenExpiry  = null;
     await user.save();
 
     if (settings.emailEnabled) {
@@ -667,7 +735,185 @@ const resetPassword = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Password reset failed. Please try again.",
-      error: err.message,
+    });
+  }
+};
+
+// ── Verify Email ──────────────────────────────────────────
+const verifyEmail = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and OTP are required.",
+      });
+    }
+
+    if (!/^\d{6}$/.test(otp)) {
+      return res.status(400).json({
+        success: false,
+        message: "OTP must be exactly 6 digits.",
+      });
+    }
+
+    const user = await User.findOne({
+      email: email.toLowerCase().trim(),
+    }).select(
+      "+emailVerificationOTP +emailVerificationOTPExpiry +emailVerificationAttempts"
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Account not found.",
+      });
+    }
+
+    if (user.isEmailVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is already verified. Please login.",
+      });
+    }
+
+    if (!user.emailVerificationOTP) {
+      return res.status(400).json({
+        success: false,
+        message: "No verification code found. Please request a new one.",
+      });
+    }
+
+    if (user.emailVerificationOTPExpiry < new Date()) {
+      user.emailVerificationOTP        = null;
+      user.emailVerificationOTPExpiry  = null;
+      await user.save();
+      return res.status(400).json({
+        success: false,
+        message: "Verification code expired. Please request a new one.",
+      });
+    }
+
+    if (user.emailVerificationAttempts >= 5) {
+      return res.status(429).json({
+        success: false,
+        message: "Too many failed attempts. Please request a new code.",
+      });
+    }
+
+    const isValid = await verifyOTPCode(otp, user.emailVerificationOTP);
+
+    if (!isValid) {
+      user.emailVerificationAttempts += 1;
+      await user.save();
+      return res.status(400).json({
+        success: false,
+        message: `Incorrect code. ${5 - user.emailVerificationAttempts} attempts remaining.`,
+      });
+    }
+
+    user.isEmailVerified             = true;
+    user.emailVerificationOTP        = null;
+    user.emailVerificationOTPExpiry  = null;
+    user.emailVerificationAttempts   = 0;
+    user.lastOTPSentAt               = null;
+    await user.save();
+
+    const settings = await Settings.getSingleton();
+    if (settings.emailEnabled) {
+      await sendEmailVerifiedSuccessEmail(user, settings.emailSenderName);
+    }
+
+    const accessToken  = generateAccessToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
+
+    res.json({
+      success:      true,
+      message:      "Email verified successfully! Welcome aboard!",
+      accessToken,
+      refreshToken,
+      user:         buildUserResponse(user),
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: "Verification failed. Please try again.",
+    });
+  }
+};
+
+// ── Resend Verification OTP ───────────────────────────────
+const resendVerificationOTP = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required.",
+      });
+    }
+
+    const user = await User.findOne({
+      email: email.toLowerCase().trim(),
+    }).select(
+      "+emailVerificationOTP +emailVerificationOTPExpiry +emailVerificationAttempts"
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Account not found.",
+      });
+    }
+
+    if (user.isEmailVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is already verified. Please login.",
+      });
+    }
+
+    const cooldownCheck = canResendOTP(user.lastOTPSentAt, 60);
+    if (!cooldownCheck.canResend) {
+      return res.status(429).json({
+        success: false,
+        message:     `Please wait ${cooldownCheck.waitSeconds} seconds before requesting a new code.`,
+        waitSeconds: cooldownCheck.waitSeconds,
+      });
+    }
+
+    const settings        = await Settings.getSingleton();
+    const otpExpiryMinutes = settings.otpExpiryMinutes || 10;
+
+    const otp       = generateOTP();
+    const hashedOTP = await hashOTP(otp);
+
+    user.emailVerificationOTP        = hashedOTP;
+    user.emailVerificationOTPExpiry  = getOTPExpiry(otpExpiryMinutes);
+    user.emailVerificationAttempts   = 0;
+    user.lastOTPSentAt               = new Date();
+    await user.save();
+
+    if (settings.emailEnabled) {
+      await sendEmailVerificationOTP(
+        user,
+        otp,
+        otpExpiryMinutes,
+        settings.emailSenderName
+      );
+    }
+
+    res.json({
+      success:         true,
+      message:         `New verification code sent! Valid for ${otpExpiryMinutes} minutes.`,
+      otpExpiryMinutes,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to resend code. Please try again.",
     });
   }
 };
@@ -681,4 +927,6 @@ module.exports = {
   forgotPassword,
   verifyOTP,
   resetPassword,
+  verifyEmail,
+  resendVerificationOTP,
 };

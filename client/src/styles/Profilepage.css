@@ -404,3 +404,33 @@ textarea:disabled {
     justify-content: center;
   }
 }
+
+/* ── Password input wrapper ──────────────────────────── */
+.pwd-input-wrap {
+  position: relative;
+  display:  flex;
+  align-items: center;
+}
+
+.pwd-input-wrap input {
+  width:         100%;
+  padding-right: 2.75rem;
+}
+
+.pwd-toggle {
+  position:    absolute;
+  right:       0.75rem;
+  background:  none;
+  border:      none;
+  cursor:      pointer;
+  color:       #94a3b8;
+  font-size:   1.1rem;
+  display:     flex;
+  align-items: center;
+  padding:     0;
+  transition:  color 0.15s;
+}
+
+.pwd-toggle:hover {
+  color: #6366f1;
+}

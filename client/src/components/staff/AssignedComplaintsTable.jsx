@@ -1,24 +1,23 @@
 import React, { useState, useMemo, useCallback } from "react";
 import StatusBadge from "../complaint/StatusBadge";
 
-
 const STATUS_FILTERS = [
-  { key: "all",         label: "All"         },
-  { key: "pending",     label: "Pending"     },
+  { key: "all", label: "All" },
+  { key: "pending", label: "Pending" },
   { key: "in-progress", label: "In Progress" },
-  { key: "resolved",    label: "Resolved"    },
-  { key: "rejected",    label: "Rejected"    },
+  { key: "resolved", label: "Resolved" },
+  { key: "rejected", label: "Rejected" },
 ];
 
 const LOCKED_STATUSES = ["resolved", "rejected"];
 
 const AssignedComplaintsTable = ({
   complaints = [],
-  loading     = false,
+  loading = false,
   onSelectComplaint,
 }) => {
   const [activeFilter, setActiveFilter] = useState("all");
-  const [search, setSearch]             = useState("");
+  const [search, setSearch] = useState("");
 
   /* ── Filtered & searched list ── */
   const filtered = useMemo(() => {
@@ -34,7 +33,7 @@ const AssignedComplaintsTable = ({
         (c) =>
           c.title?.toLowerCase().includes(q) ||
           c.studentName?.toLowerCase().includes(q) ||
-          c.category?.toLowerCase().includes(q)
+          c.category?.toLowerCase().includes(q),
       );
     }
 
@@ -46,22 +45,22 @@ const AssignedComplaintsTable = ({
       if (LOCKED_STATUSES.includes(complaint.status)) return;
       onSelectComplaint(complaint);
     },
-    [onSelectComplaint]
+    [onSelectComplaint],
   );
 
   /* ── Priority badge ── */
   const PriorityBadge = ({ priority }) => {
     const map = {
-      low:    { label: "Low",    cls: "ssd-priority--low"    },
+      low: { label: "Low", cls: "ssd-priority--low" },
       medium: { label: "Medium", cls: "ssd-priority--medium" },
-      high:   { label: "High",   cls: "ssd-priority--high"   },
+      high: { label: "High", cls: "ssd-priority--high" },
+      urgent: { label: "Urgent", cls: "ssd-priority--urgent" },
     };
-    const cfg = map[priority] || map.low;
-    return (
-      <span className={`ssd-priority-badge ${cfg.cls}`}>
-        {cfg.label}
-      </span>
-    );
+    const cfg = map[priority] || {
+      label: priority || "Low",
+      cls: "ssd-priority--low",
+    };
+    return <span className={`ssd-priority-badge ${cfg.cls}`}>{cfg.label}</span>;
   };
 
   /* ── Skeleton rows ── */
@@ -112,10 +111,7 @@ const AssignedComplaintsTable = ({
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={6}>
-                  <EmptyState
-                    search={search}
-                    filter={activeFilter}
-                  />
+                  <EmptyState search={search} filter={activeFilter} />
                 </td>
               </tr>
             ) : (
@@ -214,8 +210,11 @@ const AssignedComplaintsTable = ({
 
 /* ── Sub-components ── */
 const TableHeader = ({
-  activeFilter, setActiveFilter,
-  search, setSearch, count,
+  activeFilter,
+  setActiveFilter,
+  search,
+  setSearch,
+  count,
 }) => (
   <div className="ssd-table-header">
     <div className="ssd-table-header__top">
@@ -278,9 +277,7 @@ const TableHead = () => (
 
 const EmptyState = ({ search, filter }) => (
   <div className="ssd-empty">
-    <div className="ssd-empty__icon">
-      {search ? "🔍" : "📋"}
-    </div>
+    <div className="ssd-empty__icon">{search ? "🔍" : "📋"}</div>
     <p className="ssd-empty__title">
       {search
         ? `No results for "${search}"`
