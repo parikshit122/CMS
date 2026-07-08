@@ -2,6 +2,8 @@
   "name": "cms",
   "version": "1.0.0",
   "scripts": {
+    "build": "cd server && npm install",
+    "start": "cd server && node server.js",
     "dev": "concurrently -n \"SERVER,CLIENT\" -c \"cyan,magenta\" \"npm run server\" \"npm run client\"",
     "server": "cd server && nodemon server.js",
     "client": "cd client && npm run dev"
