@@ -2,17 +2,24 @@ const nodemailer = require("nodemailer");
 
 // ── Transporter with pooled connections ───────────────────
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+  requireTLS: true,      // Force TLS upgrade
   tls: {
     rejectUnauthorized: false,
+    ciphers: "SSLv3",
   },
   pool: true,
-  maxConnections: 5,
-  maxMessages: 100,
+  maxConnections: 3,
+  maxMessages: 50,
+  connectionTimeout: 30000,   // 30 seconds — Render is slower
+  greetingTimeout: 30000,
+  socketTimeout: 45000,
 });
 
 // ── Verify transporter on startup ─────────────────────────
