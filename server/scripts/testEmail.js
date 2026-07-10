@@ -1,55 +1,122 @@
+// E:\CMS\server\scripts\testEmail.js
 require("dotenv").config({ path: require("path").join(__dirname, "../.env") });
 
-const nodemailer = require("nodemailer");
+const {
+  sendWelcomeEmail,
+  sendEmailVerificationOTP,
+  sendEmailVerifiedSuccessEmail,
+  sendPasswordResetOTPEmail,
+  sendPasswordResetSuccessEmail,
+  sendComplaintSubmittedEmail,
+  sendComplaintStatusUpdateEmail,
+  sendComplaintResolvedEmail,
+  sendComplaintAssignedEmail,
+  sendComplaintRejectedEmail,
+} = require("../services/email.service");
 
-const test = async () => {
-  console.log("Testing email configuration...");
-  console.log("EMAIL_USER:", process.env.EMAIL_USER);
-  console.log("EMAIL_PASS:", process.env.EMAIL_PASS ? "SET (hidden)" : "NOT SET");
+// ── Mock data ──────────────────────────────────────────────────────────────────
+const TO    = process.env.EMAIL_FROM;
+const NAME  = "Test User";
 
-  const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
+const mockUser = { name: NAME, email: TO, role: "user" };
+const mockStaff = { name: "Staff Member", email: TO, role: "staff" };
 
-  try {
-    console.log("\n🔍 Verifying SMTP connection...");
-    await transporter.verify();
-    console.log("✅ SMTP connection OK\n");
-
-    const recipientEmail = process.argv[2] || process.env.EMAIL_USER;
-
-    console.log(`📧 Sending test email to: ${recipientEmail}`);
-    const info = await transporter.sendMail({
-      from:    `"ComplaintSync Test" <${process.env.EMAIL_USER}>`,
-      to:      recipientEmail,
-      subject: "Test Email from ComplaintSync",
-      html: `
-        <div style="font-family: Arial; padding: 20px;">
-          <h2 style="color: #6366f1;">Test Email Successful!</h2>
-          <p>If you received this email, your Gmail SMTP is working correctly.</p>
-          <p>Sent at: ${new Date().toLocaleString()}</p>
-        </div>
-      `,
-    });
-
-    console.log("\n✅ Email sent successfully!");
-    console.log("Message ID:", info.messageId);
-    console.log("Response:", info.response);
-  } catch (err) {
-    console.error("\n❌ Email failed:");
-    console.error("Error:", err.message);
-    console.error("\nCommon fixes:");
-    console.error("1. Enable 2-Step Verification on Gmail");
-    console.error("2. Generate new App Password: https://myaccount.google.com/apppasswords");
-    console.error("3. Use App Password (16 chars) not your Gmail password");
-    console.error("4. Check EMAIL_USER matches the Gmail account");
-  }
-
-  process.exit(0);
+const mockComplaint = {
+  complaintId:     "CMP-2026-0001",
+  title:           "Street light not working on Main Block",
+  description:     "The street light near Block C has been non-functional for 3 days causing safety concerns for students returning at night.",
+  category:        "electrical",
+  priority:        "high",
+  location:        "Block C, Main Campus",
+  status:          "pending",
+  rejectionReason: "Issue is outside the jurisdiction of our department.",
 };
 
-test();
+// ── Runner ─────────────────────────────────────────────────────────────────────
+const tests = [
+  {
+    name: "1. Welcome + OTP (Registration)",
+    fn:   () => sendWelcomeEmail(mockUser, "847291", 10),
+  },
+  {
+    name: "2. Email Verification OTP (Resend)",
+    fn:   () => sendEmailVerificationOTP(mockUser, "382910", 10),
+  },
+  {
+    name: "3. Email Verified Success",
+    fn:   () => sendEmailVerifiedSuccessEmail(mockUser),
+  },
+  {
+    name: "4. Forgot Password OTP",
+    fn:   () => sendPasswordResetOTPEmail(mockUser, "561038", 10),
+  },
+  {
+    name: "5. Password Reset Success",
+    fn:   () => sendPasswordResetSuccessEmail(mockUser),
+  },
+  {
+    name: "6. Complaint Submitted",
+    fn:   () => sendComplaintSubmittedEmail(mockUser, mockComplaint),
+  },
+  {
+    name: "7. Complaint Status → In Progress",
+    fn:   () => sendComplaintStatusUpdateEmail(
+      mockUser,
+      { ...mockComplaint, status: "in-progress" },
+      "pending",
+      "Our team is now working on your issue."
+    ),
+  },
+  {
+    name: "8. Complaint Resolved",
+    fn:   () => sendComplaintResolvedEmail(
+      mockUser,
+      { ...mockComplaint, status: "resolved" },
+      "Replaced the faulty bulb and checked the wiring."
+    ),
+  },
+  {
+    name: "9. Complaint Rejected",
+    fn:   () => sendComplaintRejectedEmail(
+      mockUser,
+      { ...mockComplaint, status: "rejected" },
+      mockComplaint.rejectionReason
+    ),
+  },
+  {
+    name: "10. Complaint Assigned to Staff",
+    fn:   () => sendComplaintAssignedEmail(mockStaff, mockComplaint),
+  },
+];
+
+const runTests = async () => {
+  console.log(`\n🚀 Testing all email templates → sending to: ${TO}\n`);
+  console.log("=".repeat(60));
+
+  const arg    = process.argv[2];
+  const toRun  = arg ? tests.filter((_, i) => String(i + 1) === arg) : tests;
+
+  for (const test of toRun) {
+    process.stdout.write(`📧 ${test.name} ... `);
+    try {
+      const result = await test.fn();
+      if (result.success) {
+        console.log(`✅ OK | ${result.messageId}`);
+      } else if (result.skipped) {
+        console.log("⚠️  Skipped (config missing)");
+      } else {
+        console.log(`❌ Failed:`, result.error);
+      }
+    } catch (err) {
+      console.log(`💥 Error: ${err.message}`);
+    }
+
+    // Small delay between sends to avoid rate limiting
+    await new Promise((r) => setTimeout(r, 500));
+  }
+
+  console.log("=".repeat(60));
+  console.log("\n✅ Done. Check your inbox.\n");
+};
+
+runTests();

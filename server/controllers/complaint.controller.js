@@ -1,6 +1,14 @@
 const Complaint = require("../models/Complaint");
 const User = require("../models/User");
 const {
+  sendComplaintSubmittedEmail,
+  sendComplaintStatusUpdateEmail,
+  sendComplaintResolvedEmail,
+  sendComplaintRejectedEmail,
+  sendComplaintAssignedEmail,
+} = require("../services/email.service");
+const Settings = require("../models/Settings");
+const {
   notifyComplaintSubmitted,
   notifyComplaintAssigned,
   notifyComplaintResolved,
@@ -8,6 +16,7 @@ const {
   notifyComplaintInProgress,
 } = require("../services/notification.service");
 
+// Replace your submitComplaint function
 const submitComplaint = async (req, res) => {
   try {
     const { title, description, category, priority, location } = req.body;
@@ -15,51 +24,42 @@ const submitComplaint = async (req, res) => {
     if (!title || !description || !category) {
       return res.status(400).json({
         success: false,
-        message: "Title, description, and category are required",
+        message: "Title, description, and category are required.",
       });
     }
 
-    // ── Handle file attachments ───────────────────────────
-    let attachments = [];
-
-    if (req.files && req.files.length > 0) {
-      const { uploadMultipleFiles } = require("../services/cloudinary.service");
-
-      try {
-        const uploaded = await uploadMultipleFiles(
-          req.files,
-          "complaint-sync/complaints",
-        );
-
-        attachments = uploaded.map((result, idx) => ({
-          url: result.secure_url,
-          publicId: result.public_id,
-          originalName: req.files[idx].originalname,
-          mimeType: req.files[idx].mimetype,
-          size: req.files[idx].size,
-        }));
-      } catch (uploadErr) {
-        console.error("Attachment upload failed:", uploadErr.message);
-        return res.status(500).json({
-          success: false,
-          message: "Failed to upload attachments. Please try again.",
-        });
-      }
-    }
+    const attachments = (req.files || []).map((file) => ({
+      url: file.path,
+      publicId: file.filename,
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      size: file.size,
+    }));
 
     const complaint = await Complaint.create({
-      title,
-      description,
-      category,
+      title: title.trim(),
+      description: description.trim(),
+      category: category.toLowerCase().trim(),
       priority: priority || "medium",
-      location,
-      student: req.user.id,
+      location: location?.trim(),
+      student: req.user._id,
+      status: "pending",
       attachments,
     });
 
-    const student = await User.findById(req.user.id);
-    await notifyComplaintSubmitted(complaint, student, req.app);
-    res.status(201).json({ success: true, data: complaint });
+    res.status(201).json({
+      success: true,
+      message: "Complaint submitted successfully.",
+      data: complaint,
+    });
+
+    // Send email after response so API never fails due to email
+    const settings = await Settings.getSingleton();
+    if (settings.emailEnabled && settings.notifyOnSubmit && req.user.email) {
+      sendComplaintSubmittedEmail(req.user, complaint, settings.emailSenderName).catch(
+        (err) => console.error("[submitComplaint] Email failed:", err.message)
+      );
+    }
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -160,120 +160,104 @@ const getAllComplaints = async (req, res) => {
   }
 };
 
+// Replace your updateComplaintStatus function
 const updateComplaintStatus = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { status, rejectionReason } = req.body;
+    const { status, note, rejectionReason } = req.body;
 
-    const complaint = await Complaint.findById(id);
+    const validStatuses = ["pending", "in-progress", "resolved", "rejected"];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, message: "Invalid status." });
+    }
+
+    const complaint = await Complaint.findById(req.params.id).populate(
+      "student",
+      "name email"
+    );
 
     if (!complaint) {
-      return res.status(404).json({
-        success: false,
-        message: "Complaint not found",
-      });
+      return res.status(404).json({ success: false, message: "Complaint not found." });
     }
 
-    if (req.user.role !== "admin") {
-      if (
-        !complaint.assignedTo ||
-        complaint.assignedTo.toString() !== req.user.id
-      ) {
-        return res.status(403).json({
-          success: false,
-          message: "Not authorized to update this complaint",
-        });
-      }
-    }
-    const locked = ["resolved", "rejected"];
-    if (locked.includes(complaint.status)) {
-      return res.status(400).json({
-        success: false,
-        message: "This complaint is locked and cannot be modified",
-      });
+    // Staff can only update their assigned complaints
+    if (req.user.role === "staff" && String(complaint.assignedTo) !== String(req.user._id)) {
+      return res.status(403).json({ success: false, message: "Not authorized to update this complaint." });
     }
 
-    if (status === "rejected" && !rejectionReason?.trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Rejection reason is required",
-      });
-    }
+    const oldStatus = complaint.status;
 
     complaint.status = status;
-    if (status === "rejected") {
-      complaint.rejectionReason = rejectionReason;
-    }
-
+    if (rejectionReason) complaint.rejectionReason = rejectionReason;
     await complaint.save();
 
-    const updated = await Complaint.findById(id)
-      .populate("student", "name email")
-      .populate("assignedTo", "name email");
+    res.json({
+      success: true,
+      message: `Complaint status updated to ${status}.`,
+      data: complaint,
+    });
 
-    const staff = await User.findById(req.user.id);
-    const student = updated.student;
+    // Send emails after response
+    if (oldStatus === status) return; // No change, skip email
 
-    if (status === "resolved") {
-      await notifyComplaintResolved(updated, student, staff, req.app);
+    const settings = await Settings.getSingleton();
+    const student = complaint.student;
+
+    if (!settings.emailEnabled || !student?.email) return;
+
+    if (status === "resolved" && settings.notifyOnResolve) {
+      sendComplaintResolvedEmail(
+        student, complaint, note || "", settings.emailSenderName
+      ).catch((err) => console.error("[updateStatus] Resolved email failed:", err.message));
+
     } else if (status === "rejected") {
-      await notifyComplaintRejected(updated, student, staff, req.app);
-    } else if (status === "in-progress") {
-      await notifyComplaintInProgress(updated, student, staff, req.app);
+      sendComplaintRejectedEmail(
+        student, complaint, rejectionReason || "", settings.emailSenderName
+      ).catch((err) => console.error("[updateStatus] Rejected email failed:", err.message));
+
+    } else {
+      sendComplaintStatusUpdateEmail(
+        student, complaint, oldStatus, note || "", settings.emailSenderName
+      ).catch((err) => console.error("[updateStatus] Status email failed:", err.message));
     }
-
-    const formatted = {
-      _id: updated._id,
-      complaintId: updated.complaintId,
-      title: updated.title,
-      description: updated.description,
-      category: updated.category,
-      priority: updated.priority,
-      location: updated.location,
-      status: updated.status,
-      rejectionReason: updated.rejectionReason,
-      studentName: updated.student?.name || "Unknown",
-      studentEmail: updated.student?.email || "",
-      createdAt: updated.createdAt,
-    };
-
-    res.json({ success: true, data: formatted });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
+// Replace your assignComplaint function
 const assignComplaint = async (req, res) => {
   try {
-    const { id } = req.params;
     const { staffId } = req.body;
 
-    const staff = await User.findById(staffId);
-    if (!staff || staff.role !== "staff") {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid staff member",
-      });
-    }
-
-    const complaint = await Complaint.findByIdAndUpdate(
-      id,
-      { assignedTo: staffId, status: "in-progress" },
-      { new: true },
-    )
-      .populate("student", "name email")
-      .populate("assignedTo", "name email");
-
+    const complaint = await Complaint.findById(req.params.id);
     if (!complaint) {
-      return res.status(404).json({
-        success: false,
-        message: "Complaint not found",
-      });
+      return res.status(404).json({ success: false, message: "Complaint not found." });
     }
 
-    await notifyComplaintAssigned(complaint, complaint.student, staff);
+    const staff = await User.findById(staffId).select("name email role");
+    if (!staff || staff.role !== "staff") {
+      return res.status(404).json({ success: false, message: "Staff member not found." });
+    }
 
-    res.json({ success: true, data: complaint });
+    complaint.assignedTo = staff._id;
+    if (complaint.status === "pending") {
+      complaint.status = "in-progress";
+    }
+    await complaint.save();
+
+    res.json({
+      success: true,
+      message: `Complaint assigned to ${staff.name}.`,
+      data: complaint,
+    });
+
+    // Send email to staff after response
+    const settings = await Settings.getSingleton();
+    if (settings.emailEnabled && settings.notifyOnAssign && staff.email) {
+      sendComplaintAssignedEmail(staff, complaint, settings.emailSenderName).catch(
+        (err) => console.error("[assignComplaint] Email failed:", err.message)
+      );
+    }
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

@@ -1,402 +1,684 @@
-const nodemailer = require("nodemailer");
+// E:\CMS\server\services\email.service.js
+const axios = require("axios");
 
-// ── Transporter with pooled connections ───────────────────
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  requireTLS: true,      // Force TLS upgrade
-  tls: {
-    rejectUnauthorized: false,
-    ciphers: "SSLv3",
-  },
-  pool: true,
-  maxConnections: 3,
-  maxMessages: 50,
-  connectionTimeout: 30000,   // 30 seconds — Render is slower
-  greetingTimeout: 30000,
-  socketTimeout: 45000,
-});
+const BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
 
-// ── Verify transporter on startup ─────────────────────────
-transporter.verify((error) => {
-  if (error) {
-    console.error("❌ Email transporter failed:", error.message);
-  } else {
-    console.log("✅ Email transporter ready");
+// ── Core sender ────────────────────────────────────────────────────────────────
+const sendMail = async (to, subject, html, label = "Email") => {
+  const senderEmail = process.env.EMAIL_FROM || process.env.EMAIL_USER;
+  const senderName  = process.env.EMAIL_SENDER_NAME || "ComplaintSync";
+
+  if (!process.env.BREVO_API_KEY) {
+    console.warn(`⚠️  [${label}] BREVO_API_KEY not set — skipping`);
+    return { success: false, skipped: true };
   }
-});
 
-// ── Helper: send with logging ─────────────────────────────
-const sendMailWithLog = async (mailOptions, label) => {
-  console.log(`📧 [${label}] Sending to: ${mailOptions.to}`);
-
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.warn(`⚠️  [${label}] EMAIL not configured — skipping`);
+  if (!senderEmail) {
+    console.warn(`⚠️  [${label}] EMAIL_FROM not set — skipping`);
     return { success: false, skipped: true };
   }
 
   try {
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ [${label}] Sent to ${mailOptions.to} — ${info.messageId}`);
-    return { success: true, messageId: info.messageId };
+    const response = await axios.post(
+      BREVO_API_URL,
+      {
+        sender:      { name: senderName, email: senderEmail },
+        to:          [{ email: to }],
+        subject,
+        htmlContent: html,
+      },
+      {
+        headers: {
+          "api-key":      process.env.BREVO_API_KEY,
+          "Content-Type": "application/json",
+          accept:         "application/json",
+        },
+      }
+    );
+
+    console.log(
+      `✅ [${label}] Sent to ${to} | MessageId: ${response.data.messageId}`
+    );
+    return { success: true, messageId: response.data.messageId };
   } catch (err) {
-    console.error(`❌ [${label}] FAILED to ${mailOptions.to}: ${err.message}`);
-    console.error(`   Full error:`, err);
-    return { success: false, error: err.message };
+    console.error(
+      `❌ [${label}] Failed to send to ${to}:`,
+      err.response?.data || err.message
+    );
+    return { success: false, error: err.response?.data || err.message };
   }
 };
 
-// ── Staff welcome email ──────────────────────────────────
-const sendStaffWelcomeEmail = async (staff, plainPassword) => {
-  const mailOptions = {
-    from: `"ComplaintSync Admin" <${process.env.EMAIL_USER}>`,
-    to: staff.email,
-    subject: "Welcome to ComplaintSync — Your Staff Account",
-    html: `
-      <div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:20px;">
-        <h2 style="color:#6366f1;">Welcome, ${staff.name}!</h2>
-        <p>An account has been created for you on <strong>ComplaintSync</strong>.</p>
-        <p>You have been added as a <strong>${staff.category || "Staff"}</strong> member.</p>
-        <div style="background:#f8fafc;padding:16px;border-radius:8px;margin:16px 0;">
-          <p style="margin:4px 0;"><strong>Email:</strong> ${staff.email}</p>
-          <p style="margin:4px 0;"><strong>Password:</strong> <code style="background:#fff;padding:4px 8px;border-radius:4px;">${plainPassword}</code></p>
-        </div>
-        <p style="color:#ef4444;"><strong>Important:</strong> Please change your password after first login.</p>
-        <a href="${process.env.FRONTEND_URL || "http://localhost:5173"}/auth"
-           style="display:inline-block;background:#6366f1;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;margin-top:16px;">
-          Login Now
-        </a>
-        <p style="margin-top:24px;color:#8a94a6;font-size:13px;">
-          If you have any questions, contact your admin.
-        </p>
+// ── Shared layout wrapper ──────────────────────────────────────────────────────
+const layout = (content, senderName = "ComplaintSync") => `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>${senderName}</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f6f9;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f9;padding:32px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0"
+          style="background:#ffffff;border-radius:12px;overflow:hidden;
+                 box-shadow:0 2px 8px rgba(0,0,0,0.08);max-width:600px;width:100%;">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#6366f1 0%,#4f46e5 100%);
+                        padding:28px 32px;text-align:center;">
+              <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;
+                          letter-spacing:0.5px;">
+                ${senderName}
+              </h1>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:32px;">
+              ${content}
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#f8fafc;padding:20px 32px;
+                        border-top:1px solid #e2e8f0;text-align:center;">
+              <p style="margin:0;color:#94a3b8;font-size:12px;line-height:1.6;">
+                This is an automated message from <strong>${senderName}</strong>.<br/>
+                Please do not reply to this email.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+// ── Shared components ──────────────────────────────────────────────────────────
+const infoRow = (label, value) => `
+  <tr>
+    <td style="padding:10px 12px;background:#f8fafc;font-weight:600;
+                color:#374151;width:40%;border-bottom:1px solid #e2e8f0;
+                font-size:14px;">
+      ${label}
+    </td>
+    <td style="padding:10px 12px;color:#1e293b;border-bottom:1px solid #e2e8f0;
+                font-size:14px;">
+      ${value}
+    </td>
+  </tr>`;
+
+const infoTable = (rows) => `
+  <table width="100%" cellpadding="0" cellspacing="0"
+    style="border:1px solid #e2e8f0;border-radius:8px;
+           overflow:hidden;margin:20px 0;border-collapse:collapse;">
+    ${rows}
+  </table>`;
+
+const statusBadge = (status) => {
+  const map = {
+    pending:     { bg: "#fef3c7", color: "#92400e", label: "Pending"     },
+    "in-progress":{ bg: "#dbeafe", color: "#1e40af", label: "In Progress" },
+    resolved:    { bg: "#d1fae5", color: "#065f46", label: "Resolved"    },
+    rejected:    { bg: "#fee2e2", color: "#991b1b", label: "Rejected"    },
+  };
+  const s = map[status?.toLowerCase()] || { bg: "#f1f5f9", color: "#475569", label: status };
+  return `<span style="background:${s.bg};color:${s.color};padding:4px 12px;
+    border-radius:20px;font-size:12px;font-weight:700;
+    text-transform:uppercase;letter-spacing:0.5px;">${s.label}</span>`;
+};
+
+const priorityBadge = (priority) => {
+  const map = {
+    low:    { color: "#059669", label: "Low"    },
+    medium: { color: "#d97706", label: "Medium" },
+    high:   { color: "#dc2626", label: "High"   },
+    urgent: { color: "#7c3aed", label: "Urgent" },
+  };
+  const p = map[priority?.toLowerCase()] || { color: "#6b7280", label: priority };
+  return `<strong style="color:${p.color};">${p.label}</strong>`;
+};
+
+const divider = () =>
+  `<hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0;"/>`;
+
+const greeting = (name) =>
+  `<p style="margin:0 0 16px;color:#1e293b;font-size:16px;">
+    Dear <strong>${name || "User"}</strong>,
+  </p>`;
+
+const signOff = (senderName = "ComplaintSync") =>
+  `<p style="margin:24px 0 0;color:#64748b;font-size:13px;line-height:1.6;">
+    Warm regards,<br/>
+    <strong style="color:#4f46e5;">The ${senderName} Team</strong>
+  </p>`;
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 1. EMAIL VERIFICATION OTP
+// ══════════════════════════════════════════════════════════════════════════════
+const sendEmailVerificationOTP = async (user, otp, expiryMinutes = 10, senderName) => {
+  const name   = user.name || "User";
+  const sender = senderName || process.env.EMAIL_SENDER_NAME || "ComplaintSync";
+
+  const content = `
+    ${greeting(name)}
+
+    <p style="margin:0 0 20px;color:#475569;font-size:15px;line-height:1.6;">
+      Welcome to <strong>${sender}</strong>! To complete your registration,
+      please verify your email address using the OTP below.
+    </p>
+
+    <!-- OTP Box -->
+    <div style="background:linear-gradient(135deg,#f0f0ff,#e8e8ff);
+                border:2px solid #6366f1;border-radius:12px;
+                padding:28px;text-align:center;margin:24px 0;">
+      <p style="margin:0 0 8px;color:#4f46e5;font-size:13px;
+                font-weight:600;text-transform:uppercase;letter-spacing:1px;">
+        Your Verification Code
+      </p>
+      <div style="font-size:42px;font-weight:800;color:#4f46e5;
+                  letter-spacing:10px;font-family:monospace;margin:8px 0;">
+        ${otp}
       </div>
-    `,
-  };
+      <p style="margin:8px 0 0;color:#6b7280;font-size:13px;">
+        ⏱ Expires in <strong>${expiryMinutes} minutes</strong>
+      </p>
+    </div>
 
-  return sendMailWithLog(mailOptions, "Staff Welcome");
+    <div style="background:#fef3c7;border-left:4px solid #f59e0b;
+                border-radius:4px;padding:12px 16px;margin:20px 0;">
+      <p style="margin:0;color:#92400e;font-size:13px;">
+        🔒 <strong>Security Notice:</strong> Never share this code with anyone.
+        Our team will never ask for your OTP.
+      </p>
+    </div>
+
+    <p style="margin:16px 0 0;color:#94a3b8;font-size:12px;">
+      If you did not create an account, please ignore this email.
+    </p>
+
+    ${signOff(sender)}`;
+
+  return sendMail(
+    user.email,
+    `Verify Your Email – ${sender}`,
+    layout(content, sender),
+    "EmailVerificationOTP"
+  );
 };
 
-// ── Password reset OTP ───────────────────────────────────
-const sendPasswordResetOTPEmail = async (
-  user,
-  otp,
-  expiryMinutes = 10,
-  senderName = "ComplaintSync — MITM"
-) => {
-  const mailOptions = {
-    from: `"${senderName}" <${process.env.EMAIL_USER}>`,
-    to: user.email,
-    subject: `${otp} is your ${senderName} password reset code`,
-    replyTo: process.env.EMAIL_USER,
-    headers: {
-      "X-Priority": "1",
-      "X-MSMail-Priority": "High",
-      Importance: "high",
-    },
-    html: `
-      <!DOCTYPE html>
-      <html>
-        <body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
-          <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:40px 0;">
-            <tr><td align="center">
-              <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-                <tr>
-                  <td style="background:linear-gradient(135deg,#021135,#086ead);padding:32px 40px;text-align:center;">
-                    <h1 style="margin:0;color:#fff;font-size:24px;">${senderName}</h1>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:40px;">
-                    <p style="font-size:16px;color:#333;margin:0 0 8px;">Hello <strong>${user.name}</strong>,</p>
-                    <p style="font-size:15px;color:#555;margin:0 0 24px;line-height:1.6;">
-                      You requested to reset your password. Use the code below.
-                      Expires in <strong>${expiryMinutes} minute${expiryMinutes !== 1 ? "s" : ""}</strong>.
-                    </p>
-                    <div style="text-align:center;margin:32px 0;">
-                      <div style="display:inline-block;background:#f0f9ff;border:2px solid #0ea0e9;border-radius:12px;padding:24px 48px;">
-                        <p style="margin:0;font-size:12px;color:#0ea0e9;letter-spacing:3px;text-transform:uppercase;font-weight:700;">Verification Code</p>
-                        <p style="margin:12px 0 0;font-size:42px;font-weight:900;color:#021135;letter-spacing:12px;">${otp}</p>
-                      </div>
-                    </div>
-                    <p style="font-size:14px;color:#555;line-height:1.6;">Do not share this code with anyone.</p>
-                    <p style="font-size:13px;color:#999;">If you did not request this, ignore this email.</p>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="background:#f9f9f9;padding:20px 40px;border-top:1px solid #eee;text-align:center;">
-                    <p style="margin:0;font-size:12px;color:#aaa;">© ${new Date().getFullYear()} ${senderName}</p>
-                  </td>
-                </tr>
-              </table>
-            </td></tr>
-          </table>
-        </body>
-      </html>
-    `,
-  };
+// ══════════════════════════════════════════════════════════════════════════════
+// 2. EMAIL VERIFIED SUCCESS
+// ══════════════════════════════════════════════════════════════════════════════
+const sendEmailVerifiedSuccessEmail = async (user, senderName) => {
+  const name   = user.name || "User";
+  const sender = senderName || process.env.EMAIL_SENDER_NAME || "ComplaintSync";
 
-  return sendMailWithLog(mailOptions, "Password Reset OTP");
+  const content = `
+    ${greeting(name)}
+
+    <!-- Success Banner -->
+    <div style="background:linear-gradient(135deg,#d1fae5,#a7f3d0);
+                border-radius:12px;padding:24px;text-align:center;margin:0 0 24px;">
+      <div style="font-size:48px;margin-bottom:8px;">✅</div>
+      <h2 style="margin:0;color:#065f46;font-size:20px;font-weight:700;">
+        Email Verified Successfully!
+      </h2>
+      <p style="margin:8px 0 0;color:#047857;font-size:14px;">
+        Your account is now active and ready to use.
+      </p>
+    </div>
+
+    <p style="margin:0 0 16px;color:#475569;font-size:15px;line-height:1.6;">
+      You can now log in and start using <strong>${sender}</strong> to submit
+      and track your complaints.
+    </p>
+
+    ${infoTable(
+      infoRow("Name",   name) +
+      infoRow("Email",  user.email) +
+      infoRow("Status", "✅ Verified")
+    )}
+
+    ${divider()}
+
+    <p style="margin:0;color:#475569;font-size:14px;line-height:1.6;">
+      If you have any questions or need help getting started, feel free to
+      reach out to our support team.
+    </p>
+
+    ${signOff(sender)}`;
+
+  return sendMail(
+    user.email,
+    `Welcome to ${sender} – Account Verified!`,
+    layout(content, sender),
+    "EmailVerifiedSuccess"
+  );
 };
 
-// ── Password reset success ────────────────────────────────
-const sendPasswordResetSuccessEmail = async (
-  user,
-  senderName = "ComplaintSync — MITM"
-) => {
-  const mailOptions = {
-    from: `"${senderName}" <${process.env.EMAIL_USER}>`,
-    to: user.email,
-    subject: `Your password has been changed successfully`,
-    replyTo: process.env.EMAIL_USER,
-    html: `
-      <div style="font-family:Arial;padding:40px;text-align:center;background:#f4f4f4;">
-        <div style="background:#fff;padding:40px;border-radius:8px;max-width:500px;margin:auto;">
-          <div style="width:64px;height:64px;line-height:64px;background:#f0fdf4;border:2px solid #22c55e;border-radius:50%;margin:auto;">
-            <span style="font-size:32px;">✓</span>
-          </div>
-          <p style="margin:20px 0;">Hello <strong>${user.name}</strong>,</p>
-          <p>Your password has been successfully changed. You can now log in with your new password.</p>
-        </div>
+// ══════════════════════════════════════════════════════════════════════════════
+// 3. FORGOT PASSWORD – OTP
+// ══════════════════════════════════════════════════════════════════════════════
+const sendPasswordResetOTPEmail = async (user, otp, expiryMinutes = 10, senderName) => {
+  const name   = user.name || "User";
+  const sender = senderName || process.env.EMAIL_SENDER_NAME || "ComplaintSync";
+
+  const content = `
+    ${greeting(name)}
+
+    <p style="margin:0 0 20px;color:#475569;font-size:15px;line-height:1.6;">
+      We received a request to reset your password. Use the OTP below to
+      proceed. If you did not make this request, you can safely ignore this email.
+    </p>
+
+    <!-- OTP Box -->
+    <div style="background:linear-gradient(135deg,#fff7ed,#ffedd5);
+                border:2px solid #f97316;border-radius:12px;
+                padding:28px;text-align:center;margin:24px 0;">
+      <p style="margin:0 0 8px;color:#c2410c;font-size:13px;
+                font-weight:600;text-transform:uppercase;letter-spacing:1px;">
+        Password Reset OTP
+      </p>
+      <div style="font-size:42px;font-weight:800;color:#ea580c;
+                  letter-spacing:10px;font-family:monospace;margin:8px 0;">
+        ${otp}
       </div>
-    `,
-  };
+      <p style="margin:8px 0 0;color:#6b7280;font-size:13px;">
+        ⏱ Expires in <strong>${expiryMinutes} minutes</strong>
+      </p>
+    </div>
 
-  return sendMailWithLog(mailOptions, "Password Reset Success");
+    <div style="background:#fee2e2;border-left:4px solid #ef4444;
+                border-radius:4px;padding:12px 16px;margin:20px 0;">
+      <p style="margin:0;color:#991b1b;font-size:13px;">
+        ⚠️ <strong>Warning:</strong> Do not share this OTP with anyone.
+        This code can be used to change your password.
+      </p>
+    </div>
+
+    ${infoTable(
+      infoRow("Account",    user.email) +
+      infoRow("Requested",  new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })) +
+      infoRow("Expires in", `${expiryMinutes} minutes`)
+    )}
+
+    <p style="margin:16px 0 0;color:#94a3b8;font-size:12px;">
+      If you did not request a password reset, please secure your account
+      immediately by contacting support.
+    </p>
+
+    ${signOff(sender)}`;
+
+  return sendMail(
+    user.email,
+    `Password Reset OTP – ${sender}`,
+    layout(content, sender),
+    "PasswordResetOTP"
+  );
 };
 
-const sendEmailVerificationOTP = async (
-  user,
-  otp,
-  expiryMinutes = 10,
-  senderName = "ComplaintSync"
-) => {
-  const mailOptions = {
-    from: `"${senderName}" <${process.env.EMAIL_USER}>`,
-    to: user.email,
-    subject: `Your verification code is ${otp}`,
-    replyTo: process.env.EMAIL_USER,
-    headers: {
-      "X-Priority": "1",
-      "X-MSMail-Priority": "High",
-      Importance: "high",
-    },
-    text: `Hello ${user.name}, Your verification code is: ${otp}. Expires in ${expiryMinutes} minutes.`,
-    html: `
-      <!DOCTYPE html>
-      <html>
-        <body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
-          <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:40px 0;">
-            <tr><td align="center">
-              <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-                <tr>
-                  <td style="background:linear-gradient(135deg,#021135,#086ead);padding:32px 40px;text-align:center;">
-                    <h1 style="margin:0;color:#fff;font-size:24px;">${senderName}</h1>
-                    <p style="margin:8px 0 0;color:#c9e0ff;font-size:14px;">Email Verification</p>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:40px;">
-                    <p style="font-size:16px;color:#333;margin:0 0 8px;">Hello <strong>${user.name}</strong>,</p>
-                    <p style="font-size:15px;color:#555;margin:0 0 24px;line-height:1.6;">
-                      Please use the verification code below to complete your registration.
-                      Expires in <strong>${expiryMinutes} minutes</strong>.
-                    </p>
-                    <div style="text-align:center;margin:32px 0;">
-                      <div style="display:inline-block;background:#f0f9ff;border:2px solid #0ea0e9;border-radius:12px;padding:24px 48px;">
-                        <p style="margin:0;font-size:12px;color:#0ea0e9;letter-spacing:3px;text-transform:uppercase;font-weight:700;">Verification Code</p>
-                        <p style="margin:12px 0 0;font-size:42px;font-weight:900;color:#021135;letter-spacing:12px;">${otp}</p>
-                      </div>
-                    </div>
-                    <p style="font-size:14px;color:#555;">Do not share this code with anyone.</p>
-                    <p style="font-size:13px;color:#999;">If you did not create an account, ignore this email.</p>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="background:#f9f9f9;padding:20px 40px;border-top:1px solid #eee;text-align:center;">
-                    <p style="margin:0;font-size:12px;color:#aaa;">© ${new Date().getFullYear()} ${senderName}</p>
-                  </td>
-                </tr>
-              </table>
-            </td></tr>
-          </table>
-        </body>
-      </html>
-    `,
-  };
+// ══════════════════════════════════════════════════════════════════════════════
+// 4. PASSWORD RESET SUCCESS
+// ══════════════════════════════════════════════════════════════════════════════
+const sendPasswordResetSuccessEmail = async (user, senderName) => {
+  const name   = user.name || "User";
+  const sender = senderName || process.env.EMAIL_SENDER_NAME || "ComplaintSync";
 
-  return sendMailWithLog(mailOptions, "Verification OTP");
+  const content = `
+    ${greeting(name)}
+
+    <!-- Success Banner -->
+    <div style="background:linear-gradient(135deg,#dbeafe,#bfdbfe);
+                border-radius:12px;padding:24px;text-align:center;margin:0 0 24px;">
+      <div style="font-size:48px;margin-bottom:8px;">🔐</div>
+      <h2 style="margin:0;color:#1e40af;font-size:20px;font-weight:700;">
+        Password Reset Successful
+      </h2>
+      <p style="margin:8px 0 0;color:#1d4ed8;font-size:14px;">
+        Your password has been updated successfully.
+      </p>
+    </div>
+
+    <p style="margin:0 0 20px;color:#475569;font-size:15px;line-height:1.6;">
+      This is a confirmation that the password for your account has been
+      successfully changed.
+    </p>
+
+    ${infoTable(
+      infoRow("Account",  user.email) +
+      infoRow("Changed",  new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })) +
+      infoRow("Status",   "✅ Password Updated")
+    )}
+
+    <div style="background:#fee2e2;border-left:4px solid #ef4444;
+                border-radius:4px;padding:12px 16px;margin:20px 0;">
+      <p style="margin:0;color:#991b1b;font-size:13px;">
+        🚨 <strong>Not you?</strong> If you did not change your password,
+        your account may be compromised. Contact support immediately.
+      </p>
+    </div>
+
+    ${signOff(sender)}`;
+
+  return sendMail(
+    user.email,
+    `Password Changed Successfully – ${sender}`,
+    layout(content, sender),
+    "PasswordResetSuccess"
+  );
 };
 
-// ── Email verified success ────────────────────────────────
-const sendEmailVerifiedSuccessEmail = async (
-  user,
-  senderName = "ComplaintSync"
-) => {
-  const mailOptions = {
-    from: `"${senderName}" <${process.env.EMAIL_USER}>`,
-    to: user.email,
-    subject: `Welcome to ${senderName}! Your email is verified ✅`,
-    html: `
-      <div style="font-family:Arial;padding:40px;text-align:center;background:#f4f4f4;">
-        <div style="background:#fff;padding:40px;border-radius:8px;max-width:500px;margin:auto;">
-          <div style="width:80px;height:80px;line-height:80px;background:#f0fdf4;border:2px solid #22c55e;border-radius:50%;margin:auto;">
-            <span style="font-size:40px;">✓</span>
-          </div>
-          <h2 style="margin:20px 0 12px;color:#333;">Welcome, ${user.name}!</h2>
-          <p style="color:#555;">Your email has been successfully verified.</p>
-          <a href="${process.env.FRONTEND_URL || "http://localhost:5173"}/auth"
-             style="display:inline-block;background:#0ea0e9;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;margin-top:20px;">
-            Login to Your Account
-          </a>
-        </div>
+// ══════════════════════════════════════════════════════════════════════════════
+// 5. COMPLAINT SUBMITTED (to citizen/student)
+// ══════════════════════════════════════════════════════════════════════════════
+const sendComplaintSubmittedEmail = async (user, complaint, senderName) => {
+  const name   = user.name || "User";
+  const sender = senderName || process.env.EMAIL_SENDER_NAME || "ComplaintSync";
+
+  const content = `
+    ${greeting(name)}
+
+    <p style="margin:0 0 20px;color:#475569;font-size:15px;line-height:1.6;">
+      Your complaint has been <strong>successfully submitted</strong>.
+      We will review it and keep you updated on its progress.
+    </p>
+
+    ${infoTable(
+      infoRow("Complaint ID", `<strong style="color:#4f46e5;">${complaint.complaintId}</strong>`) +
+      infoRow("Title",        complaint.title) +
+      infoRow("Category",     complaint.category) +
+      infoRow("Priority",     priorityBadge(complaint.priority)) +
+      infoRow("Status",       statusBadge("pending")) +
+      infoRow("Submitted",    new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }))
+    )}
+
+    <div style="background:#eff6ff;border-left:4px solid #3b82f6;
+                border-radius:4px;padding:12px 16px;margin:20px 0;">
+      <p style="margin:0;color:#1e40af;font-size:13px;">
+        📋 <strong>What happens next?</strong><br/>
+        Our team will review your complaint and assign it to the appropriate
+        staff member. You will receive email updates at every step.
+      </p>
+    </div>
+
+    ${signOff(sender)}`;
+
+  return sendMail(
+    user.email,
+    `Complaint Received – ${complaint.complaintId} | ${sender}`,
+    layout(content, sender),
+    "ComplaintSubmitted"
+  );
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 6. COMPLAINT STATUS UPDATE (to citizen/student)
+// ══════════════════════════════════════════════════════════════════════════════
+const sendComplaintStatusUpdateEmail = async (user, complaint, oldStatus, note, senderName) => {
+  const name      = user.name || "User";
+  const sender    = senderName || process.env.EMAIL_SENDER_NAME || "ComplaintSync";
+  const newStatus = complaint.status;
+
+  const content = `
+    ${greeting(name)}
+
+    <p style="margin:0 0 20px;color:#475569;font-size:15px;line-height:1.6;">
+      The status of your complaint has been updated.
+    </p>
+
+    ${infoTable(
+      infoRow("Complaint ID",     `<strong style="color:#4f46e5;">${complaint.complaintId}</strong>`) +
+      infoRow("Title",            complaint.title) +
+      infoRow("Previous Status",  statusBadge(oldStatus)) +
+      infoRow("New Status",       statusBadge(newStatus)) +
+      infoRow("Updated",          new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })) +
+      (note ? infoRow("Staff Note", `<em>${note}</em>`) : "")
+    )}
+
+    ${newStatus === "rejected" ? `
+    <div style="background:#fee2e2;border-left:4px solid #ef4444;
+                border-radius:4px;padding:12px 16px;margin:20px 0;">
+      <p style="margin:0;color:#991b1b;font-size:13px;">
+        ❌ <strong>Complaint Rejected.</strong>
+        If you believe this was rejected in error, please submit a new
+        complaint with additional details.
+      </p>
+    </div>` : ""}
+
+    ${newStatus === "in-progress" ? `
+    <div style="background:#eff6ff;border-left:4px solid #3b82f6;
+                border-radius:4px;padding:12px 16px;margin:20px 0;">
+      <p style="margin:0;color:#1e40af;font-size:13px;">
+        🔧 <strong>Your complaint is being worked on.</strong>
+        Our staff is actively addressing your issue.
+      </p>
+    </div>` : ""}
+
+    ${signOff(sender)}`;
+
+  return sendMail(
+    user.email,
+    `Complaint ${complaint.complaintId} – Status Updated to ${newStatus} | ${sender}`,
+    layout(content, sender),
+    "ComplaintStatusUpdate"
+  );
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 7. COMPLAINT RESOLVED (to citizen/student)
+// ══════════════════════════════════════════════════════════════════════════════
+const sendComplaintResolvedEmail = async (user, complaint, note, senderName) => {
+  const name   = user.name || "User";
+  const sender = senderName || process.env.EMAIL_SENDER_NAME || "ComplaintSync";
+
+  const content = `
+    ${greeting(name)}
+
+    <!-- Success Banner -->
+    <div style="background:linear-gradient(135deg,#d1fae5,#a7f3d0);
+                border-radius:12px;padding:24px;text-align:center;margin:0 0 24px;">
+      <div style="font-size:48px;margin-bottom:8px;">🎉</div>
+      <h2 style="margin:0;color:#065f46;font-size:20px;font-weight:700;">
+        Complaint Resolved!
+      </h2>
+      <p style="margin:8px 0 0;color:#047857;font-size:14px;">
+        Your issue has been successfully addressed.
+      </p>
+    </div>
+
+    ${infoTable(
+      infoRow("Complaint ID", `<strong style="color:#4f46e5;">${complaint.complaintId}</strong>`) +
+      infoRow("Title",        complaint.title) +
+      infoRow("Category",     complaint.category) +
+      infoRow("Status",       statusBadge("resolved")) +
+      infoRow("Resolved On",  new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })) +
+      (note ? infoRow("Resolution Note", `<em>${note}</em>`) : "")
+    )}
+
+    <p style="margin:20px 0 0;color:#475569;font-size:14px;line-height:1.6;">
+      Thank you for using <strong>${sender}</strong>. Your feedback helps us
+      improve our services. If you experience this issue again or have further
+      concerns, please submit a new complaint.
+    </p>
+
+    ${signOff(sender)}`;
+
+  return sendMail(
+    user.email,
+    `Complaint Resolved – ${complaint.complaintId} | ${sender}`,
+    layout(content, sender),
+    "ComplaintResolved"
+  );
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 8. COMPLAINT ASSIGNED TO STAFF
+// ══════════════════════════════════════════════════════════════════════════════
+const sendComplaintAssignedEmail = async (staffUser, complaint, senderName) => {
+  const name   = staffUser.name || "Staff";
+  const sender = senderName || process.env.EMAIL_SENDER_NAME || "ComplaintSync";
+
+  const content = `
+    ${greeting(name)}
+
+    <p style="margin:0 0 20px;color:#475569;font-size:15px;line-height:1.6;">
+      A new complaint has been <strong>assigned to you</strong>.
+      Please review the details below and take appropriate action.
+    </p>
+
+    ${infoTable(
+      infoRow("Complaint ID", `<strong style="color:#4f46e5;">${complaint.complaintId}</strong>`) +
+      infoRow("Title",        complaint.title) +
+      infoRow("Description",  complaint.description?.substring(0, 200) + (complaint.description?.length > 200 ? "..." : "")) +
+      infoRow("Category",     complaint.category) +
+      infoRow("Priority",     priorityBadge(complaint.priority)) +
+      infoRow("Status",       statusBadge(complaint.status)) +
+      (complaint.location ? infoRow("Location", complaint.location) : "") +
+      infoRow("Assigned On",  new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }))
+    )}
+
+    <div style="background:#eff6ff;border-left:4px solid #3b82f6;
+                border-radius:4px;padding:12px 16px;margin:20px 0;">
+      <p style="margin:0;color:#1e40af;font-size:13px;">
+        📌 <strong>Action Required:</strong> Please log in to the
+        ${sender} dashboard to review and process this complaint.
+      </p>
+    </div>
+
+    ${signOff(sender)}`;
+
+  return sendMail(
+    staffUser.email,
+    `New Complaint Assigned – ${complaint.complaintId} | ${sender}`,
+    layout(content, sender),
+    "ComplaintAssigned"
+  );
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 9. COMPLAINT REJECTED (to citizen/student)
+// ══════════════════════════════════════════════════════════════════════════════
+const sendComplaintRejectedEmail = async (user, complaint, reason, senderName) => {
+  const name   = user.name || "User";
+  const sender = senderName || process.env.EMAIL_SENDER_NAME || "ComplaintSync";
+
+  const content = `
+    ${greeting(name)}
+
+    <div style="background:linear-gradient(135deg,#fee2e2,#fecaca);
+                border-radius:12px;padding:24px;text-align:center;margin:0 0 24px;">
+      <div style="font-size:48px;margin-bottom:8px;">❌</div>
+      <h2 style="margin:0;color:#991b1b;font-size:20px;font-weight:700;">
+        Complaint Rejected
+      </h2>
+    </div>
+
+    <p style="margin:0 0 20px;color:#475569;font-size:15px;line-height:1.6;">
+      After reviewing your complaint, we were unable to process it at this time.
+    </p>
+
+    ${infoTable(
+      infoRow("Complaint ID", `<strong style="color:#4f46e5;">${complaint.complaintId}</strong>`) +
+      infoRow("Title",        complaint.title) +
+      infoRow("Status",       statusBadge("rejected")) +
+      infoRow("Reason",       reason || complaint.rejectionReason || "Does not meet the submission criteria.") +
+      infoRow("Date",         new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }))
+    )}
+
+    <p style="margin:20px 0 0;color:#475569;font-size:14px;line-height:1.6;">
+      If you believe this decision is incorrect or have additional information
+      to provide, please submit a new complaint with more details.
+    </p>
+
+    ${signOff(sender)}`;
+
+  return sendMail(
+    user.email,
+    `Complaint Rejected – ${complaint.complaintId} | ${sender}`,
+    layout(content, sender),
+    "ComplaintRejected"
+  );
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
+// 10. WELCOME EMAIL (after registration, before verify — optional)
+// ══════════════════════════════════════════════════════════════════════════════
+const sendWelcomeEmail = async (user, otp, expiryMinutes = 10, senderName) => {
+  // Combines welcome + OTP in one email to avoid 2 emails on register
+  const name   = user.name || "User";
+  const sender = senderName || process.env.EMAIL_SENDER_NAME || "ComplaintSync";
+
+  const content = `
+    ${greeting(name)}
+
+    <p style="margin:0 0 20px;color:#475569;font-size:15px;line-height:1.6;">
+      Welcome to <strong>${sender}</strong>! We're glad you joined us.
+      To activate your account, please verify your email address using
+      the one-time code below.
+    </p>
+
+    <!-- OTP Box -->
+    <div style="background:linear-gradient(135deg,#f0f0ff,#e8e8ff);
+                border:2px solid #6366f1;border-radius:12px;
+                padding:28px;text-align:center;margin:24px 0;">
+      <p style="margin:0 0 8px;color:#4f46e5;font-size:13px;
+                font-weight:600;text-transform:uppercase;letter-spacing:1px;">
+        Email Verification Code
+      </p>
+      <div style="font-size:42px;font-weight:800;color:#4f46e5;
+                  letter-spacing:10px;font-family:monospace;margin:8px 0;">
+        ${otp}
       </div>
-    `,
-  };
+      <p style="margin:8px 0 0;color:#6b7280;font-size:13px;">
+        ⏱ Expires in <strong>${expiryMinutes} minutes</strong>
+      </p>
+    </div>
 
-  return sendMailWithLog(mailOptions, "Email Verified Success");
+    ${infoTable(
+      infoRow("Name",  name) +
+      infoRow("Email", user.email) +
+      infoRow("Role",  user.role || "user")
+    )}
+
+    <div style="background:#fef3c7;border-left:4px solid #f59e0b;
+                border-radius:4px;padding:12px 16px;margin:20px 0;">
+      <p style="margin:0;color:#92400e;font-size:13px;">
+        🔒 <strong>Security Notice:</strong> Never share this code with anyone.
+      </p>
+    </div>
+
+    ${signOff(sender)}`;
+
+  return sendMail(
+    user.email,
+    `Welcome to ${sender} – Verify Your Email`,
+    layout(content, sender),
+    "WelcomeWithOTP"
+  );
 };
 
-// ── Complaint assigned email ──────────────────────────────
-const sendComplaintAssignedEmail = async (
-  student,
-  complaint,
-  staff,
-  senderName = "ComplaintSync"
-) => {
-  if (!student?.email) {
-    console.warn("⚠️  [Complaint Assigned] No student email — skipping");
-    return { success: false, skipped: true };
-  }
-
-  const mailOptions = {
-    from: `"${senderName}" <${process.env.EMAIL_USER}>`,
-    to: student.email,
-    subject: `Your complaint has been assigned — ${complaint.complaintId || complaint._id}`,
-    html: `
-      <div style="font-family:Arial;padding:40px;background:#f4f4f4;">
-        <div style="background:#fff;padding:32px;border-radius:8px;max-width:600px;margin:auto;">
-          <h2 style="color:#021135;">Complaint Assigned</h2>
-          <p>Hello <strong>${student.name}</strong>,</p>
-          <p>Your complaint has been assigned to <strong>${staff.name}</strong>.</p>
-          <div style="background:#f8fafc;padding:16px;border-radius:8px;margin:16px 0;">
-            <p><strong>ID:</strong> ${complaint.complaintId || complaint._id}</p>
-            <p><strong>Title:</strong> ${complaint.title}</p>
-            <p><strong>Category:</strong> ${complaint.category}</p>
-            <p><strong>Priority:</strong> ${(complaint.priority || "medium").toUpperCase()}</p>
-          </div>
-          <a href="${process.env.FRONTEND_URL || "http://localhost:5173"}/complaints"
-             style="display:inline-block;background:#6366f1;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;">
-            Track My Complaint
-          </a>
-        </div>
-      </div>
-    `,
-  };
-
-  return sendMailWithLog(mailOptions, "Complaint Assigned");
-};
-
-// ── Complaint resolved email ──────────────────────────────
-const sendComplaintResolvedEmail = async (
-  student,
-  complaint,
-  staff,
-  senderName = "ComplaintSync"
-) => {
-  if (!student?.email) {
-    console.warn("⚠️  [Complaint Resolved] No student email — skipping");
-    return { success: false, skipped: true };
-  }
-
-  const mailOptions = {
-    from: `"${senderName}" <${process.env.EMAIL_USER}>`,
-    to: student.email,
-    subject: `✅ Complaint Resolved — ${complaint.complaintId || complaint._id}`,
-    html: `
-      <div style="font-family:Arial;padding:40px;background:#f4f4f4;">
-        <div style="background:#fff;padding:32px;border-radius:8px;max-width:600px;margin:auto;">
-          <div style="text-align:center;">
-            <div style="width:56px;height:56px;line-height:56px;background:#f0fdf4;border:2px solid #22c55e;border-radius:50%;margin:auto;">
-              <span style="font-size:28px;">✓</span>
-            </div>
-            <h2 style="color:#059669;margin-top:16px;">Complaint Resolved</h2>
-          </div>
-          <p>Hello <strong>${student.name}</strong>,</p>
-          <p>Great news! Your complaint has been resolved by <strong>${staff.name}</strong>.</p>
-          <div style="background:#f0fdf4;padding:16px;border-radius:8px;margin:16px 0;border:1px solid #bbf7d0;">
-            <p><strong>ID:</strong> ${complaint.complaintId || complaint._id}</p>
-            <p><strong>Title:</strong> ${complaint.title}</p>
-            <p><strong>Resolved On:</strong> ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })}</p>
-          </div>
-          <a href="${process.env.FRONTEND_URL || "http://localhost:5173"}/complaints"
-             style="display:inline-block;background:#10b981;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;">
-            View My Complaints
-          </a>
-        </div>
-      </div>
-    `,
-  };
-
-  return sendMailWithLog(mailOptions, "Complaint Resolved");
-};
-
-// ── Complaint rejected email ──────────────────────────────
-const sendComplaintRejectedEmail = async (
-  student,
-  complaint,
-  rejectedBy,
-  senderName = "ComplaintSync"
-) => {
-  if (!student?.email) {
-    console.warn("⚠️  [Complaint Rejected] No student email — skipping");
-    return { success: false, skipped: true };
-  }
-
-  const mailOptions = {
-    from: `"${senderName}" <${process.env.EMAIL_USER}>`,
-    to: student.email,
-    subject: `Complaint Update — ${complaint.complaintId || complaint._id}`,
-    html: `
-      <div style="font-family:Arial;padding:40px;background:#f4f4f4;">
-        <div style="background:#fff;padding:32px;border-radius:8px;max-width:600px;margin:auto;">
-          <h2 style="color:#991b1b;">Complaint Update</h2>
-          <p>Hello <strong>${student.name}</strong>,</p>
-          <p>After careful review, your complaint could not be processed at this time.</p>
-          <div style="background:#fef2f2;padding:16px;border-radius:8px;margin:16px 0;border:1px solid #fecaca;">
-            <p><strong>ID:</strong> ${complaint.complaintId || complaint._id}</p>
-            <p><strong>Title:</strong> ${complaint.title}</p>
-            <p><strong>Reviewed By:</strong> ${rejectedBy.name}</p>
-          </div>
-          ${complaint.rejectionReason ? `
-            <div style="background:#fff7ed;border-left:4px solid #f59e0b;padding:16px;margin:16px 0;">
-              <p style="margin:0;font-size:12px;color:#92400e;font-weight:700;text-transform:uppercase;">Reason for Rejection</p>
-              <p style="margin:8px 0 0;color:#0f172a;">${complaint.rejectionReason}</p>
-            </div>
-          ` : ""}
-          <a href="${process.env.FRONTEND_URL || "http://localhost:5173"}/submit"
-             style="display:inline-block;background:#6366f1;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;">
-            Submit New Complaint
-          </a>
-        </div>
-      </div>
-    `,
-  };
-
-  return sendMailWithLog(mailOptions, "Complaint Rejected");
-};
-
+// ══════════════════════════════════════════════════════════════════════════════
+// Exports
+// ══════════════════════════════════════════════════════════════════════════════
 module.exports = {
-  sendStaffWelcomeEmail,
-  sendPasswordResetOTPEmail,
-  sendPasswordResetSuccessEmail,
+  sendMail,
+  sendWelcomeEmail,
   sendEmailVerificationOTP,
   sendEmailVerifiedSuccessEmail,
-  sendComplaintAssignedEmail,
+  sendPasswordResetOTPEmail,
+  sendPasswordResetSuccessEmail,
+  sendComplaintSubmittedEmail,
+  sendComplaintStatusUpdateEmail,
   sendComplaintResolvedEmail,
+  sendComplaintAssignedEmail,
   sendComplaintRejectedEmail,
 };

@@ -1,10 +1,14 @@
-const User     = require("../models/User");
-const Settings = require("../models/Settings");
-const jwt      = require("jsonwebtoken");
-const crypto   = require("crypto");
-const bcrypt   = require("bcryptjs");
+// E:\CMS\server\controllers\auth.controller.js
+"use strict";
 
-const { validateEmail } = require("../utils/emailValidator");
+const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
+const jwt = require("jsonwebtoken");
+const admin = require("../config/firebaseadmin");
+const User = require("../models/User");
+const Settings = require("../models/Settings");
+
+const { generateAccessToken, generateRefreshToken } = require("../utils/generateToken");
 const {
   generateOTP,
   hashOTP,
@@ -12,421 +16,313 @@ const {
   getOTPExpiry,
   canResendOTP,
 } = require("../utils/otpGenerator");
+const { validateEmail } = require("../utils/emailValidator");
+
 const {
-  sendPasswordResetOTPEmail,
-  sendPasswordResetSuccessEmail,
+  sendWelcomeEmail,
   sendEmailVerificationOTP,
   sendEmailVerifiedSuccessEmail,
+  sendPasswordResetOTPEmail,
+  sendPasswordResetSuccessEmail,
 } = require("../services/email.service");
-const {
-  generateAccessToken,
-  generateRefreshToken,
-} = require("../utils/generateToken");
 
-// ── Build safe user response object ──────────────────────
 const buildUserResponse = (user) => ({
-  id:       user._id,
-  name:     user.name,
-  email:    user.email,
-  role:     user.role,
-  avatar:   user.avatar,
-  phone:    user.phone,
-  bio:      user.bio,
-  course:   user.course,
-  year:     user.year,
-  category: user.category,
+  _id: user._id,
+  name: user.name,
+  email: user.email,
+  phone: user.phone,
+  role: user.role,
   provider: user.provider,
+  avatar: user.avatar,
+  bio: user.bio,
+  course: user.course,
+  year: user.year,
+  isEmailVerified: user.isEmailVerified,
+  isActive: user.isActive,
+  createdAt: user.createdAt,
 });
 
-// ── Register ──────────────────────────────────────────────
+// ── Register ───────────────────────────────────────────────────────────────────
 const register = async (req, res) => {
   try {
-    const { name, email, phone, password, course, year } = req.body;
+    const { name, email, phone, password } = req.body;
 
-    if (!name || name.trim().length < 2) {
-      return res.status(400).json({
-        success: false,
-        message: "Name must be at least 2 characters long.",
-      });
-    }
-
+    // Validate email
     const emailCheck = validateEmail(email);
     if (!emailCheck.valid) {
-      return res.status(400).json({
-        success: false,
-        message: emailCheck.reason,
-      });
-    }
-    const cleanEmail = emailCheck.email;
-
-    if (!phone || !/^[0-9]{10}$/.test(phone)) {
-      return res.status(400).json({
-        success: false,
-        message: "Phone number must be exactly 10 digits.",
-      });
+      return res.status(400).json({ success: false, message: emailCheck.reason });
     }
 
-    if (!password) {
-      return res.status(400).json({
+    const settings = await Settings.getSingleton();
+
+    // Check duplicates
+    const existingEmail = await User.findOne({ email: emailCheck.email });
+    if (existingEmail) {
+      return res.status(409).json({
         success: false,
-        message: "Password is required.",
+        message: existingEmail.isEmailVerified
+          ? "An account with this email already exists. Please login."
+          : "An account with this email exists but is not verified. Please check your inbox.",
       });
     }
 
-    const settings  = await Settings.getSingleton();
-    const minLength = settings.passwordMinLength || 8;
-
-    if (password.length < minLength) {
-      return res.status(400).json({
-        success: false,
-        message: `Password must be at least ${minLength} characters long.`,
-      });
+    if (phone) {
+      const existingPhone = await User.findOne({ phone });
+      if (existingPhone) {
+        return res.status(409).json({
+          success: false,
+          message: "This phone number is already registered.",
+        });
+      }
     }
 
-    if (settings.passwordRequireUppercase && !/[A-Z]/.test(password)) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must contain at least one uppercase letter.",
-      });
-    }
-
-    if (settings.passwordRequireNumber && !/\d/.test(password)) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must contain at least one number.",
-      });
-    }
-
-    if (settings.passwordRequireSpecial && !/[@$!%*?&#]/.test(password)) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must contain at least one special character (@$!%*?&#).",
-      });
-    }
-
-    const exists = await User.findOne({ email: cleanEmail });
-    if (exists) {
-      return res.status(400).json({
-        success: false,
-        message: "This email is already registered. Please login instead.",
-      });
-    }
-
-    const phoneExists = await User.findOne({ phone });
-    if (phoneExists) {
-      return res.status(400).json({
-        success: false,
-        message: "This phone number is already registered.",
-      });
-    }
-
-    // ✅ Role is always "user" — never assigned from email domain
-    const userData = {
-      name:            name.trim(),
-      email:           cleanEmail,
-      phone,
+    // Create user
+    const user = await User.create({
+      name: name.trim(),
+      email: emailCheck.email,
+      phone: phone || undefined,
       password,
-      role:            "user",
-      isEmailVerified: false,
-    };
+      provider: "local",
+    });
 
-    // Only add course/year for student accounts
-    if (course) userData.course = course;
-    if (year)   userData.year   = year;
+    // Generate OTP
+    const otp = generateOTP();
+    const hashedOTP = await hashOTP(otp);
+    const otpExpiryMins = settings.otpExpiryMinutes || 10;
 
-    const otpExpiryMinutes = settings.otpExpiryMinutes || 10;
-    const otp              = generateOTP();
-    const hashedOTP        = await hashOTP(otp);
+    user.emailVerificationOTP = hashedOTP;
+    user.emailVerificationOTPExpiry = getOTPExpiry(otpExpiryMins);
+    user.emailVerificationAttempts = 0;
+    user.lastOTPSentAt = new Date();
+    await user.save();
 
-    userData.emailVerificationOTP        = hashedOTP;
-    userData.emailVerificationOTPExpiry  = getOTPExpiry(otpExpiryMinutes);
-    userData.lastOTPSentAt               = new Date();
-
-    const user = await User.create(userData);
-
+    // Send welcome + OTP email (one email, not two)
     if (settings.emailEnabled) {
-      await sendEmailVerificationOTP(
-        user,
-        otp,
-        otpExpiryMinutes,
-        settings.emailSenderName
+      sendWelcomeEmail(user, otp, otpExpiryMins, settings.emailSenderName).catch(
+        (err) => console.error("[Register] Email failed:", err.message)
       );
     }
 
-    res.status(201).json({
-      success:              true,
-      message:              "Registration successful! Please check your email for the verification code.",
-      requiresVerification: true,
-      email:                cleanEmail,
-      otpExpiryMinutes,
+    return res.status(201).json({
+      success: true,
+      message: `Account created! Please check your email for the verification code.`,
+      otpExpiryMinutes: otpExpiryMins,
+      email: user.email,
     });
   } catch (err) {
-    if (err.name === "ValidationError") {
-      const firstError = Object.values(err.errors)[0];
-      return res.status(400).json({
-        success: false,
-        message: firstError.message,
-      });
-    }
     if (err.code === 11000) {
       const field = Object.keys(err.keyPattern)[0];
-      return res.status(400).json({
+      return res.status(409).json({
         success: false,
         message: `This ${field} is already registered.`,
       });
     }
-    res.status(500).json({
-      success: false,
-      message: "Registration failed. Please try again.",
-    });
+    console.error("[Register] Error:", err);
+    res.status(500).json({ success: false, message: "Registration failed. Please try again." });
   }
 };
 
-// ── Login ─────────────────────────────────────────────────
+// ── Login ──────────────────────────────────────────────────────────────────────
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: "Email is required.",
-      });
-    }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({
-        success: false,
-        message: "Please enter a valid email address.",
-      });
-    }
-
-    if (!password) {
-      return res.status(400).json({
-        success: false,
-        message: "Password is required.",
-      });
-    }
 
     const user = await User.findOne({
       email: email.toLowerCase().trim(),
     }).select("+password");
 
     if (!user) {
-      return res.status(404).json({
+      return res.status(401).json({
         success: false,
-        message: "No account found with this email. Please register first.",
-      });
-    }
-
-    if (user.lockUntil && user.lockUntil > new Date()) {
-      const minutesLeft = Math.ceil(
-        (user.lockUntil - new Date()) / (1000 * 60)
-      );
-      return res.status(423).json({
-        success: false,
-        message: `Account locked. Try again in ${minutesLeft} minute(s).`,
-      });
-    }
-
-    if (user.suspendedUntil && user.suspendedUntil > new Date()) {
-      const daysLeft = Math.ceil(
-        (user.suspendedUntil - new Date()) / (1000 * 60 * 60 * 24)
-      );
-      return res.status(403).json({
-        success: false,
-        message:        `Your account is suspended. Try again in ${daysLeft} day(s).`,
-        suspendedUntil: user.suspendedUntil,
-        reason:         user.suspensionReason || "",
-      });
-    }
-
-    if (user.isActive === false) {
-      return res.status(403).json({
-        success: false,
-        message: "Your account has been deactivated. Please contact admin.",
+        message: "No account found with this email.",
       });
     }
 
     if (user.provider && user.provider !== "local") {
       return res.status(400).json({
         success: false,
-        message: `This account uses ${user.provider} login. Please sign in with ${user.provider}.`,
+        message: `This account uses ${user.provider} login. Please use that instead.`,
       });
     }
 
-    const match = await user.matchPassword(password);
+    // Check lock
+    if (user.isLocked()) {
+      const minutesLeft = Math.ceil((user.lockUntil - new Date()) / (1000 * 60));
+      return res.status(423).json({
+        success: false,
+        message: `Account locked. Try again in ${minutesLeft} minute(s).`,
+      });
+    }
 
-    if (!match) {
-      user.loginAttempts = (user.loginAttempts || 0) + 1;
-
-      if (user.loginAttempts >= 5) {
-        user.lockUntil     = new Date(Date.now() + 30 * 60 * 1000);
-        user.loginAttempts = 0;
-        await user.save();
-        return res.status(423).json({
-          success: false,
-          message: "Too many failed attempts. Account locked for 30 minutes.",
-        });
-      }
-
-      await user.save();
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) {
+      await user.incrementLoginAttempts();
+      const remaining = Math.max(0, 5 - user.loginAttempts);
       return res.status(401).json({
         success: false,
-        message: `Incorrect password. ${5 - user.loginAttempts} attempt(s) remaining.`,
-      });
-    }
-
-    if (!user.isEmailVerified) {
-      return res.status(403).json({
-        success: false,
-        message:              "Please verify your email address to login.",
-        requiresVerification: true,
-        email:                user.email,
-      });
-    }
-
-    user.loginAttempts = 0;
-    user.lockUntil     = null;
-    user.lastLoginAt   = new Date();
-    user.lastLoginIP   = req.ip;
-    await user.save();
-
-    const accessToken  = generateAccessToken(user._id);
-    const refreshToken = generateRefreshToken(user._id);
-
-    res.json({
-      success: true,
-      accessToken,
-      refreshToken,
-      user: buildUserResponse(user),
-    });
-  } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: "Login failed. Please try again.",
-    });
-  }
-};
-
-// ── Social Login ──────────────────────────────────────────
-const socialLogin = async (req, res) => {
-  try {
-    const {
-      idToken,
-      email:    clientEmail,
-      name:     clientName,
-      avatar:   clientAvatar,
-      provider: clientProvider,
-    } = req.body;
-
-    if (!idToken && !clientEmail) {
-      return res.status(400).json({
-        success: false,
-        message: "Authentication data missing.",
-      });
-    }
-
-    let decoded = null;
-
-    if (idToken) {
-      try {
-        const admin = require("../config/firebaseadmin");
-        decoded     = await admin.auth().verifyIdToken(idToken);
-      } catch {
-        // Silent fallback to client-provided data
-      }
-    }
-
-    const email = decoded?.email || clientEmail || "";
-
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: "No email found. Please try another login method.",
-      });
-    }
-
-    const name   = decoded?.name    || clientName   || email.split("@")[0];
-    const avatar = decoded?.picture || clientAvatar || "";
-
-    const rawProvider = clientProvider ||
-      decoded?.firebase?.sign_in_provider || "google";
-
-    const providerMap = {
-      "google.com":   "google",
-      "github.com":   "github",
-      "facebook.com": "facebook",
-      "twitter.com":  "twitter",
-      google:         "google",
-      github:         "github",
-      facebook:       "facebook",
-      twitter:        "twitter",
-    };
-
-    const provider = providerMap[rawProvider] || "google";
-
-    let user = await User.findOne({ email });
-
-    if (!user) {
-      // ✅ Always create as "user" — no email domain role check
-      user = await User.create({
-        name,
-        email,
-        // ✅ Use crypto for random password — this is correct usage
-        // Social login users never use this password
-        password:        crypto.randomBytes(32).toString("hex"),
-        role:            "user",
-        provider,
-        avatar,
-        isEmailVerified: true,
+        message: remaining > 0
+          ? `Incorrect password. ${remaining} attempt(s) remaining.`
+          : "Account locked due to too many failed attempts. Try again in 30 minutes.",
       });
     }
 
     if (user.suspendedUntil && user.suspendedUntil > new Date()) {
-      const daysLeft = Math.ceil(
-        (user.suspendedUntil - new Date()) / (1000 * 60 * 60 * 24)
-      );
       return res.status(403).json({
         success: false,
-        message:        `Account suspended. Try again in ${daysLeft} day(s).`,
+        message: "Your account has been suspended.",
         suspendedUntil: user.suspendedUntil,
-        reason:         user.suspensionReason || "",
+        reason: user.suspensionReason,
       });
     }
 
     if (user.isActive === false) {
       return res.status(403).json({
         success: false,
-        message: "Account is deactivated. Contact admin.",
+        message: "Account deactivated. Please contact admin.",
       });
     }
 
-    const accessToken  = generateAccessToken(user._id);
+    if (!user.isEmailVerified) {
+      const settings = await Settings.getSingleton();
+      const cooldown = canResendOTP(user.lastOTPSentAt, 60);
+      let otpMessage = "";
+
+      if (cooldown.canResend) {
+        const otp = generateOTP();
+        const hashedOTP = await hashOTP(otp);
+        const otpExpiryMins = settings.otpExpiryMinutes || 10;
+
+        user.emailVerificationOTP = hashedOTP;
+        user.emailVerificationOTPExpiry = getOTPExpiry(otpExpiryMins);
+        user.emailVerificationAttempts = 0;
+        user.lastOTPSentAt = new Date();
+        await user.save();
+
+        if (settings.emailEnabled) {
+          sendEmailVerificationOTP(user, otp, otpExpiryMins, settings.emailSenderName).catch(
+            (err) => console.error("[Login] OTP email failed:", err.message)
+          );
+        }
+        otpMessage = " A new verification code has been sent to your email.";
+      }
+
+      return res.status(403).json({
+        success: false,
+        message: `Please verify your email before logging in.${otpMessage}`,
+        requiresVerify: true,
+        email: user.email,
+      });
+    }
+
+    await user.resetLoginAttempts(req.ip);
+
+    const accessToken = generateAccessToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
 
     return res.json({
       success: true,
+      message: "Login successful.",
       accessToken,
       refreshToken,
       user: buildUserResponse(user),
     });
   } catch (err) {
-    return res.status(500).json({
-      success: false,
-      message: "Social login failed.",
-    });
+    console.error("[Login] Error:", err);
+    res.status(500).json({ success: false, message: "Login failed. Please try again." });
   }
 };
 
-// ── Refresh Token ─────────────────────────────────────────
+const socialLogin = async (req, res) => {
+  try {
+    const { idToken } = req.body;
+
+    if (!idToken) {
+      return res.status(400).json({ success: false, message: "ID token is required." });
+    }
+
+    // admin is now getAuth() directly — call verifyIdToken() on it directly
+    if (!admin) {
+      return res.status(503).json({
+        success: false,
+        message: "Social login is not configured on this server.",
+      });
+    }
+
+    const decoded = await admin.verifyIdToken(idToken);
+    const { email, name, picture, firebase } = decoded;
+    const provider = firebase?.sign_in_provider?.replace(".com", "") || "google";
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email not provided by social provider.",
+      });
+    }
+
+    let user = await User.findOne({ email: email.toLowerCase() });
+
+    if (!user) {
+      user = await User.create({
+        name: name || email.split("@")[0],
+        email: email.toLowerCase(),
+        provider,
+        avatar: picture || "",
+        isEmailVerified: true,
+        isActive: true,
+      });
+
+      const settings = await Settings.getSingleton();
+      if (settings.emailEnabled) {
+        sendEmailVerifiedSuccessEmail(user, settings.emailSenderName).catch(
+          (err) => console.error("[SocialLogin] Welcome email failed:", err.message)
+        );
+      }
+    } else {
+      if (user.provider !== provider && user.provider === "local") {
+        return res.status(400).json({
+          success: false,
+          message: "This email is registered with a password. Please login normally.",
+        });
+      }
+      if (!user.isActive) {
+        return res.status(403).json({
+          success: false,
+          message: "Account deactivated. Please contact admin.",
+        });
+      }
+      user.lastLoginAt = new Date();
+      await user.save();
+    }
+
+    const accessToken = generateAccessToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
+
+    return res.json({
+      success: true,
+      message: "Login successful.",
+      accessToken,
+      refreshToken,
+      user: buildUserResponse(user),
+    });
+  } catch (err) {
+    console.error("[SocialLogin] Error:", err);
+    if (err.code === "auth/id-token-expired") {
+      return res.status(401).json({ success: false, message: "Session expired. Please try again." });
+    }
+    if (err.code === "auth/argument-error") {
+      return res.status(401).json({ success: false, message: "Invalid authentication token." });
+    }
+    res.status(500).json({ success: false, message: "Social login failed. Please try again." });
+  }
+};
+
 const refreshTokenController = async (req, res) => {
   try {
     const { refreshToken } = req.body;
     if (!refreshToken) {
       return res.status(401).json({ success: false, message: "No refresh token" });
     }
-    const decoded     = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
     const accessToken = generateAccessToken(decoded.id);
     res.json({ success: true, accessToken });
   } catch {
@@ -437,7 +333,7 @@ const refreshTokenController = async (req, res) => {
   }
 };
 
-// ── Get current user ──────────────────────────────────────
+// ── Get Me ─────────────────────────────────────────────────────────────────────
 const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select("-password");
@@ -447,23 +343,18 @@ const getMe = async (req, res) => {
   }
 };
 
-// ── Forgot Password ───────────────────────────────────────
+// ── Forgot Password ────────────────────────────────────────────────────────────
 const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
 
     if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: "Please enter your email address.",
-      });
+      return res.status(400).json({ success: false, message: "Please enter your email address." });
     }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return res.status(400).json({
-        success: false,
-        message: "Please enter a valid email address.",
-      });
+    const emailCheck = validateEmail(email);
+    if (!emailCheck.valid) {
+      return res.status(400).json({ success: false, message: emailCheck.reason });
     }
 
     const settings = await Settings.getSingleton();
@@ -475,9 +366,7 @@ const forgotPassword = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({
-      email: email.toLowerCase().trim(),
-    }).select(
+    const user = await User.findOne({ email: emailCheck.email }).select(
       "+passwordResetOTP +passwordResetOTPExpiry +passwordResetToken +passwordResetTokenExpiry"
     );
 
@@ -504,73 +393,45 @@ const forgotPassword = async (req, res) => {
 
     const otpExpiryMinutes = settings.otpExpiryMinutes || 10;
 
-    // ✅ Use utility functions — consistent with rest of app
-    const otp       = generateOTP();
+    const otp = generateOTP();
     const hashedOTP = await hashOTP(otp);
-    const expiry    = getOTPExpiry(otpExpiryMinutes);
+    const expiry = getOTPExpiry(otpExpiryMinutes);
 
-    user.passwordResetOTP          = hashedOTP;
-    user.passwordResetOTPExpiry    = expiry;
-    user.passwordResetToken        = null;
-    user.passwordResetTokenExpiry  = null;
+    user.passwordResetOTP = hashedOTP;
+    user.passwordResetOTPExpiry = expiry;
+    user.passwordResetToken = null;
+    user.passwordResetTokenExpiry = null;
     await user.save();
 
-    await sendPasswordResetOTPEmail(
-      user,
-      otp,
-      otpExpiryMinutes,
-      settings.emailSenderName
-    );
+    await sendPasswordResetOTPEmail(user, otp, otpExpiryMinutes, settings.emailSenderName);
 
     return res.status(200).json({
       success: true,
       message: `OTP sent to your email. Valid for ${otpExpiryMinutes} minutes.`,
     });
   } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: "Failed to send OTP. Please try again.",
-    });
+    console.error("[ForgotPassword] Error:", err);
+    res.status(500).json({ success: false, message: "Failed to send OTP. Please try again." });
   }
 };
 
-// ── Verify OTP ────────────────────────────────────────────
 const verifyOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: "Email is required.",
-      });
+    if (!email || !otp) {
+      return res.status(400).json({ success: false, message: "Email and OTP are required." });
     }
-
-    if (!otp) {
-      return res.status(400).json({
-        success: false,
-        message: "Please enter the 6-digit OTP.",
-      });
-    }
-
     if (!/^\d{6}$/.test(otp)) {
-      return res.status(400).json({
-        success: false,
-        message: "OTP must be exactly 6 digits (numbers only).",
-      });
+      return res.status(400).json({ success: false, message: "OTP must be exactly 6 digits." });
     }
 
-    const user = await User.findOne({
-      email: email.toLowerCase().trim(),
-    }).select(
+    const user = await User.findOne({ email: email.toLowerCase().trim() }).select(
       "+passwordResetOTP +passwordResetOTPExpiry +passwordResetToken +passwordResetTokenExpiry"
     );
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "No account found with this email.",
-      });
+      return res.status(404).json({ success: false, message: "No account found with this email." });
     }
 
     if (!user.passwordResetOTP) {
@@ -581,17 +442,13 @@ const verifyOTP = async (req, res) => {
     }
 
     if (user.passwordResetOTPExpiry < new Date()) {
-      user.passwordResetOTP         = null;
-      user.passwordResetOTPExpiry   = null;
+      user.passwordResetOTP = null;
+      user.passwordResetOTPExpiry = null;
       await user.save();
-      return res.status(400).json({
-        success: false,
-        message: "OTP has expired. Please request a new one.",
-      });
+      return res.status(400).json({ success: false, message: "OTP has expired. Please request a new one." });
     }
 
     const isMatch = await bcrypt.compare(otp, user.passwordResetOTP);
-
     if (!isMatch) {
       return res.status(400).json({
         success: false,
@@ -599,58 +456,44 @@ const verifyOTP = async (req, res) => {
       });
     }
 
-    // ✅ crypto used correctly here — generating secure reset token
-    const rawToken    = crypto.randomBytes(32).toString("hex");
+    const rawToken = crypto.randomBytes(32).toString("hex");
     const hashedToken = await bcrypt.hash(rawToken, 10);
     const tokenExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
-    user.passwordResetOTP          = null;
-    user.passwordResetOTPExpiry    = null;
-    user.passwordResetToken        = hashedToken;
-    user.passwordResetTokenExpiry  = tokenExpiry;
+    user.passwordResetOTP = null;
+    user.passwordResetOTPExpiry = null;
+    user.passwordResetToken = hashedToken;
+    user.passwordResetTokenExpiry = tokenExpiry;
     await user.save();
 
     return res.status(200).json({
-      success:    true,
-      message:    "OTP verified successfully. You can now set a new password.",
+      success: true,
+      message: "OTP verified successfully. You can now set a new password.",
       resetToken: rawToken,
-      email:      user.email,
+      email: user.email,
     });
   } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: "Verification failed. Please try again.",
-    });
+    console.error("[VerifyOTP] Error:", err);
+    res.status(500).json({ success: false, message: "Verification failed. Please try again." });
   }
 };
 
-// ── Reset Password ────────────────────────────────────────
+// ── Reset Password ─────────────────────────────────────────────────────────────
 const resetPassword = async (req, res) => {
   try {
     const { email, resetToken, newPassword, confirmPassword } = req.body;
 
     if (!email || !resetToken) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid reset session. Please start over.",
-      });
+      return res.status(400).json({ success: false, message: "Invalid reset session. Please start over." });
     }
-
     if (!newPassword || !confirmPassword) {
-      return res.status(400).json({
-        success: false,
-        message: "Please fill in both password fields.",
-      });
+      return res.status(400).json({ success: false, message: "Please fill in both password fields." });
     }
-
     if (newPassword !== confirmPassword) {
-      return res.status(400).json({
-        success: false,
-        message: "Passwords do not match.",
-      });
+      return res.status(400).json({ success: false, message: "Passwords do not match." });
     }
 
-    const settings  = await Settings.getSingleton();
+    const settings = await Settings.getSingleton();
     const minLength = settings.passwordMinLength || 8;
 
     if (newPassword.length < minLength) {
@@ -659,55 +502,33 @@ const resetPassword = async (req, res) => {
         message: `Password must be at least ${minLength} characters long.`,
       });
     }
-
     if (settings.passwordRequireUppercase && !/[A-Z]/.test(newPassword)) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must contain at least one uppercase letter.",
-      });
+      return res.status(400).json({ success: false, message: "Password must contain at least one uppercase letter." });
     }
-
     if (settings.passwordRequireNumber && !/\d/.test(newPassword)) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must contain at least one number.",
-      });
+      return res.status(400).json({ success: false, message: "Password must contain at least one number." });
     }
-
     if (settings.passwordRequireSpecial && !/[@$!%*?&#]/.test(newPassword)) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must contain at least one special character (@$!%*?&#).",
-      });
+      return res.status(400).json({ success: false, message: "Password must contain at least one special character." });
     }
 
-    const user = await User.findOne({
-      email: email.toLowerCase().trim(),
-    }).select("+password +passwordResetToken +passwordResetTokenExpiry");
+    const user = await User.findOne({ email: email.toLowerCase().trim() }).select(
+      "+password +passwordResetToken +passwordResetTokenExpiry"
+    );
 
     if (!user || !user.passwordResetToken) {
-      return res.status(400).json({
-        success: false,
-        message: "Reset session not found. Please request a new OTP.",
-      });
+      return res.status(400).json({ success: false, message: "Reset session not found. Please request a new OTP." });
     }
-
     if (user.passwordResetTokenExpiry < new Date()) {
-      user.passwordResetToken        = null;
-      user.passwordResetTokenExpiry  = null;
+      user.passwordResetToken = null;
+      user.passwordResetTokenExpiry = null;
       await user.save();
-      return res.status(400).json({
-        success: false,
-        message: "Reset session expired. Please request a new OTP.",
-      });
+      return res.status(400).json({ success: false, message: "Reset session expired. Please request a new OTP." });
     }
 
     const isTokenValid = await bcrypt.compare(resetToken, user.passwordResetToken);
     if (!isTokenValid) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid reset token. Please start over.",
-      });
+      return res.status(400).json({ success: false, message: "Invalid reset token. Please start over." });
     }
 
     const isSamePassword = await bcrypt.compare(newPassword, user.password);
@@ -718,13 +539,16 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    user.password                  = newPassword;
-    user.passwordResetToken        = null;
-    user.passwordResetTokenExpiry  = null;
+    user.password = newPassword;
+    user.passwordResetToken = null;
+    user.passwordResetTokenExpiry = null;
     await user.save();
 
+    // Send success confirmation email
     if (settings.emailEnabled) {
-      await sendPasswordResetSuccessEmail(user, settings.emailSenderName);
+      sendPasswordResetSuccessEmail(user, settings.emailSenderName).catch(
+        (err) => console.error("[ResetPassword] Email failed:", err.message)
+      );
     }
 
     return res.status(200).json({
@@ -732,69 +556,48 @@ const resetPassword = async (req, res) => {
       message: "Password reset successful! You can now log in.",
     });
   } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: "Password reset failed. Please try again.",
-    });
+    console.error("[ResetPassword] Error:", err);
+    res.status(500).json({ success: false, message: "Password reset failed. Please try again." });
   }
 };
 
-// ── Verify Email ──────────────────────────────────────────
+// ── Verify Email ───────────────────────────────────────────────────────────────
 const verifyEmail = async (req, res) => {
   try {
     const { email, otp } = req.body;
 
     if (!email || !otp) {
-      return res.status(400).json({
-        success: false,
-        message: "Email and OTP are required.",
-      });
+      return res.status(400).json({ success: false, message: "Email and OTP are required." });
     }
-
     if (!/^\d{6}$/.test(otp)) {
-      return res.status(400).json({
-        success: false,
-        message: "OTP must be exactly 6 digits.",
-      });
+      return res.status(400).json({ success: false, message: "OTP must be exactly 6 digits." });
     }
 
-    const user = await User.findOne({
-      email: email.toLowerCase().trim(),
-    }).select(
+    const user = await User.findOne({ email: email.toLowerCase().trim() }).select(
       "+emailVerificationOTP +emailVerificationOTPExpiry +emailVerificationAttempts"
     );
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "Account not found.",
-      });
+      return res.status(404).json({ success: false, message: "Account not found." });
     }
-
     if (user.isEmailVerified) {
-      return res.status(400).json({
-        success: false,
-        message: "Email is already verified. Please login.",
-      });
+      return res.status(400).json({ success: false, message: "Email is already verified. Please login." });
     }
-
     if (!user.emailVerificationOTP) {
       return res.status(400).json({
         success: false,
         message: "No verification code found. Please request a new one.",
       });
     }
-
     if (user.emailVerificationOTPExpiry < new Date()) {
-      user.emailVerificationOTP        = null;
-      user.emailVerificationOTPExpiry  = null;
+      user.emailVerificationOTP = null;
+      user.emailVerificationOTPExpiry = null;
       await user.save();
       return res.status(400).json({
         success: false,
         message: "Verification code expired. Please request a new one.",
       });
     }
-
     if (user.emailVerificationAttempts >= 5) {
       return res.status(429).json({
         success: false,
@@ -803,7 +606,6 @@ const verifyEmail = async (req, res) => {
     }
 
     const isValid = await verifyOTPCode(otp, user.emailVerificationOTP);
-
     if (!isValid) {
       user.emailVerificationAttempts += 1;
       await user.save();
@@ -813,108 +615,92 @@ const verifyEmail = async (req, res) => {
       });
     }
 
-    user.isEmailVerified             = true;
-    user.emailVerificationOTP        = null;
-    user.emailVerificationOTPExpiry  = null;
-    user.emailVerificationAttempts   = 0;
-    user.lastOTPSentAt               = null;
+    // Mark verified
+    user.isEmailVerified = true;
+    user.emailVerificationOTP = null;
+    user.emailVerificationOTPExpiry = null;
+    user.emailVerificationAttempts = 0;
+    user.lastOTPSentAt = null;
     await user.save();
 
+    // Send verified success email
     const settings = await Settings.getSingleton();
     if (settings.emailEnabled) {
-      await sendEmailVerifiedSuccessEmail(user, settings.emailSenderName);
+      sendEmailVerifiedSuccessEmail(user, settings.emailSenderName).catch(
+        (err) => console.error("[VerifyEmail] Success email failed:", err.message)
+      );
     }
 
-    const accessToken  = generateAccessToken(user._id);
+    const accessToken = generateAccessToken(user._id);
     const refreshToken = generateRefreshToken(user._id);
 
-    res.json({
-      success:      true,
-      message:      "Email verified successfully! Welcome aboard!",
+    return res.json({
+      success: true,
+      message: "Email verified successfully! Welcome aboard!",
       accessToken,
       refreshToken,
-      user:         buildUserResponse(user),
+      user: buildUserResponse(user),
     });
   } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: "Verification failed. Please try again.",
-    });
+    console.error("[VerifyEmail] Error:", err);
+    res.status(500).json({ success: false, message: "Verification failed. Please try again." });
   }
 };
 
-// ── Resend Verification OTP ───────────────────────────────
 const resendVerificationOTP = async (req, res) => {
   try {
     const { email } = req.body;
 
     if (!email) {
-      return res.status(400).json({
-        success: false,
-        message: "Email is required.",
-      });
+      return res.status(400).json({ success: false, message: "Email is required." });
     }
 
-    const user = await User.findOne({
-      email: email.toLowerCase().trim(),
-    }).select(
+    const user = await User.findOne({ email: email.toLowerCase().trim() }).select(
       "+emailVerificationOTP +emailVerificationOTPExpiry +emailVerificationAttempts"
     );
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "Account not found.",
-      });
+      return res.status(404).json({ success: false, message: "Account not found." });
     }
-
     if (user.isEmailVerified) {
-      return res.status(400).json({
-        success: false,
-        message: "Email is already verified. Please login.",
-      });
+      return res.status(400).json({ success: false, message: "Email is already verified. Please login." });
     }
 
     const cooldownCheck = canResendOTP(user.lastOTPSentAt, 60);
     if (!cooldownCheck.canResend) {
       return res.status(429).json({
         success: false,
-        message:     `Please wait ${cooldownCheck.waitSeconds} seconds before requesting a new code.`,
+        message: `Please wait ${cooldownCheck.waitSeconds} seconds before requesting a new code.`,
         waitSeconds: cooldownCheck.waitSeconds,
       });
     }
 
-    const settings        = await Settings.getSingleton();
+    const settings = await Settings.getSingleton();
     const otpExpiryMinutes = settings.otpExpiryMinutes || 10;
 
-    const otp       = generateOTP();
+    const otp = generateOTP();
     const hashedOTP = await hashOTP(otp);
 
-    user.emailVerificationOTP        = hashedOTP;
-    user.emailVerificationOTPExpiry  = getOTPExpiry(otpExpiryMinutes);
-    user.emailVerificationAttempts   = 0;
-    user.lastOTPSentAt               = new Date();
+    user.emailVerificationOTP = hashedOTP;
+    user.emailVerificationOTPExpiry = getOTPExpiry(otpExpiryMinutes);
+    user.emailVerificationAttempts = 0;
+    user.lastOTPSentAt = new Date();
     await user.save();
 
     if (settings.emailEnabled) {
-      await sendEmailVerificationOTP(
-        user,
-        otp,
-        otpExpiryMinutes,
-        settings.emailSenderName
+      sendEmailVerificationOTP(user, otp, otpExpiryMinutes, settings.emailSenderName).catch(
+        (err) => console.error("[ResendOTP] Email failed:", err.message)
       );
     }
 
-    res.json({
-      success:         true,
-      message:         `New verification code sent! Valid for ${otpExpiryMinutes} minutes.`,
+    return res.json({
+      success: true,
+      message: `New verification code sent! Valid for ${otpExpiryMinutes} minutes.`,
       otpExpiryMinutes,
     });
   } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: "Failed to resend code. Please try again.",
-    });
+    console.error("[ResendOTP] Error:", err);
+    res.status(500).json({ success: false, message: "Failed to resend code. Please try again." });
   }
 };
 
