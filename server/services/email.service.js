@@ -24,14 +24,24 @@ const transporter = nodemailer.createTransport({
   socketTimeout: 15000,
 });
 
-transporter.verify((err, success) => {
-  if (err) {
-    console.error("❌ [EmailService] SMTP verify FAILED");
-    console.error("   Error:", err.message);
-    console.error("   Code:", err.code || "N/A");
-  } else {
-    console.log("✅ [EmailService] Gmail SMTP ready and verified");
-  }
+const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false,
+  requireTLS: true,
+  auth: {
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD,
+  },
+  pool: true,
+  maxConnections: 5,
+  maxMessages: 100,
+  connectionTimeout: 10000,
+  greetingTimeout: 5000,
+  socketTimeout: 15000,
+  tls: {
+    rejectUnauthorized: false,
+  },
 });
 
 
