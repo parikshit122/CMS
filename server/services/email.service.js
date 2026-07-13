@@ -2,8 +2,15 @@
 
 const nodemailer = require("nodemailer");
 
+console.log("📧 Email Config Check:");
+console.log("   GMAIL_USER:", process.env.GMAIL_USER ? "✅ Set" : "❌ MISSING");
+console.log("   GMAIL_APP_PASSWORD:", process.env.GMAIL_APP_PASSWORD ? `✅ Set (${process.env.GMAIL_APP_PASSWORD.length} chars)` : "❌ MISSING");
+console.log("   EMAIL_FROM:", process.env.EMAIL_FROM || "not set");
+
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp.gmail.com",
+  port: 465,
+  secure: true,
   auth: {
     user: process.env.GMAIL_USER,
     pass: process.env.GMAIL_APP_PASSWORD,
@@ -11,13 +18,19 @@ const transporter = nodemailer.createTransport({
   pool: true,
   maxConnections: 5,
   maxMessages: 100,
+  connectionTimeout: 10000,
+  greetingTimeout: 5000,
+  socketTimeout: 15000,
 });
 
-transporter.verify((err) => {
-  if (err) console.error("❌ Gmail SMTP error:", err.message);
-  else console.log("✅ Gmail SMTP ready");
+transporter.verify((err, success) => {
+  if (err) {
+    console.error("❌ Gmail SMTP verify FAILED:", err.message);
+    console.error("   Full error:", err);
+  } else {
+    console.log("✅ Gmail SMTP ready and verified");
+  }
 });
-
 const sendMail = async (to, subject, html, label = "Email") => {
   const senderEmail = process.env.EMAIL_FROM || process.env.GMAIL_USER;
   const senderName = process.env.EMAIL_SENDER_NAME || "ComplaintSync";
@@ -212,10 +225,10 @@ const sendEmailVerifiedSuccessEmail = async (user, senderName) => {
       and track your complaints.
     </p>
     ${infoTable(
-      infoRow("Name", name) +
-      infoRow("Email", user.email) +
-      infoRow("Status", "✅ Verified")
-    )}
+    infoRow("Name", name) +
+    infoRow("Email", user.email) +
+    infoRow("Status", "✅ Verified")
+  )}
     ${divider()}
     <p style="margin:0;color:#475569;font-size:14px;line-height:1.6;">
       If you have any questions or need help getting started, feel free to
@@ -264,10 +277,10 @@ const sendPasswordResetOTPEmail = async (user, otp, expiryMinutes = 10, senderNa
       </p>
     </div>
     ${infoTable(
-      infoRow("Account", user.email) +
-      infoRow("Requested", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })) +
-      infoRow("Expires in", `${expiryMinutes} minutes`)
-    )}
+    infoRow("Account", user.email) +
+    infoRow("Requested", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })) +
+    infoRow("Expires in", `${expiryMinutes} minutes`)
+  )}
     <p style="margin:16px 0 0;color:#94a3b8;font-size:12px;">
       If you did not request a password reset, please secure your account
       immediately by contacting support.
@@ -303,10 +316,10 @@ const sendPasswordResetSuccessEmail = async (user, senderName) => {
       successfully changed.
     </p>
     ${infoTable(
-      infoRow("Account", user.email) +
-      infoRow("Changed", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })) +
-      infoRow("Status", "✅ Password Updated")
-    )}
+    infoRow("Account", user.email) +
+    infoRow("Changed", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })) +
+    infoRow("Status", "✅ Password Updated")
+  )}
     <div style="background:#fee2e2;border-left:4px solid #ef4444;
                 border-radius:4px;padding:12px 16px;margin:20px 0;">
       <p style="margin:0;color:#991b1b;font-size:13px;">
@@ -335,13 +348,13 @@ const sendComplaintSubmittedEmail = async (user, complaint, senderName) => {
       We will review it and keep you updated on its progress.
     </p>
     ${infoTable(
-      infoRow("Complaint ID", `<strong style="color:#4f46e5;">${complaint.complaintId}</strong>`) +
-      infoRow("Title", complaint.title) +
-      infoRow("Category", complaint.category) +
-      infoRow("Priority", priorityBadge(complaint.priority)) +
-      infoRow("Status", statusBadge("pending")) +
-      infoRow("Submitted", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }))
-    )}
+    infoRow("Complaint ID", `<strong style="color:#4f46e5;">${complaint.complaintId}</strong>`) +
+    infoRow("Title", complaint.title) +
+    infoRow("Category", complaint.category) +
+    infoRow("Priority", priorityBadge(complaint.priority)) +
+    infoRow("Status", statusBadge("pending")) +
+    infoRow("Submitted", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }))
+  )}
     <div style="background:#eff6ff;border-left:4px solid #3b82f6;
                 border-radius:4px;padding:12px 16px;margin:20px 0;">
       <p style="margin:0;color:#1e40af;font-size:13px;">
@@ -371,13 +384,13 @@ const sendComplaintStatusUpdateEmail = async (user, complaint, oldStatus, note, 
       The status of your complaint has been updated.
     </p>
     ${infoTable(
-      infoRow("Complaint ID", `<strong style="color:#4f46e5;">${complaint.complaintId}</strong>`) +
-      infoRow("Title", complaint.title) +
-      infoRow("Previous Status", statusBadge(oldStatus)) +
-      infoRow("New Status", statusBadge(newStatus)) +
-      infoRow("Updated", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })) +
-      (note ? infoRow("Staff Note", `<em>${note}</em>`) : "")
-    )}
+    infoRow("Complaint ID", `<strong style="color:#4f46e5;">${complaint.complaintId}</strong>`) +
+    infoRow("Title", complaint.title) +
+    infoRow("Previous Status", statusBadge(oldStatus)) +
+    infoRow("New Status", statusBadge(newStatus)) +
+    infoRow("Updated", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })) +
+    (note ? infoRow("Staff Note", `<em>${note}</em>`) : "")
+  )}
     ${newStatus === "rejected" ? `
     <div style="background:#fee2e2;border-left:4px solid #ef4444;
                 border-radius:4px;padding:12px 16px;margin:20px 0;">
@@ -422,13 +435,13 @@ const sendComplaintResolvedEmail = async (user, complaint, note, senderName) => 
       </p>
     </div>
     ${infoTable(
-      infoRow("Complaint ID", `<strong style="color:#4f46e5;">${complaint.complaintId}</strong>`) +
-      infoRow("Title", complaint.title) +
-      infoRow("Category", complaint.category) +
-      infoRow("Status", statusBadge("resolved")) +
-      infoRow("Resolved On", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })) +
-      (note ? infoRow("Resolution Note", `<em>${note}</em>`) : "")
-    )}
+    infoRow("Complaint ID", `<strong style="color:#4f46e5;">${complaint.complaintId}</strong>`) +
+    infoRow("Title", complaint.title) +
+    infoRow("Category", complaint.category) +
+    infoRow("Status", statusBadge("resolved")) +
+    infoRow("Resolved On", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })) +
+    (note ? infoRow("Resolution Note", `<em>${note}</em>`) : "")
+  )}
     <p style="margin:20px 0 0;color:#475569;font-size:14px;line-height:1.6;">
       Thank you for using <strong>${sender}</strong>. Your feedback helps us
       improve our services. If you experience this issue again or have further
@@ -455,15 +468,15 @@ const sendComplaintAssignedEmail = async (staffUser, complaint, senderName) => {
       Please review the details below and take appropriate action.
     </p>
     ${infoTable(
-      infoRow("Complaint ID", `<strong style="color:#4f46e5;">${complaint.complaintId}</strong>`) +
-      infoRow("Title", complaint.title) +
-      infoRow("Description", complaint.description?.substring(0, 200) + (complaint.description?.length > 200 ? "..." : "")) +
-      infoRow("Category", complaint.category) +
-      infoRow("Priority", priorityBadge(complaint.priority)) +
-      infoRow("Status", statusBadge(complaint.status)) +
-      (complaint.location ? infoRow("Location", complaint.location) : "") +
-      infoRow("Assigned On", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }))
-    )}
+    infoRow("Complaint ID", `<strong style="color:#4f46e5;">${complaint.complaintId}</strong>`) +
+    infoRow("Title", complaint.title) +
+    infoRow("Description", complaint.description?.substring(0, 200) + (complaint.description?.length > 200 ? "..." : "")) +
+    infoRow("Category", complaint.category) +
+    infoRow("Priority", priorityBadge(complaint.priority)) +
+    infoRow("Status", statusBadge(complaint.status)) +
+    (complaint.location ? infoRow("Location", complaint.location) : "") +
+    infoRow("Assigned On", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }))
+  )}
     <div style="background:#eff6ff;border-left:4px solid #3b82f6;
                 border-radius:4px;padding:12px 16px;margin:20px 0;">
       <p style="margin:0;color:#1e40af;font-size:13px;">
@@ -498,12 +511,12 @@ const sendComplaintRejectedEmail = async (user, complaint, reason, senderName) =
       After reviewing your complaint, we were unable to process it at this time.
     </p>
     ${infoTable(
-      infoRow("Complaint ID", `<strong style="color:#4f46e5;">${complaint.complaintId}</strong>`) +
-      infoRow("Title", complaint.title) +
-      infoRow("Status", statusBadge("rejected")) +
-      infoRow("Reason", reason || complaint.rejectionReason || "Does not meet the submission criteria.") +
-      infoRow("Date", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }))
-    )}
+    infoRow("Complaint ID", `<strong style="color:#4f46e5;">${complaint.complaintId}</strong>`) +
+    infoRow("Title", complaint.title) +
+    infoRow("Status", statusBadge("rejected")) +
+    infoRow("Reason", reason || complaint.rejectionReason || "Does not meet the submission criteria.") +
+    infoRow("Date", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }))
+  )}
     <p style="margin:20px 0 0;color:#475569;font-size:14px;line-height:1.6;">
       If you believe this decision is incorrect or have additional information
       to provide, please submit a new complaint with more details.
@@ -545,10 +558,10 @@ const sendWelcomeEmail = async (user, otp, expiryMinutes = 10, senderName) => {
       </p>
     </div>
     ${infoTable(
-      infoRow("Name", name) +
-      infoRow("Email", user.email) +
-      infoRow("Role", user.role || "user")
-    )}
+    infoRow("Name", name) +
+    infoRow("Email", user.email) +
+    infoRow("Role", user.role || "user")
+  )}
     <div style="background:#fef3c7;border-left:4px solid #f59e0b;
                 border-radius:4px;padding:12px 16px;margin:20px 0;">
       <p style="margin:0;color:#92400e;font-size:13px;">

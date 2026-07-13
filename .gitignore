@@ -155,3 +155,4 @@ mongodb-data/
 *.tar.gz
 .npm/
 package-lock.json.bak
+server/scripts/makeAdmin.js
