@@ -2,10 +2,11 @@
 
 const nodemailer = require("nodemailer");
 
-console.log("📧 Email Config Check:");
-console.log("   GMAIL_USER:", process.env.GMAIL_USER ? "✅ Set" : "❌ MISSING");
+console.log("📧 [EmailService] Config Check:");
+console.log("   GMAIL_USER:", process.env.GMAIL_USER ? `✅ ${process.env.GMAIL_USER}` : "❌ MISSING");
 console.log("   GMAIL_APP_PASSWORD:", process.env.GMAIL_APP_PASSWORD ? `✅ Set (${process.env.GMAIL_APP_PASSWORD.length} chars)` : "❌ MISSING");
-console.log("   EMAIL_FROM:", process.env.EMAIL_FROM || "not set");
+console.log("   EMAIL_FROM:", process.env.EMAIL_FROM || "❌ not set");
+console.log("   EMAIL_SENDER_NAME:", process.env.EMAIL_SENDER_NAME || "❌ not set");
 
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
@@ -25,12 +26,15 @@ const transporter = nodemailer.createTransport({
 
 transporter.verify((err, success) => {
   if (err) {
-    console.error("❌ Gmail SMTP verify FAILED:", err.message);
-    console.error("   Full error:", err);
+    console.error("❌ [EmailService] SMTP verify FAILED");
+    console.error("   Error:", err.message);
+    console.error("   Code:", err.code || "N/A");
   } else {
-    console.log("✅ Gmail SMTP ready and verified");
+    console.log("✅ [EmailService] Gmail SMTP ready and verified");
   }
 });
+
+
 const sendMail = async (to, subject, html, label = "Email") => {
   const senderEmail = process.env.EMAIL_FROM || process.env.GMAIL_USER;
   const senderName = process.env.EMAIL_SENDER_NAME || "ComplaintSync";
