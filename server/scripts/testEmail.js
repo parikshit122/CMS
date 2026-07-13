@@ -15,20 +15,20 @@ const {
 } = require("../services/email.service");
 
 // ── Mock data ──────────────────────────────────────────────────────────────────
-const TO    = process.env.EMAIL_FROM;
-const NAME  = "Test User";
+const TO = process.env.EMAIL_TEST_TO || process.env.EMAIL_FROM;
+const NAME = "Test User";
 
 const mockUser = { name: NAME, email: TO, role: "user" };
 const mockStaff = { name: "Staff Member", email: TO, role: "staff" };
 
 const mockComplaint = {
-  complaintId:     "CMP-2026-0001",
-  title:           "Street light not working on Main Block",
-  description:     "The street light near Block C has been non-functional for 3 days causing safety concerns for students returning at night.",
-  category:        "electrical",
-  priority:        "high",
-  location:        "Block C, Main Campus",
-  status:          "pending",
+  complaintId: "CMP-2026-0001",
+  title: "Street light not working on Main Block",
+  description: "The street light near Block C has been non-functional for 3 days causing safety concerns for students returning at night.",
+  category: "electrical",
+  priority: "high",
+  location: "Block C, Main Campus",
+  status: "pending",
   rejectionReason: "Issue is outside the jurisdiction of our department.",
 };
 
@@ -36,31 +36,31 @@ const mockComplaint = {
 const tests = [
   {
     name: "1. Welcome + OTP (Registration)",
-    fn:   () => sendWelcomeEmail(mockUser, "847291", 10),
+    fn: () => sendWelcomeEmail(mockUser, "847291", 10),
   },
   {
     name: "2. Email Verification OTP (Resend)",
-    fn:   () => sendEmailVerificationOTP(mockUser, "382910", 10),
+    fn: () => sendEmailVerificationOTP(mockUser, "382910", 10),
   },
   {
     name: "3. Email Verified Success",
-    fn:   () => sendEmailVerifiedSuccessEmail(mockUser),
+    fn: () => sendEmailVerifiedSuccessEmail(mockUser),
   },
   {
     name: "4. Forgot Password OTP",
-    fn:   () => sendPasswordResetOTPEmail(mockUser, "561038", 10),
+    fn: () => sendPasswordResetOTPEmail(mockUser, "561038", 10),
   },
   {
     name: "5. Password Reset Success",
-    fn:   () => sendPasswordResetSuccessEmail(mockUser),
+    fn: () => sendPasswordResetSuccessEmail(mockUser),
   },
   {
     name: "6. Complaint Submitted",
-    fn:   () => sendComplaintSubmittedEmail(mockUser, mockComplaint),
+    fn: () => sendComplaintSubmittedEmail(mockUser, mockComplaint),
   },
   {
     name: "7. Complaint Status → In Progress",
-    fn:   () => sendComplaintStatusUpdateEmail(
+    fn: () => sendComplaintStatusUpdateEmail(
       mockUser,
       { ...mockComplaint, status: "in-progress" },
       "pending",
@@ -69,7 +69,7 @@ const tests = [
   },
   {
     name: "8. Complaint Resolved",
-    fn:   () => sendComplaintResolvedEmail(
+    fn: () => sendComplaintResolvedEmail(
       mockUser,
       { ...mockComplaint, status: "resolved" },
       "Replaced the faulty bulb and checked the wiring."
@@ -77,7 +77,7 @@ const tests = [
   },
   {
     name: "9. Complaint Rejected",
-    fn:   () => sendComplaintRejectedEmail(
+    fn: () => sendComplaintRejectedEmail(
       mockUser,
       { ...mockComplaint, status: "rejected" },
       mockComplaint.rejectionReason
@@ -85,7 +85,7 @@ const tests = [
   },
   {
     name: "10. Complaint Assigned to Staff",
-    fn:   () => sendComplaintAssignedEmail(mockStaff, mockComplaint),
+    fn: () => sendComplaintAssignedEmail(mockStaff, mockComplaint),
   },
 ];
 
@@ -93,8 +93,8 @@ const runTests = async () => {
   console.log(`\n🚀 Testing all email templates → sending to: ${TO}\n`);
   console.log("=".repeat(60));
 
-  const arg    = process.argv[2];
-  const toRun  = arg ? tests.filter((_, i) => String(i + 1) === arg) : tests;
+  const arg = process.argv[2];
+  const toRun = arg ? tests.filter((_, i) => String(i + 1) === arg) : tests;
 
   for (const test of toRun) {
     process.stdout.write(`📧 ${test.name} ... `);
