@@ -2,7 +2,7 @@ const Settings = require("../models/Settings");
 const Notification = require("../models/Notification");
 const Complaint = require("../models/Complaint");
 const User = require("../models/User");
-const nodemailer = require("nodemailer");
+const { sendMail } = require("../services/email.service");
 
 const getSettings = async (req, res) => {
   try {
@@ -117,29 +117,28 @@ const sendTestEmail = async (req, res) => {
 
     const settings = await Settings.getSingleton();
 
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
+    const result = await sendMail(
+      email,
+      "ComplaintSync — Test Email",
+      `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px;">
+      <h2 style="color: #6366f1;">Test Email Successful</h2>
+      <p>This is a test email from your ComplaintSync admin settings.</p>
+      <p>If you received this, your email configuration is working correctly.</p>
+      <p style="margin-top: 24px; color: #8a94a6; font-size: 13px;">
+        Sent at: ${new Date().toLocaleString()}
+      </p>
+    </div>
+  `,
+      "TestEmail"
+    );
 
-    await transporter.sendMail({
-      from: `"${settings.emailSenderName}" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: "ComplaintSync — Test Email",
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px;">
-          <h2 style="color: #6366f1;">Test Email Successful</h2>
-          <p>This is a test email from your ComplaintSync admin settings.</p>
-          <p>If you received this, your email configuration is working correctly.</p>
-          <p style="margin-top: 24px; color: #8a94a6; font-size: 13px;">
-            Sent at: ${new Date().toLocaleString()}
-          </p>
-        </div>
-      `,
-    });
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to send test email: " + (result.error || "Unknown error"),
+      });
+    }
 
     res.json({
       success: true,
