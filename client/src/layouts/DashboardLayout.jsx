@@ -1,5 +1,5 @@
 import { useState, useId } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
 import SpatialDock from "../components/layout/SpatialDock";
@@ -10,14 +10,13 @@ import "../styles/Dashboard.css";
 export default function DashboardLayout({
   children,
   role = "User",
-  customMenuItems = null,
+  menuItems = null,
 }) {
   const location = useLocation();
+  const navigate = useNavigate();
 
   const { user } = useAuth();
   useAuthSync();
-
-  const [showProfileModal, setShowProfileModal] = useState(false);
 
   const displayRole = user?.role
     ? user.role.charAt(0).toUpperCase() + user.role.slice(1)
@@ -44,7 +43,7 @@ export default function DashboardLayout({
     ],
   };
 
-  const menuItems = customMenuItems || defaultMenuItems[displayRole] || defaultMenuItems.User;
+  const currentMenuItems = menuItems || defaultMenuItems[displayRole] || defaultMenuItems.User;
 
   // Z-Axis Entrance Animations
   const spatialTransition = {
@@ -63,8 +62,18 @@ export default function DashboardLayout({
       <header className="dynamic-island-header">
         <div className="dynamic-island-content">
           
-          <div className="island-brand">
-            <i className="bx bx-atom neon-text-orange" />
+          <div 
+            className="island-brand"
+            onClick={() => {
+              const dashRoute = user?.role === "admin" ? "/admin" : user?.role === "staff" ? "/staff" : "/dashboard";
+              navigate(dashRoute);
+            }}
+            role="button"
+            tabIndex={0}
+            style={{ cursor: "pointer" }}
+            title="Go to Dashboard"
+          >
+            <i className="bx bx-atom bx-spin-hover neon-text-orange" />
           </div>
 
           <div className="island-actions">
@@ -72,7 +81,7 @@ export default function DashboardLayout({
             
             <div
               className="island-avatar"
-              onClick={() => setShowProfileModal(!showProfileModal)}
+              onClick={() => navigate("/profile")}
               role="button"
               tabIndex={0}
             >
@@ -104,7 +113,7 @@ export default function DashboardLayout({
       </div>
 
       {/* Bottom Floating Glass Dock */}
-      <SpatialDock menuItems={menuItems} />
+      <SpatialDock menuItems={currentMenuItems} />
     </div>
   );
 }
