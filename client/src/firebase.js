@@ -36,14 +36,14 @@ export const auth = getAuth(app);
 export const authReady = (async () => {
   try {
     await setPersistence(auth, indexedDBLocalPersistence);
-    console.log("✅ IndexedDB persistence set");
+    // console.log("✅ IndexedDB persistence set");
   } catch (e) {
-    console.warn("IndexedDB failed, trying localStorage:", e.message);
+    // console.warn("IndexedDB failed, trying localStorage:", e.message);
     try {
       await setPersistence(auth, browserLocalPersistence);
-      console.log("✅ LocalStorage persistence set");
+      // console.log("✅ LocalStorage persistence set");
     } catch (e2) {
-      console.error("All persistence failed:", e2.message);
+      // console.error("All persistence failed:", e2.message);
     }
   }
   return auth;

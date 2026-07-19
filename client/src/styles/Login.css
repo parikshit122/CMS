@@ -3,35 +3,75 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100vh;
+  min-height: 100vh;
   width: 100%;
   flex: 1;
+  position: relative;
+  overflow: hidden;
 }
 
-/* Main logincontainer */
+/* Ambient Animated Background Orbs */
+.outer-container::before,
+.outer-container::after {
+  content: "";
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  filter: blur(120px);
+  z-index: 0;
+  animation: float-auth-orbs 15s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+.outer-container::before {
+  background: var(--neon-orange-glow, rgba(249, 115, 22, 0.3));
+  top: -15%;
+  left: -10%;
+}
+
+.outer-container::after {
+  background: var(--neon-rose-glow, rgba(225, 29, 72, 0.3));
+  bottom: -15%;
+  right: -10%;
+  animation-duration: 20s;
+  animation-delay: -5s;
+}
+
+@keyframes float-auth-orbs {
+  0% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(100px, 50px) scale(1.1); }
+  66% { transform: translate(-50px, 150px) scale(0.9); }
+  100% { transform: translate(-100px, -50px) scale(1.05); }
+}
+
 .logincontainer {
   position: relative;
   width: 850px;
-  height: 550px;
-  background: #fff;
+  height: 560px;
+  max-height: 90vh;
+  background: var(--surface-card, #1e1e2e);
   margin: 20px;
   border-radius: 30px;
-  box-shadow: 0 0 30px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.8), inset 0 0 20px rgba(249, 115, 22, 0.05);
   overflow: hidden;
+  border: 1px solid var(--surface-glass-border, rgba(255, 255, 255, 0.05));
+  z-index: 1;
 }
 
 /* Form Box */
 .form-box {
   position: absolute;
   right: 0;
+  top: 0;
   width: 50%;
   height: 100%;
-  background: #fff;
+  background: var(--surface-card, #1e1e2e);
   display: flex;
   align-items: center;
-  color: #333;
+  color: var(--text-primary, #ffffff);
   text-align: center;
-  padding: 0px 40px 60px;
+  padding: 25px 40px;
   z-index: 1;
   transition:
     0.6s ease-in-out 1.2s,
@@ -44,7 +84,7 @@
 
 .logincontainer.active .form-box {
   right: 50%;
-  top: 12%;
+  top: 0;
 }
 
 .logincontainer.active .form-box.register {
@@ -56,30 +96,35 @@ form {
 }
 
 .logincontainer h1 {
-  font-size: 36px;
-  margin: -10;
+  font-size: 32px;
+  margin-bottom: 15px;
 }
 
 /* Input Box */
 .input-box {
   position: relative;
-  margin: 20px 0;
+  margin: 15px 0;
 }
 
 .input-box input {
   width: 100%;
   padding: 13px 50px 13px 20px;
-  background: #eee;
-  border: none;
+  background: var(--bg-color, #0f0f0f);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
   border-radius: 8px;
   outline: none;
   font-size: 16px;
-  color: #333;
+  color: var(--text-primary, #ffffff);
   font-weight: 500;
 }
 
+.input-box input:focus {
+  border-color: var(--neon-orange, #f97316);
+  box-shadow: 0 0 10px rgba(249, 115, 22, 0.3);
+}
+
 .input-box input::placeholder {
-  color: #888;
+  color: var(--text-secondary, #9ca3af);
   font-weight: 400;
 }
 
@@ -89,25 +134,30 @@ form {
   top: 50%;
   transform: translateY(-50%);
   font-size: 25px;
-  color: #471717;
+  color: var(--text-secondary, #9ca3af);
 }
 
 /* Forgot Link */
 .forgot-link {
-  margin: -15px 0 15px;
+  margin: -10px 0 15px;
 }
 
 .forgot-link a {
-  color: #333;
+  color: var(--text-secondary, #9ca3af);
   text-decoration: none;
   font-size: 14.5px;
+  transition: color 0.2s;
+}
+
+.forgot-link a:hover {
+  color: var(--neon-orange, #f97316);
 }
 
 /* Buttons */
 .logincontainer .login-btn {
   width: 100%;
   height: 48px;
-  background: linear-gradient(to right, #0f78c8, #3805d1);
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
   border-radius: 8px;
   border: none;
   outline: none;
@@ -124,11 +174,10 @@ form {
 .logincontainer .register-btn {
   width: 100%;
   height: 48px;
-  background: #7494ec;
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
   border-radius: 8px;
   border: none;
   outline: none;
-  background: linear-gradient(to right, #0f78c8, #3805d1);
   cursor: pointer;
   font-size: 19px;
   display: flex;
@@ -140,13 +189,13 @@ form {
 
 .logincontainer p {
   font-size: 14.5px;
-  margin: 15px 0;
+  margin: 10px 0;
 }
 
 .social-icons {
   display: flex;
   justify-content: center;
-  margin-bottom: 50px;
+  margin-bottom: 20px;
 }
 
 .social-icons a:hover {
@@ -154,36 +203,83 @@ form {
   box-shadow: 8px 5px 5px rgba(0, 0, 0, 0.6);
 }
 
-/* Social Icons */
-.social-icons a {
-  display: inline-flex;
-  padding: 10px;
-  border: 2px solid #ccc;
-  border-radius: 8px;
-  font-size: 27px;
-  background: transparent;
-  color: #333;
-  text-decoration: none;
-  margin: 0 8px;
-  transition: all 0.4s ease-in;
-}
-
+/* Social Icons RGB Animation */
 .social-btn {
   display: inline-flex;
-  padding: 10px;
-  border: 2px solid #ccc;
-  border-radius: 8px;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin: 0 10px;
+  border-radius: 10px;
+  position: relative;
+  overflow: hidden;
   background: transparent;
-  font-size: 27px;
-  color: #333;
-  text-decoration: none;
-  margin: 0 8px;
-  transition: all 0.4s ease-in;
+  border: none;
+  font-size: 28px;
+  color: var(--text-primary, #fff);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
 }
 
 .social-btn:hover {
   transform: translateY(-5px);
-  box-shadow: 8px 5px 5px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.8);
+}
+
+/* Rotating RGB Border */
+.social-btn::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(
+    #ff0000, 
+    #ff7f00, 
+    #ffff00, 
+    #00ff00, 
+    #0000ff, 
+    #4b0082, 
+    #9400d3, 
+    #ff0000
+  );
+  animation: rgb-rotate 3s linear infinite;
+  z-index: 0;
+  opacity: 0.8;
+}
+
+/* Inner Background */
+.social-btn::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  right: 2px;
+  bottom: 2px;
+  background: var(--bg-primary, #0f0f0f);
+  border-radius: 8px;
+  z-index: 0;
+}
+
+/* The actual icon */
+.social-btn i {
+  position: relative;
+  z-index: 1;
+  transition: text-shadow 0.3s ease, color 0.3s ease;
+}
+
+.social-btn:hover i {
+  color: #fff;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+}
+
+@keyframes rgb-rotate {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 /* Toggle Box */
@@ -200,9 +296,7 @@ form {
   border-radius: 150px;
   width: 300%;
   height: 100%;
-
-  background: linear-gradient(135deg, #021135, #0ea0e9, #083849, #086ead);
-
+  background: linear-gradient(135deg, var(--neon-orange, #f97316), var(--neon-rose, #e11d48));
   z-index: 2;
   transition: 1.8s ease-in-out;
 }
@@ -296,59 +390,7 @@ form {
   border: 0;
 }
 
-/* ============================================================
-   LOGIN PAGE — DARK MODE SUPPORT
-   ============================================================ */
-
-html[data-bs-theme="dark"] .logincontainer {
-  background: var(--surface-color);
-  box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
-}
-
-html[data-bs-theme="dark"] .form-box {
-  background: var(--surface-color);
-  color: var(--text-color);
-}
-
-html[data-bs-theme="dark"] .logincontainer h1,
-html[data-bs-theme="dark"] form h1 {
-  color: var(--text-color);
-}
-
-html[data-bs-theme="dark"] .input-box input {
-  background: var(--bg-color);
-  color: var(--text-color);
-  border: 1px solid var(--border-color);
-}
-
-html[data-bs-theme="dark"] .input-box input::placeholder {
-  color: var(--muted-text);
-}
-
-html[data-bs-theme="dark"] .input-box i {
-  color: var(--muted-text);
-}
-
-html[data-bs-theme="dark"] .logincontainer p {
-  color: var(--muted-text);
-}
-
-html[data-bs-theme="dark"] .social-btn {
-  border-color: var(--border-color);
-  color: var(--text-color);
-  background: var(--bg-color);
-}
-
-html[data-bs-theme="dark"] .social-btn:hover {
-  border-color: var(--primary-color);
-  color: var(--primary-color);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-html[data-bs-theme="dark"] .forgot-link a,
-html[data-bs-theme="dark"] .forgot-btn {
-  color: var(--primary-color);
-}
+/* Removed legacy data-bs-theme overrides as Ember Forge is natively dark */
 
 /* ── Mobile: auth page ── */
 @media (max-width: 480px) {
@@ -367,103 +409,153 @@ html[data-bs-theme="dark"] .forgot-btn {
   }
 }
 
+/* Absolute Back Button */
+.back-btn-absolute {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 10;
+}
+
 @media screen and (max-width: 650px) {
   .logincontainer {
-    height: 100dvh;
+    height: 100vh;
+    max-height: none;
     width: 100%;
-    margin: 0 auto;
-    transform: translateY(-10px);
+    margin: 0;
+    border-radius: 0;
+    display: block;
+    overflow: hidden;
   }
-
-  .logincontainer h1 {
-    font-size: 35px;
-    font-weight: 600;
-    margin: 30px 0 -0 0;
-  }
-
+  
+  /* 75% height for forms */
   .form-box {
-    bottom: 0;
     width: 100%;
-    height: 65%;
+    height: 75%;
+    bottom: 0;
+    top: auto;
+    padding: 10px 15px;
+    background: var(--surface-card, #1e1e2e);
+    display: flex;
+    transition: 0.6s ease-in-out 1.2s, visibility 0s 1s;
   }
-
+  
   .logincontainer.active .form-box {
     right: 0;
-    bottom: 30%;
+    bottom: 25%;
+    top: auto;
   }
+  
+  /* Heavily compact elements for mobile */
+  .form-box .input-box { margin: 6px 0; }
+  .form-box input { padding: 8px 30px 8px 12px; font-size: 13px; }
+  .form-box h1 { font-size: 22px; margin-bottom: 2px; margin-top: 10px; }
+  .logincontainer p { margin: 6px 0; font-size: 12px; }
+  .social-icons { margin-bottom: 5px; }
+  .social-btn { width: 32px; height: 32px; font-size: 16px; margin: 0 4px; }
+  .logincontainer .login-btn, .logincontainer .register-btn { height: 38px; font-size: 15px; margin-top: 5px; }
 
-  .toggle-box::before {
-    left: 0;
-    top: -271%;
+  /* Restore the toggle box sliding */
+  .toggle-box {
+    position: absolute;
     width: 100%;
-    height: 300%;
-    border-radius: 20vw;
+    height: 100%;
+    display: block;
+    background: transparent;
+    border: none;
   }
-
-  .logincontainer.active .toggle-box::before {
-    top: 77%;
+  
+  .toggle-box::before {
+    display: block;
     left: 0;
+    top: -75%;
+    width: 100%;
+    height: 100%;
+    border-radius: 0 0 30px 30px;
   }
-
-  .social-icons {
-    margin-bottom: 35px;
+  
+  .logincontainer.active .toggle-box::before {
+    top: 75%;
+    left: 0;
+    border-radius: 30px 30px 0 0;
   }
-
+  
+  /* 25% height for toggle panel */
   .toggle-panel {
     width: 100%;
-    height: 20%;
+    height: 25%;
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 15px 10px 5px 10px;
+    transition: 0.6s ease-in-out;
   }
-
+  
+  .toggle-panel h1 {
+    font-size: 18px;
+    margin-bottom: 4px;
+  }
+  
+  .toggle-panel p {
+    font-size: 13px;
+    margin-bottom: 4px;
+  }
+  
   .toggle-panel.toggle-left {
-    top: 30px;
-  }
-
-  .logincontainer.active .toggle-panel.toggle-left {
+    top: 0;
     left: 0;
-    top: -30%;
+    transition-delay: 1.2s;
   }
-
+  
+  .logincontainer.active .toggle-panel.toggle-left {
+    top: -25%;
+    transition-delay: 1.2s;
+  }
+  
   .toggle-panel.toggle-right {
+    bottom: -25%;
     right: 0;
-    bottom: -30%;
+    transition-delay: 0.6s;
+  }
+  
+  .logincontainer.active .toggle-panel.toggle-right {
+    bottom: 0;
+    right: 0;
+    transition-delay: 1.2s;
   }
 
-  .logincontainer.active .toggle-panel.toggle-right {
-    bottom: 18px;
+  /* Compact Glassy Back Button for Mobile */
+  .back-btn-absolute {
+    top: 15px;
+    left: 15px;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.15) !important;
+    border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2) !important;
+    backdrop-filter: blur(10px);
+    color: #fff !important;
+    z-index: 9999;
+  }
+  
+  .back-btn-absolute .back-text {
+    display: none;
   }
 }
 
 @media screen and (max-width: 400px) {
-  .form-box {
-    padding: 16px;
-    margin-top: 0;
-  }
-
   .logincontainer h1 {
-    font-size: 30px;
-    margin-top: 30px;
-    margin-bottom: -10px;
+    font-size: 28px;
   }
-
-  .toggle-panel.toggle-right {
-    bottom: -34%;
-  }
-
   .social-icons {
-    margin-bottom: 120px;
-  }
-
-  .logincontainer.active .toggle-panel.toggle-right {
-    bottom: 10px;
-  }
-
-  .logincontainer.active .toggle-box::before {
-    top: 74.7%;
-    left: 0;
-  }
-
-  .toggle-box h1 {
-    font-size: 20px;
+    margin-bottom: 20px;
   }
 }
 
@@ -477,7 +569,7 @@ html[data-bs-theme="dark"] .forgot-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #021135, #0ea0e9, #083849, #086ead);
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color), var(--accent-color));
   padding: 24px 16px;
   position: relative;
   overflow: hidden;
@@ -512,14 +604,14 @@ html[data-bs-theme="dark"] .forgot-btn {
   z-index: 1;
   width: 100%;
   max-width: 460px;
-  background: #ffffff;
+  background: var(--surface-color);
   border-radius: 24px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.3);
   overflow: hidden;
 }
 
 .auth-card-header {
-  background: linear-gradient(135deg, #021135, #0ea0e9, #083849, #086ead);
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color), var(--accent-color));
   padding: 36px 40px 32px;
   text-align: center;
   position: relative;
@@ -532,7 +624,7 @@ html[data-bs-theme="dark"] .forgot-btn {
   left: 0;
   right: 0;
   height: 20px;
-  background: #ffffff;
+  background: var(--surface-color);
   border-radius: 20px 20px 0 0;
 }
 
@@ -586,7 +678,7 @@ html[data-bs-theme="dark"] .forgot-btn {
   display: block;
   font-size: 13px;
   font-weight: 600;
-  color: #374151;
+  color: var(--text-color);
   margin-bottom: 8px;
   letter-spacing: 0.3px;
   text-transform: uppercase;
@@ -602,7 +694,7 @@ html[data-bs-theme="dark"] .forgot-btn {
   top: 50%;
   transform: translateY(-50%);
   font-size: 20px;
-  color: #9ca3af;
+  color: var(--muted-text);
   pointer-events: none;
   transition: color 0.2s;
 }
@@ -610,11 +702,11 @@ html[data-bs-theme="dark"] .forgot-btn {
 .auth-input {
   width: 100%;
   padding: 13px 16px 13px 46px;
-  background: #f3f4f6;
+  background: var(--bg-color);
   border: 2px solid transparent;
   border-radius: 10px;
   font-size: 15px;
-  color: #111827;
+  color: var(--text-color);
   outline: none;
   transition: all 0.2s ease;
   font-family: inherit;
@@ -622,18 +714,18 @@ html[data-bs-theme="dark"] .forgot-btn {
 }
 
 .auth-input:focus {
-  background: #ffffff;
-  border-color: #0ea0e9;
-  box-shadow: 0 0 0 4px rgba(14, 160, 233, 0.12);
+  background: var(--surface-color);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 4px var(--border-color);
 }
 
 .auth-input:focus + i,
 .auth-input-wrap:focus-within i {
-  color: #0ea0e9;
+  color: var(--primary-color);
 }
 
 .auth-input::placeholder {
-  color: #9ca3af;
+  color: var(--muted-text);
   font-weight: 400;
 }
 

@@ -3,7 +3,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #021135, #0ea0e9, #083849, #086ead);
+  background: var(--bg-color);
   padding: 20px;
 }
 
@@ -20,7 +20,7 @@
 .maintenance-icon {
   width: 100px;
   height: 100px;
-  background: linear-gradient(135deg, #0f78c8, #3805d1);
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -63,7 +63,7 @@
   align-items: center;
   gap: 8px;
   padding: 12px 28px;
-  background: linear-gradient(to right, #0f78c8, #3805d1);
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
   color: #fff;
   border: none;
   border-radius: 10px;
@@ -108,7 +108,7 @@
 }
 
 .maintenance-retry {
-  background: linear-gradient(to right, #0f78c8, #3805d1);
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
   color: #fff;
 }
 

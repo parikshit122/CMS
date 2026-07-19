@@ -1,6 +1,6 @@
 .sc-page {
   --sc-primary: var(--primary-color, #6366f1);
-  --sc-primary-dark: #4f46e5;
+  --sc-primary-dark: var(--secondary-color, #4f46e5);
   --sc-primary-alpha: rgba(99, 102, 241, 0.1);
   --sc-primary-glow: rgba(99, 102, 241, 0.22);
 

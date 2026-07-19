@@ -42,7 +42,7 @@ const buildUserResponse = (user) => ({
   createdAt: user.createdAt,
 });
 
-// ── Register ───────────────────────────────────────────────────────────────────
+// â”€â”€ Register â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const register = async (req, res) => {
   try {
     const { name, email, phone, password } = req.body;
@@ -106,6 +106,7 @@ const register = async (req, res) => {
     return res.status(201).json({
       success: true,
       message: `Account created! Please check your email for the verification code.`,
+      requiresVerification: true,
       otpExpiryMinutes: otpExpiryMins,
       email: user.email,
     });
@@ -122,7 +123,7 @@ const register = async (req, res) => {
   }
 };
 
-// ── Login ──────────────────────────────────────────────────────────────────────
+// â”€â”€ Login â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -157,7 +158,8 @@ const login = async (req, res) => {
     const isMatch = await user.matchPassword(password);
     if (!isMatch) {
       await user.incrementLoginAttempts();
-      const remaining = Math.max(0, 5 - user.loginAttempts);
+      const maxAttempts = (await Settings.getSingleton()).maxLoginAttempts || 5;
+      const remaining = Math.max(0, maxAttempts - user.loginAttempts);
       return res.status(401).json({
         success: false,
         message: remaining > 0
@@ -209,7 +211,7 @@ const login = async (req, res) => {
       return res.status(403).json({
         success: false,
         message: `Please verify your email before logging in.${otpMessage}`,
-        requiresVerify: true,
+        requiresVerification: true,
         email: user.email,
       });
     }
@@ -240,7 +242,7 @@ const socialLogin = async (req, res) => {
       return res.status(400).json({ success: false, message: "ID token is required." });
     }
 
-    // admin is now getAuth() directly — call verifyIdToken() on it directly
+    // admin is now getAuth() directly â€” call verifyIdToken() on it directly
     if (!admin) {
       return res.status(503).json({
         success: false,
@@ -249,13 +251,27 @@ const socialLogin = async (req, res) => {
     }
 
     const decoded = await admin.verifyIdToken(idToken);
-    const { email, name, picture, firebase } = decoded;
-    const provider = firebase?.sign_in_provider?.replace(".com", "") || "google";
+    let { email, name, picture, firebase, uid } = decoded;
+    const provider = firebase?.sign_in_provider?.replace(".com", "") || req.body.provider || "google";
+
+    // If the token doesn't contain the email (common for Github/Twitter), fetch the full UserRecord
+    if (!email && uid) {
+      try {
+        const userRecord = await admin.getUser(uid);
+        email = userRecord.email || (userRecord.providerData && userRecord.providerData[0]?.email);
+      } catch (err) {
+        console.error("[SocialLogin] Error fetching user record:", err.message);
+      }
+    }
+
+    // Fallback to body properties for cosmetic fields if token is missing them
+    name = name || req.body.name || email?.split("@")[0];
+    picture = picture || req.body.avatar || "";
 
     if (!email) {
       return res.status(400).json({
         success: false,
-        message: "Email not provided by social provider.",
+        message: "Email not provided by social provider. Please ensure your email is public or verified.",
       });
     }
 
@@ -278,12 +294,6 @@ const socialLogin = async (req, res) => {
         );
       }
     } else {
-      if (user.provider !== provider && user.provider === "local") {
-        return res.status(400).json({
-          success: false,
-          message: "This email is registered with a password. Please login normally.",
-        });
-      }
       if (!user.isActive) {
         return res.status(403).json({
           success: false,
@@ -333,7 +343,7 @@ const refreshTokenController = async (req, res) => {
   }
 };
 
-// ── Get Me ─────────────────────────────────────────────────────────────────────
+// â”€â”€ Get Me â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select("-password");
@@ -343,7 +353,7 @@ const getMe = async (req, res) => {
   }
 };
 
-// ── Forgot Password ────────────────────────────────────────────────────────────
+// â”€â”€ Forgot Password â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
@@ -478,7 +488,7 @@ const verifyOTP = async (req, res) => {
   }
 };
 
-// ── Reset Password ─────────────────────────────────────────────────────────────
+// â”€â”€ Reset Password â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const resetPassword = async (req, res) => {
   try {
     const { email, resetToken, newPassword, confirmPassword } = req.body;
@@ -561,7 +571,7 @@ const resetPassword = async (req, res) => {
   }
 };
 
-// ── Verify Email ───────────────────────────────────────────────────────────────
+// â”€â”€ Verify Email â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const verifyEmail = async (req, res) => {
   try {
     const { email, otp } = req.body;

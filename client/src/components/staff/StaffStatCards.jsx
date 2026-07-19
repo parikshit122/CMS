@@ -1,41 +1,42 @@
 import React from "react";
 import { SkeletonStatCard } from "../common/Loader";
+import SpatialCard from "../layout/SpatialCard";
 
 const STAT_CONFIG = [
   {
     key: "totalAssigned",
     label: "Total Assigned",
     icon: "bx bx-list-ul",
-    color: "#6366f1",
-    bg: "rgba(99,102,241,0.10)",
+    color: "#f59e0b",
+    bg: "rgba(245,158,11,0.10)",
   },
   {
     key: "pending",
     label: "Pending",
     icon: "bx bx-time-five",
-    color: "#f59e0b",
-    bg: "rgba(245,158,11,0.10)",
+    color: "#f43f5e",
+    bg: "rgba(244,63,94,0.10)",
   },
   {
     key: "inProgress",
     label: "In Progress",
     icon: "bx bx-loader-alt",
-    color: "#3b82f6",
-    bg: "rgba(59,130,246,0.10)",
+    color: "#fbbf24",
+    bg: "rgba(251,191,36,0.10)",
   },
   {
     key: "resolved",
     label: "Resolved",
     icon: "bx bx-check-circle",
-    color: "#10b981",
-    bg: "rgba(16,185,129,0.10)",
+    color: "#f59e0b",
+    bg: "rgba(245,158,11,0.10)",
   },
   {
     key: "rejected",
     label: "Rejected",
     icon: "bx bx-x-circle",
-    color: "#ef4444",
-    bg: "rgba(239,68,68,0.10)",
+    color: "#f43f5e",
+    bg: "rgba(244,63,94,0.10)",
   },
 ];
 
@@ -82,8 +83,8 @@ const StaffStatCards = ({ stats = {}, loading = false }) => {
         const trendLabel = `${up ? "Up" : "Down"} ${Math.abs(pct)}% from last week`;
 
         return (
-          <div
-            className="ssd-stat-card"
+          <SpatialCard
+            className="ssd-stat-card spatial-stat-card"
             key={cfg.key}
             role="listitem"
             aria-label={`${cfg.label}: ${stats[cfg.key] ?? 0}. ${trendLabel}`}
@@ -149,7 +150,7 @@ const StaffStatCards = ({ stats = {}, loading = false }) => {
                 }}
               />
             </div>
-          </div>
+          </SpatialCard>
         );
       })}
     </div>

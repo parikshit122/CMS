@@ -6,7 +6,7 @@ const User    = require("../models/User");
 const tokenBlacklist = new Map();
 
 // Clean expired tokens every 15 minutes instead of clearing ALL
-setInterval(() => {
+const cleanupInterval = setInterval(() => {
   const now = Date.now();
   for (const [token, expiresAt] of tokenBlacklist.entries()) {
     if (expiresAt < now) {
@@ -14,6 +14,7 @@ setInterval(() => {
     }
   }
 }, 15 * 60 * 1000);
+cleanupInterval.unref();
 
 const protect = async (req, res, next) => {
   try {

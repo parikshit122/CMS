@@ -1,7 +1,7 @@
 /* ===== BASE STYLES ===== */
 .footer {
-  background-color: #1e293b;
-  color: #ffffff;
+  background-color: var(--surface-color);
+  color: var(--text-color);
   padding: 60px 20px 30px;
 }
 
@@ -23,7 +23,7 @@
 
 .footer-desc {
   font-size: 14px;
-  color: #94a3b8;
+  color: var(--muted-text);
   line-height: 1.7;
   margin-top: 14px;
   max-width: 420px;
@@ -39,24 +39,25 @@
 .footer-social a {
   width: 38px;
   height: 38px;
-  background: #0f172a;
+  background: var(--active-bg);
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  color: #ffffff;
+  color: var(--text-color);
   transition: all 0.3s ease;
   text-decoration: none;
 }
 
 .footer-social a:hover {
-  background: #08c58f;
+  background: var(--primary-color);
+  color: #fff;
   transform: translateY(-3px);
 }
 
 .copyright {
   font-size: 13px;
-  color: #64748b;
+  color: var(--muted-text);
   margin-top: 20px;
 }
 
@@ -74,7 +75,7 @@
   display: block;
   width: 35px;
   height: 2px;
-  background: #08c58f;
+  background: var(--primary-color);
   margin-top: 6px;
 }
 
@@ -89,14 +90,14 @@
 }
 
 .footer-links a {
-  color: #94a3b8;
+  color: var(--muted-text);
   text-decoration: none;
   font-size: 14px;
   transition: color 0.2s ease;
 }
 
 .footer-links a:hover {
-  color: #08c58f;
+  color: var(--primary-color);
 }
 
 /* ===== 📱 LARGE TABLET / SMALL LAPTOP (≤1024px) ===== */

@@ -35,6 +35,8 @@ export default defineConfig({
           "react-vendor":    ["react", "react-dom", "react-router-dom"],
           "firebase-vendor": ["firebase/app", "firebase/auth"],
           "socket-vendor":   ["socket.io-client"],
+          "three-vendor":    ["three", "@react-three/fiber", "@react-three/drei"],
+          "gsap-vendor":     ["gsap", "@gsap/react"]
         },
       },
     },

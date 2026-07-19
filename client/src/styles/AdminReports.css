@@ -58,12 +58,12 @@
 }
 
 .reports-btn--primary {
-  background: #6366f1;
+  background: var(--primary-color);
   color: #fff;
 }
 
 .reports-btn--primary:hover {
-  background: #4f46e5;
+  background: var(--secondary-color);
 }
 
 .reports-btn--primary:disabled {
@@ -113,8 +113,8 @@
   font-size: 24px;
   padding: 10px;
   border-radius: 10px;
-  background: rgba(99, 102, 241, 0.1);
-  color: #6366f1;
+  background: var(--active-bg);
+  color: var(--primary-color);
 }
 
 .reports-summary__card--pending i {
@@ -279,7 +279,7 @@
 .reports-table__id {
   font-family: monospace;
   font-weight: 600;
-  color: #6366f1 !important;
+  color: var(--primary-color) !important;
   font-size: 12px;
 }
 

@@ -35,7 +35,7 @@ describe("POST /api/auth/register", () => {
   it("should reject duplicate email", async () => {
     await request(app).post("/api/auth/register").send(validPayload);
     const res = await request(app).post("/api/auth/register").send(validPayload);
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(409);
     expect(res.body.success).toBe(false);
   });
 
@@ -104,7 +104,7 @@ describe("POST /api/auth/login", () => {
       .post("/api/auth/login")
       .send({ email: "nobody@gmail.com", password: TEST_PASSWORD });
 
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(401);
     expect(res.body.success).toBe(false);
   });
 

@@ -19,21 +19,21 @@ export const connectSocket = (token) => {
   });
 
   socket.on("connect", () => {
-    if (import.meta.env.DEV) {
-      console.log("🔌 Socket connected:", socket.id);
-    }
+    // if (import.meta.env.DEV) {
+    //   console.log("🔌 Socket connected:", socket.id);
+    // }
   });
 
   socket.on("disconnect", (reason) => {
-    if (import.meta.env.DEV) {
-      console.log("🔌 Socket disconnected:", reason);
-    }
+    // if (import.meta.env.DEV) {
+    //   console.log("🔌 Socket disconnected:", reason);
+    // }
   });
 
   socket.on("connect_error", (err) => {
-    if (import.meta.env.DEV) {
-      console.warn("🔌 Socket connection error:", err.message);
-    }
+    // if (import.meta.env.DEV) {
+    //   console.warn("🔌 Socket connection error:", err.message);
+    // }
   });
 
   return socket;

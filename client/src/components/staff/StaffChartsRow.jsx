@@ -12,6 +12,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
+import SpatialCard from "../layout/SpatialCard";
 
 
 /* ── Custom Tooltip ── */
@@ -48,8 +49,8 @@ const DEFAULT_WEEKLY = [
 
 const DEFAULT_STATUS = [
   { name: "Pending",     value: 0, color: "#f59e0b" },
-  { name: "In Progress", value: 0, color: "#3b82f6" },
-  { name: "Resolved",    value: 0, color: "#10b981" },
+  { name: "In Progress", value: 0, color: "#f43f5e" },
+  { name: "Resolved",    value: 0, color: "#fbbf24" },
   { name: "Rejected",    value: 0, color: "#ef4444" },
 ];
 
@@ -70,7 +71,7 @@ const StaffChartsRow = ({ stats = {}, loading = false }) => {
   return (
     <div className="ssd-charts-row">
       {/* ── Line Chart: Assigned vs Resolved ── */}
-      <div className="ssd-chart-card">
+      <SpatialCard className="ssd-chart-card">
         <div className="ssd-chart-card__header">
           <div>
             <h4 className="ssd-chart-card__title">Weekly Trend</h4>
@@ -115,27 +116,27 @@ const StaffChartsRow = ({ stats = {}, loading = false }) => {
                 type="monotone"
                 dataKey="assigned"
                 name="Assigned"
-                stroke="#6366f1"
+                stroke="#f59e0b"
                 strokeWidth={2.5}
-                dot={{ r: 3, fill: "#6366f1" }}
+                dot={{ r: 3, fill: "#f59e0b" }}
                 activeDot={{ r: 5 }}
               />
               <Line
                 type="monotone"
                 dataKey="resolved"
                 name="Resolved"
-                stroke="#10b981"
+                stroke="#f43f5e"
                 strokeWidth={2.5}
-                dot={{ r: 3, fill: "#10b981" }}
+                dot={{ r: 3, fill: "#f43f5e" }}
                 activeDot={{ r: 5 }}
               />
             </LineChart>
           </ResponsiveContainer>
         )}
-      </div>
+      </SpatialCard>
 
       {/* ── Bar Chart: Status Distribution ── */}
-      <div className="ssd-chart-card">
+      <SpatialCard className="ssd-chart-card">
         <div className="ssd-chart-card__header">
           <div>
             <h4 className="ssd-chart-card__title">Status Breakdown</h4>
@@ -180,9 +181,9 @@ const StaffChartsRow = ({ stats = {}, loading = false }) => {
             </BarChart>
           </ResponsiveContainer>
         )}
+        </SpatialCard>
       </div>
-    </div>
-  );
+    );
 };
 
 export default StaffChartsRow;

@@ -6,8 +6,10 @@ import { loginUser, registerUser } from "../../services/authService";
 import API from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import SuspendedScreen from "../../components/auth/SuspendedScreen";
+import AuthMotionBackground from "../../components/auth/AuthMotionBackground";
 import "../../styles/Login.css";
 import "boxicons/css/boxicons.min.css";
+import use3DTilt from "../../hooks/use3DTilt";
 
 import { signInWithPopup, getRedirectResult } from "firebase/auth";
 
@@ -93,6 +95,7 @@ function Login() {
   const location = useLocation();
   const alert = useAlert();
   const { login } = useAuth();
+  const tiltRef = use3DTilt({ max: 15, scale: 1.02 });
 
   useEffect(() => {
     const panel = location.state?.panel;
@@ -272,8 +275,7 @@ function Login() {
       firebaseEmail =
         result.user.email || result.user.providerData?.[0]?.email || "";
       const firebaseName =
-        result.user.displayName ||
-        result.user.providerData?.[0]?.displayName ||
+        result.user.displayName || result.user.providerData?.[0]?.displayName ||
         "";
       const firebaseAvatar =
         result.user.photoURL || result.user.providerData?.[0]?.photoURL || "";
@@ -486,23 +488,21 @@ function Login() {
   };
 
   return (
-    <div className="outer-container">
+    <div className="outer-container" style={{ perspective: "1500px" }}>
+      <AuthMotionBackground />
       <Button
-        style={{
-          position: "absolute",
-          top: "10px",
-          left: "10px",
-          zIndex: 9999,
-        }}
+        className="back-btn-absolute"
         onClick={handleBack}
         aria-label="Go back to home page"
       >
-        <i className="bx bx-arrow-back" aria-hidden="true" /> Back
+        <i className="bx bx-arrow-back" aria-hidden="true" /> <span className="back-text">Back</span>
       </Button>
 
       <div
         className={`logincontainer ${isActive ? "active" : ""}`}
         aria-live="polite"
+        ref={tiltRef}
+        style={{ transformStyle: "preserve-3d" }}
       >
         <div
           className="form-box login"

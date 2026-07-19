@@ -17,7 +17,7 @@ try {
       });
       console.log("✅ Firebase Admin initialized");
     } else {
-      console.warn("⚠️  Firebase env vars missing — social login disabled");
+      // console.warn("⚠️  Firebase env vars missing — social login disabled");
     }
   }
 } catch (err) {

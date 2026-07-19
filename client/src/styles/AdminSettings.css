@@ -30,7 +30,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: linear-gradient(to right, #0f78c8, #3805d1);
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
   color: #fff;
   border: none;
   padding: 10px 20px;

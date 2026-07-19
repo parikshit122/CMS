@@ -4,22 +4,26 @@ const axios = require("axios");
 
 const BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
 
-console.log("📧 [EmailService] Config Check:");
-console.log("   BREVO_API_KEY:", process.env.BREVO_API_KEY ? `✅ Set (${process.env.BREVO_API_KEY.length} chars)` : "❌ MISSING");
-console.log("   EMAIL_FROM:", process.env.EMAIL_FROM || "❌ not set");
-console.log("   EMAIL_SENDER_NAME:", process.env.EMAIL_SENDER_NAME || "❌ not set");
+const isDev = process.env.NODE_ENV !== "production";
+
+// if (isDev) {
+//   console.log("📧 [EmailService] Config Check:");
+//   console.log("   BREVO_API_KEY:", process.env.BREVO_API_KEY ? "✅ Set" : "❌ MISSING");
+//   console.log("   EMAIL_FROM:", process.env.EMAIL_FROM || "❌ not set");
+//   console.log("   EMAIL_SENDER_NAME:", process.env.EMAIL_SENDER_NAME || "❌ not set");
+// }
 
 const sendMail = async (to, subject, html, label = "Email") => {
   const senderEmail = process.env.EMAIL_FROM;
   const senderName = process.env.EMAIL_SENDER_NAME || "ComplaintSync";
 
   if (!process.env.BREVO_API_KEY) {
-    console.warn(`⚠️  [${label}] BREVO_API_KEY not set — skipping`);
+    // console.warn(`⚠️  [${label}] BREVO_API_KEY not set — skipping`);
     return { success: false, skipped: true };
   }
 
   if (!senderEmail) {
-    console.warn(`⚠️  [${label}] EMAIL_FROM not set — skipping`);
+    // console.warn(`⚠️  [${label}] EMAIL_FROM not set — skipping`);
     return { success: false, skipped: true };
   }
 
@@ -576,9 +580,40 @@ const sendWelcomeEmail = async (user, otp, expiryMinutes = 10, senderName) => {
   );
 };
 
+const sendStaffWelcomeEmail = async (staff, password, senderName) => {
+  const name = staff.name || "Staff Member";
+  const sender = senderName || process.env.EMAIL_SENDER_NAME || "ComplaintSync";
+
+  const content = `
+    ${greeting(name)}
+    <p style="margin:0 0 20px;color:#475569;font-size:15px;line-height:1.6;">
+      You have been added as a staff member to <strong>${sender}</strong>.
+    </p>
+    ${infoTable(
+      infoRow("Email", staff.email) +
+      infoRow("Password", password) +
+      infoRow("Role", "Staff")
+    )}
+    <div style="background:#eff6ff;border-left:4px solid #3b82f6;
+                border-radius:4px;padding:12px 16px;margin:20px 0;">
+      <p style="margin:0;color:#1e40af;font-size:13px;">
+        📌 <strong>Action Required:</strong> Please log in and change your password immediately.
+      </p>
+    </div>
+    ${signOff(sender)}`;
+
+  return sendMail(
+    staff.email,
+    `Welcome to ${sender} – Staff Account Created`,
+    layout(content, sender),
+    "StaffWelcome"
+  );
+};
+
 module.exports = {
   sendMail,
   sendWelcomeEmail,
+  sendStaffWelcomeEmail,
   sendEmailVerificationOTP,
   sendEmailVerifiedSuccessEmail,
   sendPasswordResetOTPEmail,

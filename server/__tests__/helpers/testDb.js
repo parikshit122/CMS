@@ -1,9 +1,7 @@
 const mongoose = require("mongoose");
+const { MongoMemoryServer } = require("mongodb-memory-server");
 
-// Use dedicated test database
-const TEST_DB_URI =
-  process.env.MONGODB_URI ||
-  "mongodb://localhost:27017/cms_test";
+let mongoServer;
 
 const connect = async () => {
   // Close existing connection if any
@@ -11,7 +9,10 @@ const connect = async () => {
     await mongoose.disconnect();
   }
 
-  await mongoose.connect(TEST_DB_URI, {
+  mongoServer = await MongoMemoryServer.create();
+  const uri = mongoServer.getUri();
+
+  await mongoose.connect(uri, {
     serverSelectionTimeoutMS: 5000,
     connectTimeoutMS:         5000,
   });
@@ -32,6 +33,9 @@ const closeDatabase = async () => {
   if (mongoose.connection.readyState === 0) return;
   await mongoose.connection.dropDatabase().catch(() => {});
   await mongoose.disconnect();
+  if (mongoServer) {
+    await mongoServer.stop();
+  }
 };
 
 module.exports = { connect, clearDatabase, closeDatabase };

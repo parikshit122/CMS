@@ -28,13 +28,29 @@ const submitComplaint = async (req, res) => {
       });
     }
 
-    const attachments = (req.files || []).map((file) => ({
-      url: file.path,
-      publicId: file.filename,
-      originalName: file.originalname,
-      mimeType: file.mimetype,
-      size: file.size,
-    }));
+    let attachments = [];
+    if (req.files && req.files.length > 0) {
+      const { uploadToCloudinary } = require("../services/cloudinary.service");
+      try {
+        const uploaded = await Promise.all(
+          req.files.map((file) =>
+            uploadToCloudinary(file.buffer, {
+              folder: "complaint-sync/complaints",
+              public_id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
+            })
+          )
+        );
+        attachments = uploaded.map((result, i) => ({
+          url: result.secure_url,
+          publicId: result.public_id,
+          originalName: req.files[i].originalname,
+          mimeType: req.files[i].mimetype,
+          size: req.files[i].size,
+        }));
+      } catch (uploadErr) {
+        console.error("[submitComplaint] Attachment upload failed:", uploadErr.message);
+      }
+    }
 
     const complaint = await Complaint.create({
       title: title.trim(),
@@ -184,11 +200,36 @@ const updateComplaintStatus = async (req, res) => {
       return res.status(403).json({ success: false, message: "Not authorized to update this complaint." });
     }
 
+    if (complaint.status === "resolved") {
+      return res.status(400).json({ success: false, message: "Cannot update a resolved complaint (locked)." });
+    }
+
+    if (status === "rejected" && !rejectionReason) {
+      return res.status(400).json({ success: false, message: "Rejection reason is required." });
+    }
+
     const oldStatus = complaint.status;
 
     complaint.status = status;
     if (rejectionReason) complaint.rejectionReason = rejectionReason;
     await complaint.save();
+
+    // Send DB + socket notifications (after save)
+    const app = req.app;
+    const notifySettings = await Settings.getSingleton();
+    if (oldStatus !== status) {
+      try {
+        if (status === "resolved" && notifySettings.notifyOnResolve) {
+          await notifyComplaintResolved(complaint, complaint.student, req.user, app);
+        } else if (status === "rejected") {
+          await notifyComplaintRejected(complaint, complaint.student, req.user, app);
+        } else if (status === "in-progress") {
+          await notifyComplaintInProgress(complaint, complaint.student, req.user, app);
+        }
+      } catch (notifyErr) {
+        console.error("[updateStatus] Notification failed:", notifyErr.message);
+      }
+    }
 
     res.json({
       success: true,

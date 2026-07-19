@@ -12,6 +12,7 @@ import {
 } from "../../redux/notificationSlice";
 import NotificationList from "./NotificationList";
 import "boxicons/css/boxicons.min.css";
+import "../../styles/NotificationBell.css";
 
 const POLL_INTERVAL = 60000;
 

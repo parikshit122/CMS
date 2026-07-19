@@ -1,4 +1,6 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
+import PageTransition from "../components/common/PageTransition";
 
 import Header from "../components/layout/Header";
 import Footer from "../components/layout/Footer";
@@ -72,6 +74,7 @@ const getDisplayRole = (role) => {
 
 function AppRoutes() {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -91,40 +94,41 @@ function AppRoutes() {
   }
 
   return (
-    <Routes>
-      <Route
-        path="/"
-        element={
-          user ? (
-            <Navigate to={getRoleRedirect(user.role)} replace />
-          ) : (
-            <>
-              <Header />
-              <Home />
-              <Footer />
-            </>
-          )
-        }
-      />
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        <Route
+          path="/"
+          element={
+            user ? (
+              <Navigate to={getRoleRedirect(user.role)} replace />
+            ) : (
+              <PageTransition>
+                <Header />
+                <Home />
+                <Footer />
+              </PageTransition>
+            )
+          }
+        />
 
-      <Route path="/auth" element={<Login />} />
-      <Route path="/auth/forgot-password" element={<ForgotPassword />} />
-      <Route path="/auth/verify-otp" element={<VerifyOtp />} />
-      <Route path="/auth/verify-email" element={<VerifyEmail />} />
-      <Route path="/auth/reset-password" element={<ResetPassword />} />
-      <Route path="/maintenance" element={<Maintenance />} />
+        <Route path="/auth" element={<PageTransition><Login /></PageTransition>} />
+        <Route path="/auth/forgot-password" element={<PageTransition><ForgotPassword /></PageTransition>} />
+        <Route path="/auth/verify-otp" element={<PageTransition><VerifyOtp /></PageTransition>} />
+        <Route path="/auth/verify-email" element={<PageTransition><VerifyEmail /></PageTransition>} />
+        <Route path="/auth/reset-password" element={<PageTransition><ResetPassword /></PageTransition>} />
+        <Route path="/maintenance" element={<PageTransition><Maintenance /></PageTransition>} />
 
       <Route
         path="/dashboard"
         element={
           <ProtectedRoute allowedRoles={["user"]}>
-            <DashboardLayout
+            <PageTransition><DashboardLayout
               menuItems={studentMenuItems}
               userName={user?.name}
               role={getDisplayRole(user?.role)}
             >
               <StudentDash />
-            </DashboardLayout>
+            </DashboardLayout></PageTransition>
           </ProtectedRoute>
         }
       />
@@ -133,13 +137,13 @@ function AppRoutes() {
         path="/submit"
         element={
           <ProtectedRoute allowedRoles={["user"]}>
-            <DashboardLayout
+            <PageTransition><DashboardLayout
               menuItems={studentMenuItems}
               userName={user?.name}
               role={getDisplayRole(user?.role)}
             >
               <SubmitComplaint />
-            </DashboardLayout>
+            </DashboardLayout></PageTransition>
           </ProtectedRoute>
         }
       />
@@ -148,13 +152,13 @@ function AppRoutes() {
         path="/complaints"
         element={
           <ProtectedRoute allowedRoles={["user"]}>
-            <DashboardLayout
+            <PageTransition><DashboardLayout
               menuItems={studentMenuItems}
               userName={user?.name}
               role={getDisplayRole(user?.role)}
             >
               <MyComplaints />
-            </DashboardLayout>
+            </DashboardLayout></PageTransition>
           </ProtectedRoute>
         }
       />
@@ -163,13 +167,13 @@ function AppRoutes() {
         path="/admin"
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
-            <DashboardLayout
+            <PageTransition><DashboardLayout
               menuItems={adminMenuItems}
               userName={user?.name}
               role={getDisplayRole(user?.role)}
             >
               <AdminDashboard />
-            </DashboardLayout>
+            </DashboardLayout></PageTransition>
           </ProtectedRoute>
         }
       />
@@ -178,13 +182,13 @@ function AppRoutes() {
         path="/admin/users"
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
-            <DashboardLayout
+            <PageTransition><DashboardLayout
               menuItems={adminMenuItems}
               userName={user?.name}
               role={getDisplayRole(user?.role)}
             >
               <ManageUsers />
-            </DashboardLayout>
+            </DashboardLayout></PageTransition>
           </ProtectedRoute>
         }
       />
@@ -193,13 +197,13 @@ function AppRoutes() {
         path="/admin/reports"
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
-            <DashboardLayout
+            <PageTransition><DashboardLayout
               menuItems={adminMenuItems}
               userName={user?.name}
               role={getDisplayRole(user?.role)}
             >
               <AdminReports />
-            </DashboardLayout>
+            </DashboardLayout></PageTransition>
           </ProtectedRoute>
         }
       />
@@ -208,13 +212,13 @@ function AppRoutes() {
         path="/staff"
         element={
           <ProtectedRoute allowedRoles={["staff"]}>
-            <DashboardLayout
+            <PageTransition><DashboardLayout
               menuItems={staffMenuItems}
               userName={user?.name}
               role={getDisplayRole(user?.role)}
             >
               <StaffDashboard />
-            </DashboardLayout>
+            </DashboardLayout></PageTransition>
           </ProtectedRoute>
         }
       />
@@ -223,13 +227,13 @@ function AppRoutes() {
         path="/staff/complaints"
         element={
           <ProtectedRoute allowedRoles={["staff"]}>
-            <DashboardLayout
+            <PageTransition><DashboardLayout
               menuItems={staffMenuItems}
               userName={user?.name}
               role={getDisplayRole(user?.role)}
             >
               <StaffComplaints />
-            </DashboardLayout>
+            </DashboardLayout></PageTransition>
           </ProtectedRoute>
         }
       />
@@ -238,13 +242,13 @@ function AppRoutes() {
         path="/notifications"
         element={
           <ProtectedRoute allowedRoles={["user"]}>
-            <DashboardLayout
+            <PageTransition><DashboardLayout
               menuItems={studentMenuItems}
               userName={user?.name}
               role={getDisplayRole(user?.role)}
             >
               <Notifications />
-            </DashboardLayout>
+            </DashboardLayout></PageTransition>
           </ProtectedRoute>
         }
       />
@@ -253,13 +257,13 @@ function AppRoutes() {
         path="/admin/notifications"
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
-            <DashboardLayout
+            <PageTransition><DashboardLayout
               menuItems={adminMenuItems}
               userName={user?.name}
               role={getDisplayRole(user?.role)}
             >
               <Notifications />
-            </DashboardLayout>
+            </DashboardLayout></PageTransition>
           </ProtectedRoute>
         }
       />
@@ -268,13 +272,13 @@ function AppRoutes() {
         path="/admin/settings"
         element={
           <ProtectedRoute allowedRoles={["admin"]}>
-            <DashboardLayout
+            <PageTransition><DashboardLayout
               menuItems={adminMenuItems}
               userName={user?.name}
               role={getDisplayRole(user?.role)}
             >
               <AdminSettings />
-            </DashboardLayout>
+            </DashboardLayout></PageTransition>
           </ProtectedRoute>
         }
       />
@@ -283,13 +287,13 @@ function AppRoutes() {
         path="/staff/notifications"
         element={
           <ProtectedRoute allowedRoles={["staff"]}>
-            <DashboardLayout
+            <PageTransition><DashboardLayout
               menuItems={staffMenuItems}
               userName={user?.name}
               role={getDisplayRole(user?.role)}
             >
               <Notifications />
-            </DashboardLayout>
+            </DashboardLayout></PageTransition>
           </ProtectedRoute>
         }
       />
@@ -298,25 +302,26 @@ function AppRoutes() {
         path="/profile"
         element={
           <ProtectedRoute allowedRoles={["user", "staff", "admin"]}>
-            <DashboardLayout
-              menuItems={
-                user?.role === "admin"
-                  ? adminMenuItems
-                  : user?.role === "staff"
-                    ? staffMenuItems
-                    : studentMenuItems
-              }
-              userName={user?.name}
-              role={getDisplayRole(user?.role)}
-            >
-              <Profile />
-            </DashboardLayout>
+            <PageTransition><DashboardLayout
+                menuItems={
+                  user?.role === "admin"
+                    ? adminMenuItems
+                    : user?.role === "staff"
+                      ? staffMenuItems
+                      : studentMenuItems
+                }
+                userName={user?.name}
+                role={getDisplayRole(user?.role)}
+              >
+                <Profile />
+              </DashboardLayout></PageTransition>
           </ProtectedRoute>
         }
       />
 
-      <Route path="*" element={<NotFound />} />
-    </Routes>
+      <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
+      </Routes>
+    </AnimatePresence>
   );
 }
 

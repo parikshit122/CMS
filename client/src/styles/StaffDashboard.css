@@ -18,7 +18,7 @@
   flex-direction: column;
   gap: 32px;
   padding: 12px 4px 40px;
-  background: var(--bg-color);
+  background: transparent;
   color: var(--text-color);
   transition:
     background var(--transition),
@@ -95,10 +95,6 @@
   align-items: flex-end;
   gap: 3px;
   padding: 10px 16px;
-  background: var(--surface-color);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
 }
 
 .ssd-page__meta-item {
@@ -200,20 +196,9 @@
 }
 
 .ssd-stat-card {
-  background: var(--surface-color);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: 20px 20px 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  box-shadow: var(--shadow-sm);
-  transition:
-    transform var(--transition),
-    box-shadow var(--transition),
-    border-color var(--transition);
-  position: relative;
-  overflow: hidden;
 }
 
 .ssd-stat-card::before {
@@ -325,14 +310,7 @@
 }
 
 .ssd-chart-card {
-  background: var(--surface-color);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: 24px;
-  box-shadow: var(--shadow-sm);
-  transition:
-    background var(--transition),
-    border-color var(--transition);
+  /* Layout handled by TiltCard */
 }
 
 .ssd-chart-card__header {
@@ -400,14 +378,19 @@
    TABLE CARD
    ============================================================ */
 .ssd-table-card {
-  background: var(--surface-color);
-  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-xl);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
-  transition:
-    background var(--transition),
-    border-color var(--transition);
+  transition: all var(--transition);
+}
+
+html[data-bs-theme="dark"] .ssd-table-card {
+  background: rgba(15, 15, 15, 0.4);
+  border: 1px solid rgba(249, 115, 22, 0.15);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5), inset 0 0 10px rgba(249, 115, 22, 0.05);
 }
 
 .ssd-table-header {
@@ -618,7 +601,7 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #3b82f6);
+  background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
   color: #fff;
   display: flex;
   align-items: center;

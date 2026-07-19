@@ -16,9 +16,21 @@ const allowedOrigins = (
   process.env.CORS_ORIGIN || "http://localhost:5173,http://localhost:3000"
 ).split(",").map((o) => o.trim());
 
+const DEV_ORIGINS = [
+  "http://localhost:5173",
+  "http://localhost:3000",
+];
+
 const io = new Server(httpServer, {
   cors: {
-    origin:      allowedOrigins,
+    origin:      isDev
+      ? (origin, cb) => {
+          if (!origin || allowedOrigins.includes(origin) || DEV_ORIGINS.includes(origin)) {
+            return cb(null, true);
+          }
+          cb(new Error(`CORS blocked: ${origin}`));
+        }
+      : allowedOrigins,
     methods:     ["GET", "POST"],
     credentials: true,
   },
@@ -52,7 +64,7 @@ io.on("connection", (socket) => {
   const user = socket.user;
 
   if (isDev) {
-    console.log(`🔌 Socket connected: ${user.name} (${user.role}) — ${socket.id}`);
+    // console.log(`🔌 Socket connected: ${user.name} (${user.role}) — ${socket.id}`);
   }
 
   // ── Join role-based rooms ─────────────────────────────
@@ -62,7 +74,7 @@ io.on("connection", (socket) => {
   // ── Handle disconnect ─────────────────────────────────
   socket.on("disconnect", (reason) => {
     if (isDev) {
-      console.log(`🔌 Socket disconnected: ${user.name} — ${reason}`);
+      // console.log(`🔌 Socket disconnected: ${user.name} — ${reason}`);
     }
   });
 

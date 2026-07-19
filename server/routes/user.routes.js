@@ -1,4 +1,4 @@
-const express = require("express");
+﻿const express = require("express");
 const router = express.Router();
 const { protect } = require("../middlewares/auth.middleware");
 const { upload } = require("../middlewares/upload.middleware");
@@ -6,7 +6,7 @@ const { uploadAvatar } = require("../controllers/user.controller");
 const User = require("../models/User");
 
 router.get("/test", (req, res) => {
-  res.json({ message: "Users route working ✅" });
+  res.json({ message: "Users route working âœ…" });
 });
 
 router.post(
@@ -31,7 +31,7 @@ router.patch("/profile", protect, async (req, res) => {
   try {
     const { name, phone, course, year, bio } = req.body;
 
-    // ── Basic validation ─────────────────────────────────
+    // â”€â”€ Basic validation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (name !== undefined && name.trim().length < 2) {
       return res.status(400).json({
         success: false,
@@ -72,7 +72,7 @@ router.patch("/profile", protect, async (req, res) => {
       });
     }
 
-    // ── Update fields ─────────────────────────────────────
+    // â”€â”€ Update fields â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (name  !== undefined) user.name = name.trim();
     if (bio   !== undefined) user.bio  = bio;
 
@@ -82,7 +82,7 @@ router.patch("/profile", protect, async (req, res) => {
       if (year   !== undefined) user.year   = year;
     }
 
-    // ── Phone duplicate check ─────────────────────────────
+    // â”€â”€ Phone duplicate check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (phone !== undefined && phone !== "" && phone !== user.phone) {
       const phoneExists = await User.findOne({
         phone,
@@ -119,12 +119,12 @@ router.patch("/profile", protect, async (req, res) => {
   }
 });;
 
-// ── Change Password ───────────────────────────────────────
+// â”€â”€ Change Password â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.patch("/change-password", protect, async (req, res) => {
   try {
     const { currentPassword, newPassword, confirmPassword } = req.body;
 
-    // ── Basic presence checks ─────────────────────────────
+    // â”€â”€ Basic presence checks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (!currentPassword || !newPassword || !confirmPassword) {
       return res.status(400).json({
         success: false,
@@ -132,7 +132,7 @@ router.patch("/change-password", protect, async (req, res) => {
       });
     }
 
-    // ── Passwords match ───────────────────────────────────
+    // â”€â”€ Passwords match â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (newPassword !== confirmPassword) {
       return res.status(400).json({
         success: false,
@@ -140,7 +140,7 @@ router.patch("/change-password", protect, async (req, res) => {
       });
     }
 
-    // ── Min length ────────────────────────────────────────
+    // â”€â”€ Min length â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (newPassword.length < 8) {
       return res.status(400).json({
         success: false,
@@ -148,7 +148,7 @@ router.patch("/change-password", protect, async (req, res) => {
       });
     }
 
-    // ── Complexity checks ─────────────────────────────────
+    // â”€â”€ Complexity checks â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (!/[A-Z]/.test(newPassword)) {
       return res.status(400).json({
         success: false,
@@ -170,7 +170,7 @@ router.patch("/change-password", protect, async (req, res) => {
       });
     }
 
-    // ── Get user with password field ──────────────────────
+    // â”€â”€ Get user with password field â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const user = await User.findById(req.user.id).select("+password");
     if (!user) {
       return res.status(404).json({
@@ -179,7 +179,7 @@ router.patch("/change-password", protect, async (req, res) => {
       });
     }
 
-    // ── Social login users cannot change password ─────────
+    // â”€â”€ Social login users cannot change password â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (user.provider && user.provider !== "local") {
       return res.status(400).json({
         success: false,
@@ -187,7 +187,7 @@ router.patch("/change-password", protect, async (req, res) => {
       });
     }
 
-    // ── Verify current password ───────────────────────────
+    // â”€â”€ Verify current password â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const isMatch = await user.matchPassword(currentPassword);
     if (!isMatch) {
       return res.status(401).json({
@@ -196,7 +196,7 @@ router.patch("/change-password", protect, async (req, res) => {
       });
     }
 
-    // ── Cannot reuse same password ────────────────────────
+    // â”€â”€ Cannot reuse same password â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const isSame = await user.matchPassword(newPassword);
     if (isSame) {
       return res.status(400).json({
@@ -205,7 +205,7 @@ router.patch("/change-password", protect, async (req, res) => {
       });
     }
 
-    // ── Save — pre-save hook hashes automatically ─────────
+    // â”€â”€ Save â€” pre-save hook hashes automatically â”€â”€â”€â”€â”€â”€â”€â”€â”€
     user.password      = newPassword;
     user.loginAttempts = 0;
     user.lockUntil     = null;
