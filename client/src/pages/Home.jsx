@@ -1,4 +1,5 @@
 import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import "../styles/Home.css";
 import Button from "../components/common/Button";
 import HeroMotionGraphics from "../components/layout/HeroMotionGraphics";
@@ -15,34 +16,35 @@ function Home() {
     <div className="landing">
       <HeroMotionGraphics />
 
-      <section className="stats-container">
-        <div className="card">
+      <section className="stats-container" aria-label="ComplaintSync at a glance">
+        <motion.div className="card" initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.45 }}>
           <i className="bx bx-check-circle stat-icon" />
           <h2>10,000+</h2>
           <p>Complaints Resolved</p>
-        </div>
+        </motion.div>
 
-        <div className="card">
+        <motion.div className="card" initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.45, delay: 0.08 }}>
           <i className="bx bx-smile stat-icon" />
           <h2>98%</h2>
           <p>Satisfaction Rate</p>
-        </div>
+        </motion.div>
 
-        <div className="card">
+        <motion.div className="card" initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.45, delay: 0.16 }}>
           <i className="bx bx-time-five stat-icon" />
           <h2>24/7</h2>
           <p>Support Available</p>
-        </div>
+        </motion.div>
 
-        <div className="card">
+        <motion.div className="card" initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.45, delay: 0.24 }}>
           <i className="bx bx-buildings stat-icon" />
           <h2>50+</h2>
           <p>Organizations</p>
-        </div>
+        </motion.div>
       </section>
 
       {/* ── FEATURES SECTION ── */}
-      <div id="features" className="container1">
+      <div id="features" className="container1 section-intro">
+        <span className="eyebrow">A better resolution experience</span>
         <h1>
           <span>
             <i className="bx bx-star section-emoji" /> Everything You Need
@@ -55,60 +57,61 @@ function Home() {
         </p>
       </div>
 
-      <section className="features-wrap">
+      <section className="features-wrap" aria-label="Platform features">
         <div className="features-grid">
-          <article className="feature-card">
+          <motion.article className="feature-card" whileHover={{ y: -10, rotateX: 3, rotateY: -3 }} transition={{ type: "spring", stiffness: 280, damping: 20 }}>
             <div className="feature-icon" aria-hidden="true">
               <i className="bx bx-edit" />
             </div>
             <h3>Easy Submission</h3>
             <p>Submit complaints in minutes with our intuitive interface</p>
-          </article>
+          </motion.article>
 
-          <article className="feature-card">
+          <motion.article className="feature-card" whileHover={{ y: -10, rotateX: 3, rotateY: -3 }} transition={{ type: "spring", stiffness: 280, damping: 20 }}>
             <div className="feature-icon" aria-hidden="true">
               <i className="bx bx-radar" />
             </div>
             <h3>Real-time Tracking</h3>
             <p>Track your complaint status 24/7 with live updates</p>
-          </article>
+          </motion.article>
 
-          <article className="feature-card">
+          <motion.article className="feature-card" whileHover={{ y: -10, rotateX: 3, rotateY: -3 }} transition={{ type: "spring", stiffness: 280, damping: 20 }}>
             <div className="feature-icon" aria-hidden="true">
               <i className="bx bx-shield-quarter" />
             </div>
             <h3>Secure &amp; Private</h3>
             <p>Your data is encrypted and protected at all times</p>
-          </article>
+          </motion.article>
 
-          <article className="feature-card">
+          <motion.article className="feature-card" whileHover={{ y: -10, rotateX: 3, rotateY: -3 }} transition={{ type: "spring", stiffness: 280, damping: 20 }}>
             <div className="feature-icon" aria-hidden="true">
               <i className="bx bx-bar-chart-alt-2" />
             </div>
             <h3>Analytics Dashboard</h3>
             <p>Get insights and reports on complaint trends</p>
-          </article>
+          </motion.article>
 
-          <article className="feature-card">
+          <motion.article className="feature-card" whileHover={{ y: -10, rotateX: 3, rotateY: -3 }} transition={{ type: "spring", stiffness: 280, damping: 20 }}>
             <div className="feature-icon" aria-hidden="true">
               <i className="bx bx-group" />
             </div>
             <h3>Multi-role Support</h3>
             <p>Designed for users, staff, and administrators</p>
-          </article>
+          </motion.article>
 
-          <article className="feature-card">
+          <motion.article className="feature-card" whileHover={{ y: -10, rotateX: 3, rotateY: -3 }} transition={{ type: "spring", stiffness: 280, damping: 20 }}>
             <div className="feature-icon" aria-hidden="true">
               <i className="bx bx-rocket" />
             </div>
             <h3>Fast Resolution</h3>
             <p>Streamlined workflow for quick issue resolution</p>
-          </article>
+          </motion.article>
         </div>
       </section>
 
       {/* ── WORKFLOW SECTION ── */}
-      <div id="workflow" className="container1 workflow-header">
+      <div id="workflow" className="container1 workflow-header section-intro">
+        <span className="eyebrow">From signal to solution</span>
         <h1>
           <span>
             <i className="bx bx-git-branch section-emoji" /> How It Works
@@ -175,6 +178,8 @@ function Home() {
 
       {/* ── READY TO START ── */}
       <section className="ready-container">
+        <div className="ready-orbit ready-orbit-one" aria-hidden="true" />
+        <div className="ready-orbit ready-orbit-two" aria-hidden="true" />
         <div className="ready">
           <h2>
             <i className="bx bx-rocket ready-icon" /> Ready to Get Started?

@@ -43,6 +43,9 @@ export default function HeroMotionGraphics() {
       <motion.div className="ambient-orb orb-orange" variants={pulseAnimation} animate="animate" />
       <motion.div className="ambient-orb orb-rose" variants={pulseAnimation} animate="animate" style={{ animationDelay: "2s" }} />
       <motion.div className="ambient-orb orb-cyan" variants={pulseAnimation} animate="animate" style={{ animationDelay: "1s" }} />
+      <div className="hero-grid-overlay" aria-hidden="true" />
+      <div className="hero-orbit hero-orbit-a" aria-hidden="true" />
+      <div className="hero-orbit hero-orbit-b" aria-hidden="true" />
 
       <div className="hero-content-grid">
         
@@ -111,6 +114,7 @@ export default function HeroMotionGraphics() {
                 <span className="mockup-dot green"></span>
               </div>
               <div className="mockup-body">
+                <div className="mockup-kicker"><span className="mockup-live-dot" /> Live resolution overview</div>
                 <div className="mockup-line title-line"></div>
                 <div className="mockup-line subtitle-line"></div>
                 
@@ -120,6 +124,10 @@ export default function HeroMotionGraphics() {
                   <motion.div className="mockup-bar" initial={{ height: 0 }} animate={{ height: "40%" }} transition={{ duration: 1.5, delay: 0.6 }} />
                   <motion.div className="mockup-bar" initial={{ height: 0 }} animate={{ height: "100%" }} transition={{ duration: 1.5, delay: 0.8 }} />
                   <motion.div className="mockup-bar" initial={{ height: 0 }} animate={{ height: "70%" }} transition={{ duration: 1.5, delay: 1.0 }} />
+                </div>
+                <div className="mockup-footer-row">
+                  <span>Weekly resolution</span>
+                  <strong>+18.4%</strong>
                 </div>
               </div>
             </motion.div>
