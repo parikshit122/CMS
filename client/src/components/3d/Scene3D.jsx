@@ -73,7 +73,7 @@ function DriftingEmbers({ isMobile, lowFpsMode }) {
 
   return (
     <points ref={meshRef}>
-      <bufferGeometry>
+      <bufferGeometry key={count}>
         <bufferAttribute
           attach="attributes-position"
           count={count}

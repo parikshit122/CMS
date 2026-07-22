@@ -2,6 +2,7 @@ import { useState, useId } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
 import SpatialDock from "../components/layout/SpatialDock";
 import NotificationBell from "../components/notification/NotificationBell";
 import useAuthSync from "../hooks/useAuthSync";
@@ -16,6 +17,7 @@ export default function DashboardLayout({
   const navigate = useNavigate();
 
   const { user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   useAuthSync();
 
   const displayRole = user?.role
@@ -77,6 +79,15 @@ export default function DashboardLayout({
           </div>
 
           <div className="island-actions">
+            <button
+              className="island-theme-toggle"
+              onClick={toggleTheme}
+              title={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`}
+              aria-label="Toggle Theme"
+              type="button"
+            >
+              <i className={`bx ${theme === "dark" ? "bx-sun" : "bx-moon"}`} />
+            </button>
             <NotificationBell />
             
             <div
