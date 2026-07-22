@@ -81,6 +81,28 @@
   gap: 12px;
 }
 
+.island-theme-toggle, .header-theme-toggle {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--surface-glass-border);
+  color: var(--neon-orange);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  transition: all 0.25s ease;
+}
+
+.island-theme-toggle:hover, .header-theme-toggle:hover {
+  background: rgba(249, 115, 22, 0.15);
+  border-color: var(--neon-orange);
+  transform: scale(1.08) rotate(15deg);
+  box-shadow: 0 0 12px var(--neon-orange-glow);
+}
+
 .island-avatar {
   width: 36px;
   height: 36px;

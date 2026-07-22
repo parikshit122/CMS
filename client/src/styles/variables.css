@@ -51,6 +51,29 @@
   --header-height: 64px;
 }
 
+html[data-bs-theme="light"],
+html[data-theme="light"] {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #f1f5f9;
+  --bg-gradient: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  
+  --surface-card: #ffffff;
+  --surface-card-hover: #f1f5f9;
+  --surface-glass: rgba(255, 255, 255, 0.88);
+  --surface-glass-border: rgba(0, 0, 0, 0.1);
+  --surface-glass-top-border: rgba(0, 0, 0, 0.15);
+  
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --text-color: #0f172a;
+  --muted-text: #64748b;
+  --border-color: rgba(0, 0, 0, 0.12);
+
+  --shadow-3d: 0 10px 30px 0 rgba(0, 0, 0, 0.08);
+  --shadow-floating: 0 8px 24px 0 rgba(0, 0, 0, 0.06);
+}
+
 html, body {
   background-color: var(--bg-primary) !important;
   color: var(--text-primary);
@@ -61,4 +84,148 @@ html, body {
 h1, h2, h3, h4, h5, h6, .bento-title, .stat-title, .ssd-chart-card__title, .dashboard-title {
   font-family: var(--font-heading) !important;
   letter-spacing: -0.02em;
+}
+
+/* Light Mode Comprehensive UI & Contrast Polish */
+html[data-bs-theme="light"] body,
+html[data-theme="light"] body {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+html[data-bs-theme="light"] h1,
+html[data-bs-theme="light"] h2,
+html[data-bs-theme="light"] h3,
+html[data-bs-theme="light"] h4,
+html[data-bs-theme="light"] h5,
+html[data-bs-theme="light"] h6,
+html[data-bs-theme="light"] .bento-title,
+html[data-bs-theme="light"] .dashboard-title,
+html[data-bs-theme="light"] .stat-title,
+html[data-bs-theme="light"] .ssd-chart-card__title,
+html[data-theme="light"] h1,
+html[data-theme="light"] h2,
+html[data-theme="light"] h3,
+html[data-theme="light"] h4,
+html[data-theme="light"] h5,
+html[data-theme="light"] h6,
+html[data-theme="light"] .bento-title,
+html[data-theme="light"] .dashboard-title,
+html[data-theme="light"] .stat-title,
+html[data-theme="light"] .ssd-chart-card__title {
+  color: var(--text-primary) !important;
+}
+
+html[data-bs-theme="light"] p,
+html[data-bs-theme="light"] .bento-subtitle,
+html[data-bs-theme="light"] .stat-context,
+html[data-theme="light"] p,
+html[data-theme="light"] .bento-subtitle,
+html[data-theme="light"] .stat-context {
+  color: var(--text-secondary);
+}
+
+html[data-bs-theme="light"] .spatial-card,
+html[data-bs-theme="light"] .stat-card,
+html[data-bs-theme="light"] .bento-card,
+html[data-bs-theme="light"] .chart-bento-card,
+html[data-bs-theme="light"] .ssd-card,
+html[data-bs-theme="light"] .ssd-table-card,
+html[data-bs-theme="light"] .sc-card,
+html[data-bs-theme="light"] .card,
+html[data-bs-theme="light"] .feature-card,
+html[data-bs-theme="light"] .workflow-card,
+html[data-theme="light"] .spatial-card,
+html[data-theme="light"] .stat-card,
+html[data-theme="light"] .bento-card,
+html[data-theme="light"] .chart-bento-card,
+html[data-theme="light"] .ssd-card,
+html[data-theme="light"] .ssd-table-card,
+html[data-theme="light"] .sc-card,
+html[data-theme="light"] .card,
+html[data-theme="light"] .feature-card,
+html[data-theme="light"] .workflow-card {
+  background: var(--surface-card) !important;
+  border-color: var(--border-color) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06) !important;
+  color: var(--text-primary);
+}
+
+html[data-bs-theme="light"] .dynamic-island-content,
+html[data-bs-theme="light"] .spatial-dock-container,
+html[data-bs-theme="light"] .dashboard-header,
+html[data-theme="light"] .dynamic-island-content,
+html[data-theme="light"] .spatial-dock-container,
+html[data-theme="light"] .dashboard-header {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08) !important;
+}
+
+html[data-bs-theme="light"] i:not([class*="neon-"]):not(.stat-icon):not(.ready-icon):not(.feature-icon i):not(.workflow-icon i),
+html[data-theme="light"] i:not([class*="neon-"]):not(.stat-icon):not(.ready-icon):not(.feature-icon i):not(.workflow-icon i) {
+  color: var(--text-secondary);
+}
+
+html[data-bs-theme="light"] input,
+html[data-bs-theme="light"] select,
+html[data-bs-theme="light"] textarea,
+html[data-theme="light"] input,
+html[data-theme="light"] select,
+html[data-theme="light"] textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Force Home / Landing page to ALWAYS remain in dark Ember Forge theme */
+html[data-bs-theme="light"] .landing,
+html[data-theme="light"] .landing,
+html[data-bs-theme="light"] .public-header,
+html[data-theme="light"] .public-header {
+  --bg-primary: #0f0f0f;
+  --bg-secondary: #14141c;
+  --bg-gradient: linear-gradient(135deg, #0f0f0f 0%, #1a1a2e 50%, #121218 100%);
+  --surface-card: #1e1e2e;
+  --surface-card-hover: #2a2a3f;
+  --surface-glass: rgba(30, 30, 46, 0.65);
+  --surface-glass-border: rgba(255, 255, 255, 0.08);
+  --text-primary: #ffffff;
+  --text-secondary: #d1d5db;
+  --text-muted: #9ca3af;
+  --text-color: #ffffff;
+  --muted-text: #9ca3af;
+  --border-color: rgba(255, 255, 255, 0.08);
+  color: #ffffff !important;
+}
+
+html[data-bs-theme="light"] .landing h1,
+html[data-bs-theme="light"] .landing h2,
+html[data-bs-theme="light"] .landing h3,
+html[data-bs-theme="light"] .landing h4,
+html[data-bs-theme="light"] .landing h5,
+html[data-bs-theme="light"] .landing h6,
+html[data-theme="light"] .landing h1,
+html[data-theme="light"] .landing h2,
+html[data-theme="light"] .landing h3,
+html[data-theme="light"] .landing h4,
+html[data-theme="light"] .landing h5,
+html[data-theme="light"] .landing h6 {
+  color: #ffffff !important;
+}
+
+html[data-bs-theme="light"] .landing p,
+html[data-theme="light"] .landing p {
+  color: #9ca3af !important;
+}
+
+html[data-bs-theme="light"] .landing .card,
+html[data-bs-theme="light"] .landing .feature-card,
+html[data-bs-theme="light"] .landing .workflow-card,
+html[data-theme="light"] .landing .card,
+html[data-theme="light"] .landing .feature-card,
+html[data-theme="light"] .landing .workflow-card {
+  background: linear-gradient(145deg, rgba(42,42,63,.82), rgba(23,23,34,.88)) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #ffffff !important;
 }

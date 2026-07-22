@@ -65,29 +65,18 @@ export default function DashboardLayout({
         <div className="dynamic-island-content">
           
           <div 
-            className="island-brand"
-            onClick={() => {
-              const dashRoute = user?.role === "admin" ? "/admin" : user?.role === "staff" ? "/staff" : "/dashboard";
-              navigate(dashRoute);
-            }}
+            className="island-brand island-theme-toggle-left"
+            onClick={toggleTheme}
             role="button"
             tabIndex={0}
             style={{ cursor: "pointer" }}
-            title="Go to Dashboard"
+            title={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`}
+            aria-label="Toggle Theme"
           >
-            <i className="bx bx-atom bx-spin-hover neon-text-orange" />
+            <i className={`bx ${theme === "dark" ? "bx-sun" : "bx-moon"} neon-text-orange`} />
           </div>
 
           <div className="island-actions">
-            <button
-              className="island-theme-toggle"
-              onClick={toggleTheme}
-              title={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`}
-              aria-label="Toggle Theme"
-              type="button"
-            >
-              <i className={`bx ${theme === "dark" ? "bx-sun" : "bx-moon"}`} />
-            </button>
             <NotificationBell />
             
             <div

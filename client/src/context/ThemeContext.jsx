@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 
 const ThemeContext = createContext();
 
@@ -7,11 +8,15 @@ export const ThemeProvider = ({ children }) => {
     return localStorage.getItem("app_theme") || "dark";
   });
 
+  const location = useLocation();
+
   useEffect(() => {
-    document.documentElement.setAttribute("data-bs-theme", theme);
-    document.documentElement.setAttribute("data-theme", theme);
+    // Home page ('/') always stays in dark Ember Forge theme
+    const activeTheme = location.pathname === "/" ? "dark" : theme;
+    document.documentElement.setAttribute("data-bs-theme", activeTheme);
+    document.documentElement.setAttribute("data-theme", activeTheme);
     localStorage.setItem("app_theme", theme);
-  }, [theme]);
+  }, [theme, location.pathname]);
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === "dark" ? "light" : "dark"));

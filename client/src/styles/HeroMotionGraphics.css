@@ -439,9 +439,14 @@
 
 /* Responsive */
 @media (max-width: 1024px) {
+  .hero-motion-wrapper {
+    padding: 32px 24px;
+  }
+
   .hero-content-grid {
     grid-template-columns: 1fr;
     text-align: center;
+    gap: 40px;
   }
   
   .hero-text-section {
@@ -466,14 +471,66 @@
 }
 
 @media (max-width: 768px) {
+  .hero-motion-wrapper {
+    padding: 24px 16px;
+    margin-top: 10px;
+    margin-bottom: 30px;
+    border-radius: 20px;
+    min-height: auto;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
   .hero-title {
-    font-size: 40px;
+    font-size: 36px;
+    word-break: break-word;
   }
   .hero-visual-section {
-    height: 300px;
+    height: 280px;
+    width: 100%;
   }
   .main-card {
     transform: translateZ(0);
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    min-height: 240px;
   }
-  .hero-orbit { display: none; }
+  .hero-orbit, .ambient-orb {
+    display: none !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero-motion-wrapper {
+    padding: 20px 14px;
+  }
+  .hero-badge {
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+  .hero-title {
+    font-size: 28px;
+  }
+  .hero-subtitle {
+    font-size: 15px;
+  }
+  .hero-cta-group {
+    flex-direction: column;
+    width: 100%;
+    gap: 12px;
+  }
+  .hero-btn-primary, .hero-btn-secondary {
+    width: 100%;
+    justify-content: center;
+  }
+  .hero-stats-row {
+    flex-direction: column;
+    gap: 12px;
+    padding-top: 16px;
+  }
+  .hero-stat-divider {
+    display: none;
+  }
 }
