@@ -46,11 +46,11 @@ const sendMail = async (to, subject, html, label = "Email") => {
       }
     );
 
-    console.log(`✅ [${label}] Sent to ${to} | MessageId: ${response.data.messageId}`);
+    console.log("✅ [%s] Sent to %s | MessageId: %s", String(label), String(to), response.data.messageId);
     return { success: true, messageId: response.data.messageId };
   } catch (err) {
     const errorMsg = err.response?.data?.message || err.message;
-    console.error(`❌ [${label}] Failed to send to ${to}:`, errorMsg);
+    console.error("❌ [%s] Failed to send to %s:", String(label), String(to), errorMsg);
     if (err.response?.data) {
       console.error(`   Details:`, JSON.stringify(err.response.data));
     }

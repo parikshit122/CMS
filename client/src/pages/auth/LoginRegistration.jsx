@@ -38,7 +38,7 @@ const getRoleRedirect = (role) => {
 // ✅ Sanitize input before sending to API
 const sanitizeInput = (value) => {
   if (typeof value !== "string") return value;
-  return value.trim().replace(/<[^>]*>/g, "");
+  return value.trim().replace(/<[^>]*>?/gm, "");
 };
 
 const SOCIAL_PROVIDERS = ["google", "github", "twitter", "facebook"];

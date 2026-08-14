@@ -67,7 +67,7 @@ const register = async (req, res) => {
     }
 
     if (phone) {
-      const existingPhone = await User.findOne({ phone });
+      const existingPhone = await User.findOne({ phone: String(phone) });
       if (existingPhone) {
         return res.status(409).json({
           success: false,

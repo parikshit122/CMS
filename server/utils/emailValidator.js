@@ -75,7 +75,7 @@ const validateEmail = (email) => {
   const normalizedEmail = email.trim().toLowerCase();
 
   // Basic format check
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+  if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(normalizedEmail)) {
     return { valid: false, reason: "Invalid email format" };
   }
 

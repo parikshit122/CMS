@@ -257,7 +257,7 @@ router.patch(
       // ✅ Phone update with duplicate check
       if (phone !== undefined && phone !== user.phone) {
         const phoneExists = await User.findOne({
-          phone,
+          phone: String(phone),
           _id: { $ne: user._id },
         });
         if (phoneExists) {

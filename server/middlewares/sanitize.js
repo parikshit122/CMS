@@ -6,10 +6,7 @@ const sanitizeValue = (value) => {
 
   if (typeof value === "string") {
     return value
-      // Remove script tags
-      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-      // Remove all HTML tags
-      .replace(/<[^>]+>/g, "")
+      .replace(/<[^>]*>?/gm, "")
       .trim();
   }
 

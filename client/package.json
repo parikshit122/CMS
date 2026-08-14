@@ -21,7 +21,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "@vitest/ui": "^4.1.10",
     "jsdom": "^29.1.1",
-    "vite": "^5.4.10",
+    "vite": "^6.0.0",
     "vitest": "^4.1.10"
   },
   "dependencies": {
@@ -29,7 +29,7 @@
     "@react-three/drei": "^9.122.0",
     "@react-three/fiber": "^8.18.0",
     "@reduxjs/toolkit": "^2.12.0",
-    "axios": "^1.7.9",
+    "axios": "^1.8.1",
     "bootstrap": "^5.3.3",
     "boxicons": "^2.1.4",
     "file-saver": "^2.0.5",
@@ -43,9 +43,16 @@
     "react-dom": "^18.3.1",
     "react-icons": "^5.4.0",
     "react-redux": "^9.3.0",
-    "react-router-dom": "^6.28.0",
+    "react-router-dom": "^6.28.1",
     "recharts": "^2.13.3",
     "socket.io-client": "^4.8.3",
     "three": "^0.185.1"
+  },
+  "overrides": {
+    "form-data": "^4.0.1",
+    "postcss": "^8.5.1",
+    "esbuild": "^0.25.0",
+    "protobufjs": "^7.4.0",
+    "socket.io-parser": "^4.2.4"
   }
 }

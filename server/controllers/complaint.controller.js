@@ -130,13 +130,13 @@ const getAllComplaints = async (req, res) => {
     const filter = {};
 
     if (req.query.status && req.query.status !== "all") {
-      filter.status = req.query.status;
+      filter.status = String(req.query.status);
     }
     if (req.query.priority && req.query.priority !== "all") {
-      filter.priority = req.query.priority;
+      filter.priority = String(req.query.priority);
     }
     if (req.query.category && req.query.category !== "all") {
-      filter.category = req.query.category;
+      filter.category = String(req.query.category);
     }
     if (req.query.from || req.query.to) {
       filter.createdAt = {};

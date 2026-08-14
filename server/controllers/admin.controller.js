@@ -132,7 +132,7 @@ const addStaff = async (req, res) => {
       });
     }
 
-    const exists = await User.findOne({ email });
+    const exists = await User.findOne({ email: String(email) });
     if (exists) {
       return res.status(400).json({
         success: false,
@@ -451,7 +451,7 @@ const assignStaffToComplaint = async (req, res) => {
       });
     }
 
-    const newStaff = await User.findById(staffId);
+    const newStaff = await User.findById(String(staffId));
     if (!newStaff || newStaff.role !== "staff") {
       return res.status(400).json({
         success: false,

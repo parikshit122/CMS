@@ -1,4 +1,4 @@
-﻿const express = require("express");
+const express = require("express");
 const router = express.Router();
 const { protect } = require("../middlewares/auth.middleware");
 const { upload } = require("../middlewares/upload.middleware");
@@ -85,7 +85,7 @@ router.patch("/profile", protect, async (req, res) => {
     // â”€â”€ Phone duplicate check â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (phone !== undefined && phone !== "" && phone !== user.phone) {
       const phoneExists = await User.findOne({
-        phone,
+        phone: String(phone),
         _id: { $ne: user._id },
       });
       if (phoneExists) {
