@@ -6,7 +6,7 @@ const sanitizeValue = (value) => {
 
   if (typeof value === "string") {
     return value
-      .replace(/<[^>]*>?/gm, "")
+      .replace(/[<>]/g, "")
       .trim();
   }
 
