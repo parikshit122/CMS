@@ -1,6 +1,11 @@
+const mongoose = require("mongoose");
 const Settings = require("../models/Settings");
 
 const checkMaintenance = async (req, res, next) => {
+  if (mongoose.connection.readyState !== 1) {
+    return next();
+  }
+
   try {
     const settings = await Settings.getSingleton();
 
@@ -20,8 +25,6 @@ const checkMaintenance = async (req, res, next) => {
         "Site is under maintenance. Please try again later.",
     });
   } catch (err) {
-    // Fail closed: if we cannot determine maintenance state, block access
-    // rather than risk exposing the app during an outage.
     return res.status(503).json({
       success: false,
       maintenance: true,

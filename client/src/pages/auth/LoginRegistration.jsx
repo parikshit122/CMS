@@ -240,6 +240,11 @@ function Login() {
 
     await authReady;
 
+    if (!auth) {
+      alert.error("Social login is not configured in this preview environment.");
+      return;
+    }
+
     const providers = {
       google: googleProvider,
       facebook: facebookProvider,

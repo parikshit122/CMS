@@ -66,4 +66,4 @@ export const MAX_FILE_SIZE_MB  = 5;
 export const MAX_FILE_SIZE     = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 // ── API base URL ──────────────────────────────────────────
-export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+export const API_URL = import.meta.env.VITE_API_URL || "/api";

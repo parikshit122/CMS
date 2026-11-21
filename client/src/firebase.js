@@ -29,21 +29,27 @@ const firebaseConfig = {
   measurementId: cleanEnv(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID),
 };
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
+const hasFirebaseConfig = Boolean(
+  firebaseConfig.apiKey && firebaseConfig.projectId
+);
 
-export const auth = getAuth(app);
+const app = hasFirebaseConfig
+  ? !getApps().length
+    ? initializeApp(firebaseConfig)
+    : getApps()[0]
+  : null;
+
+export const auth = app ? getAuth(app) : null;
 
 export const authReady = (async () => {
+  if (!auth) return null;
   try {
     await setPersistence(auth, indexedDBLocalPersistence);
-    // console.log("✅ IndexedDB persistence set");
   } catch (e) {
-    // console.warn("IndexedDB failed, trying localStorage:", e.message);
     try {
       await setPersistence(auth, browserLocalPersistence);
-      // console.log("✅ LocalStorage persistence set");
     } catch (e2) {
-      // console.error("All persistence failed:", e2.message);
+      // ignore persistence fallback failure
     }
   }
   return auth;

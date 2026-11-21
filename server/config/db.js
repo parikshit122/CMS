@@ -1,11 +1,14 @@
 const mongoose = require("mongoose");
 
+mongoose.set("bufferCommands", false);
+
 const connectDB = async () => {
   try {
     const uri = process.env.MONGODB_URI;
 
     if (!uri) {
-      throw new Error("MONGODB_URI is not defined in .env file");
+      console.warn("⚠️  MONGODB_URI is not defined — database running in offline fallback mode");
+      return null;
     }
 
     console.log("🔄 Connecting to MongoDB...");
@@ -14,9 +17,10 @@ const connectDB = async () => {
 
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
     console.log(`📦 Database Name: ${conn.connection.name}`);
+    return conn;
   } catch (error) {
-    console.error(`❌ MongoDB Connection Error: ${error.message}`);
-    process.exit(1);
+    console.warn(`⚠️  MongoDB Connection Error: ${error.message} — continuing in offline mode`);
+    return null;
   }
 };
 

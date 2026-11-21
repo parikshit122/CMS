@@ -1,7 +1,9 @@
-const express      = require("express");
-const cors         = require("cors");
-const helmet       = require("helmet");
-const compression  = require("compression");
+const path          = require("path");
+const fs            = require("fs");
+const express       = require("express");
+const cors          = require("cors");
+const helmet        = require("helmet");
+const compression   = require("compression");
 const mongoSanitize = require("./middlewares/sanitize");
 const { generalLimiter } = require("./middlewares/rateLimiters");
 const {
@@ -13,24 +15,14 @@ const app = express();
 
 app.set("trust proxy", 1);
 
-// ── 1. Security Headers ───────────────────────────────────
+// ── 1. Security Headers (iframe & SPA friendly) ───────────
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
     crossOriginOpenerPolicy:   { policy: "unsafe-none"  },
     crossOriginEmbedderPolicy: false,
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc:     ["'self'"],
-        scriptSrc:      ["'self'"],
-        styleSrc:       ["'self'", "'unsafe-inline'"],
-        imgSrc:         ["'self'", "data:", "https:"],
-        connectSrc:     ["'self'"],
-        fontSrc:        ["'self'", "https:"],
-        objectSrc:      ["'none'"],
-        frameAncestors: ["'none'"],
-      },
-    },
+    contentSecurityPolicy:     false,
+    frameguard:                false,
   })
 );
 
@@ -38,33 +30,30 @@ app.use(
 app.use(compression());
 
 // ── 3. CORS ───────────────────────────────────────────────
-const allowedOrigins = (
-  process.env.CORS_ORIGIN || "http://localhost:5173,http://localhost:3000"
+const configuredOrigins = (
+  process.env.CORS_ORIGIN || "http://localhost:3000,http://localhost:5173"
 )
   .split(",")
-  .map((o) => o.trim());
-
-const DEV_ORIGINS = [
-  "http://localhost:5173",
-  "http://localhost:3000",
-];
+  .map((o) => o.trim())
+  .filter(Boolean);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, Postman, curl)
       if (!origin) return callback(null, true);
-
-      const isAllowed = allowedOrigins.includes(origin);
-      const isDevAllowed =
-        process.env.NODE_ENV !== "production" &&
-        DEV_ORIGINS.includes(origin);
-
-      if (isAllowed || isDevAllowed) {
-        return callback(null, true);
+      if (configuredOrigins.includes(origin)) return callback(null, true);
+      try {
+        const { hostname, protocol } = new URL(origin);
+        if (hostname === "localhost" || hostname === "127.0.0.1") {
+          return callback(null, true);
+        }
+        if (protocol === "https:" && hostname.endsWith(".run.app")) {
+          return callback(null, true);
+        }
+      } catch {
+        // invalid origin header
       }
-
-      callback(new Error(`CORS blocked: ${origin}`));
+      return callback(new Error(`CORS blocked: ${origin}`));
     },
     credentials:    true,
     methods:        ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -87,14 +76,6 @@ app.use("/api/", generalLimiter);
 app.disable("x-powered-by");
 
 // ── Health Check (public, no auth required) ───────────────
-app.get("/", (req, res) => {
-  res.json({
-    success:   true,
-    message:   "ComplaintSync API is running",
-    timestamp: new Date().toISOString(),
-  });
-});
-
 app.get("/api/health", (req, res) => {
   res.json({
     success:   true,
@@ -126,9 +107,43 @@ if (process.env.NODE_ENV !== "production") {
 // ── API Routes ────────────────────────────────────────────
 app.use("/api", require("./routes"));
 
-// ── 404 + Global Error Handler ────────────────────────────
-// Order matters — notFound must come before errorHandler
+// ── Static Frontend (Built Vite SPA) ──────────────────────
+const clientDistPath = path.join(__dirname, "../client/dist");
+const clientIndexHtml = path.join(clientDistPath, "index.html");
+
+if (fs.existsSync(clientDistPath)) {
+  app.use(express.static(clientDistPath));
+}
+
+app.use((req, res, next) => {
+  if (req.method === "GET" && !req.path.startsWith("/api") && fs.existsSync(clientIndexHtml)) {
+    return res.sendFile(clientIndexHtml);
+  }
+  next();
+});
+
+// ── 404 + Offline DB Fallback + Global Error Handler ──────
 app.use(notFoundHandler);
+app.use((err, req, res, next) => {
+  const msg = err?.message || "";
+  if (
+    err?.name === "MongooseError" ||
+    err?.name === "MongoNetworkError" ||
+    err?.name === "MongoServerSelectionError" ||
+    msg.includes("buffering timed out") ||
+    msg.includes("before initial connection is complete")
+  ) {
+    console.warn("[AI Studio] Database offline — returning fallback response");
+    if (req.method === "GET") {
+      return res.json(req.path.endsWith("s") || req.path.endsWith("s/") ? [] : {});
+    }
+    return res.status(503).json({
+      success: false,
+      message: "Database is not connected yet. Please configure MONGODB_URI to enable persistence.",
+    });
+  }
+  next(err);
+});
 app.use(errorHandler);
 
 module.exports = app;
