@@ -293,12 +293,10 @@ export default function AdminSettings() {
                   min="7"
                   max="365"
                   value={settings.autoCloseResolvedDays}
-                  onChange={(e) =>
-                    handleChange(
-                      "autoCloseResolvedDays",
-                      parseInt(e.target.value),
-                    )
-                  }
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    handleChange("autoCloseResolvedDays", Number.isNaN(val) ? "" : val);
+                  }}
                 />
               </div>
 
@@ -350,9 +348,10 @@ export default function AdminSettings() {
                   min="6"
                   max="32"
                   value={settings.passwordMinLength}
-                  onChange={(e) =>
-                    handleChange("passwordMinLength", parseInt(e.target.value))
-                  }
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    handleChange("passwordMinLength", Number.isNaN(val) ? "" : val);
+                  }}
                 />
               </div>
 
@@ -400,12 +399,10 @@ export default function AdminSettings() {
                   min="5"
                   max="240"
                   value={settings.sessionTimeoutMinutes}
-                  onChange={(e) =>
-                    handleChange(
-                      "sessionTimeoutMinutes",
-                      parseInt(e.target.value),
-                    )
-                  }
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    handleChange("sessionTimeoutMinutes", Number.isNaN(val) ? "" : val);
+                  }}
                 />
               </div>
 
@@ -420,9 +417,10 @@ export default function AdminSettings() {
                   min="3"
                   max="20"
                   value={settings.maxLoginAttempts}
-                  onChange={(e) =>
-                    handleChange("maxLoginAttempts", parseInt(e.target.value))
-                  }
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    handleChange("maxLoginAttempts", Number.isNaN(val) ? "" : val);
+                  }}
                 />
               </div>
 
@@ -437,9 +435,10 @@ export default function AdminSettings() {
                   min="1"
                   max="60"
                   value={settings.otpExpiryMinutes}
-                  onChange={(e) =>
-                    handleChange("otpExpiryMinutes", parseInt(e.target.value))
-                  }
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    handleChange("otpExpiryMinutes", Number.isNaN(val) ? "" : val);
+                  }}
                 />
               </div>
             </div>
@@ -596,7 +595,10 @@ export default function AdminSettings() {
                     className="setting-input small"
                     min="7"
                     value={clearDays}
-                    onChange={(e) => setClearDays(parseInt(e.target.value))}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      setClearDays(Number.isNaN(val) ? 7 : val);
+                    }}
                   />
                   <button
                     className="settings-btn danger"

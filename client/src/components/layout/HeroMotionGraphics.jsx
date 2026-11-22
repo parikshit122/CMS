@@ -4,45 +4,36 @@ import Button from "../common/Button";
 import "../../styles/HeroMotionGraphics.css";
 import "boxicons/css/boxicons.min.css";
 
-const floatingAnimation = {
-  animate: {
-    y: [0, -15, 0],
-    rotateX: [0, 2, -2, 0],
-    rotateY: [0, -2, 2, 0],
-    transition: { duration: 6, repeat: Infinity, ease: "easeInOut" }
-  }
-};
-
-const pulseAnimation = {
-  animate: {
-    scale: [1, 1.15, 1],
-    opacity: [0.4, 0.7, 0.4],
-    transition: { duration: 5, repeat: Infinity, ease: "easeInOut" }
-  }
-};
-
 const staggerContainer = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
-    transition: { staggerChildren: 0.15 }
+    transition: { staggerChildren: 0.07 }
   }
 };
 
 const fadeUp = {
-  hidden: { opacity: 0, y: 30 },
-  show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 100, damping: 20 } }
+  hidden: { opacity: 0, y: 18 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] } }
 };
+
+const CHART_BARS = [
+  { height: "60%", delay: 0.1 },
+  { height: "90%", delay: 0.18 },
+  { height: "40%", delay: 0.26 },
+  { height: "100%", delay: 0.34 },
+  { height: "70%", delay: 0.42 },
+];
 
 export default function HeroMotionGraphics() {
   const navigate = useNavigate();
 
   return (
     <div className="hero-motion-wrapper">
-      {/* Ambient Glowing Orbs */}
-      <motion.div className="ambient-orb orb-orange" variants={pulseAnimation} animate="animate" />
-      <motion.div className="ambient-orb orb-rose" variants={pulseAnimation} animate="animate" style={{ animationDelay: "2s" }} />
-      <motion.div className="ambient-orb orb-cyan" variants={pulseAnimation} animate="animate" style={{ animationDelay: "1s" }} />
+      {/* Ambient Glowing Orbs (pure radial-gradient + CSS transform, no blur filter repaint) */}
+      <div className="ambient-orb orb-orange" aria-hidden="true" />
+      <div className="ambient-orb orb-rose" aria-hidden="true" />
+      <div className="ambient-orb orb-cyan" aria-hidden="true" />
       <div className="hero-grid-overlay" aria-hidden="true" />
       <div className="hero-orbit hero-orbit-a" aria-hidden="true" />
       <div className="hero-orbit hero-orbit-b" aria-hidden="true" />
@@ -102,12 +93,12 @@ export default function HeroMotionGraphics() {
           </motion.div>
         </motion.div>
 
-        {/* Right: 3D Motion Graphics */}
+        {/* Right: 3D Motion Graphics (CSS GPU-composited float) */}
         <div className="hero-visual-section">
           <div className="glass-perspective-container">
             
             {/* Main Central Dashboard Card */}
-            <motion.div className="hero-glass-card main-card" variants={floatingAnimation} animate="animate">
+            <div className="hero-glass-card main-card hero-float-card">
               <div className="mockup-header">
                 <span className="mockup-dot red"></span>
                 <span className="mockup-dot yellow"></span>
@@ -119,21 +110,26 @@ export default function HeroMotionGraphics() {
                 <div className="mockup-line subtitle-line"></div>
                 
                 <div className="mockup-chart-container">
-                  <motion.div className="mockup-bar" initial={{ height: 0 }} animate={{ height: "60%" }} transition={{ duration: 1.5, delay: 0.2 }} />
-                  <motion.div className="mockup-bar" initial={{ height: 0 }} animate={{ height: "90%" }} transition={{ duration: 1.5, delay: 0.4 }} />
-                  <motion.div className="mockup-bar" initial={{ height: 0 }} animate={{ height: "40%" }} transition={{ duration: 1.5, delay: 0.6 }} />
-                  <motion.div className="mockup-bar" initial={{ height: 0 }} animate={{ height: "100%" }} transition={{ duration: 1.5, delay: 0.8 }} />
-                  <motion.div className="mockup-bar" initial={{ height: 0 }} animate={{ height: "70%" }} transition={{ duration: 1.5, delay: 1.0 }} />
+                  {CHART_BARS.map((bar, idx) => (
+                    <motion.div
+                      key={idx}
+                      className="mockup-bar"
+                      style={{ height: bar.height, transformOrigin: "bottom" }}
+                      initial={{ scaleY: 0 }}
+                      animate={{ scaleY: 1 }}
+                      transition={{ duration: 0.7, delay: bar.delay, ease: [0.22, 1, 0.36, 1] }}
+                    />
+                  ))}
                 </div>
                 <div className="mockup-footer-row">
                   <span>Weekly resolution</span>
                   <strong>+18.4%</strong>
                 </div>
               </div>
-            </motion.div>
+            </div>
 
             {/* Floating Accent Card - Left */}
-            <motion.div className="hero-glass-card side-card-left" variants={floatingAnimation} animate="animate" style={{ animationDelay: "1s" }}>
+            <div className="hero-glass-card side-card-left hero-float-card-left">
               <div className="mockup-stat">
                 <div className="pulse-ring">
                   <i className="bx bx-check-double neon-text-orange" />
@@ -143,10 +139,10 @@ export default function HeroMotionGraphics() {
                   <div className="mockup-line subtitle-line short"></div>
                 </div>
               </div>
-            </motion.div>
+            </div>
 
             {/* Floating Accent Card - Right */}
-            <motion.div className="hero-glass-card side-card-right" variants={floatingAnimation} animate="animate" style={{ animationDelay: "1.5s" }}>
+            <div className="hero-glass-card side-card-right hero-float-card-right">
               <div className="mockup-avatar-row">
                 <div className="mockup-avatar">
                   <i className="bx bx-user" />
@@ -159,7 +155,7 @@ export default function HeroMotionGraphics() {
               <div className="mockup-badge">
                 <i className="bx bx-check" /> Active
               </div>
-            </motion.div>
+            </div>
 
           </div>
         </div>

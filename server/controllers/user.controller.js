@@ -1,4 +1,4 @@
-const User = require("../models/User");
+const { updateUserById } = require("../../src/db/users.ts");
 const cloudinary = require("../config/cloudinary");
 
 const uploadAvatar = async (req, res) => {
@@ -10,26 +10,33 @@ const uploadAvatar = async (req, res) => {
       });
     }
 
+    if (
+      !process.env.CLOUDINARY_CLOUD_NAME ||
+      !process.env.CLOUDINARY_API_KEY ||
+      !process.env.CLOUDINARY_API_SECRET
+    ) {
+      return res.status(503).json({
+        success: false,
+        message: "Image upload storage is not configured yet. Add Cloudinary secrets in Settings to enable avatar uploads.",
+      });
+    }
+
     const result = await new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
         {
           folder: "complaint-sync/avatars",
           transformation: [{ width: 300, height: 300, crop: "fill" }],
         },
-        (error, result) => {
+        (error, uploadResult) => {
           if (error) reject(error);
-          else resolve(result);
+          else resolve(uploadResult);
         }
       );
 
       stream.end(req.file.buffer);
     });
 
-    await User.findByIdAndUpdate(
-      req.user.id,
-      { avatar: result.secure_url },
-      { returnDocument: "after" }
-    );
+    await updateUserById(req.user.id, { avatar: result.secure_url });
 
     res.json({
       success: true,

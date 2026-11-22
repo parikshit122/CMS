@@ -9,7 +9,7 @@ const REQUIREMENTS = [
   { test: (pw) => /[A-Z]/.test(pw), label: "One uppercase letter" },
   { test: (pw) => /[a-z]/.test(pw), label: "One lowercase letter" },
   { test: (pw) => /\d/.test(pw), label: "One number" },
-  { test: (pw) => /[@$!%*?&]/.test(pw), label: "One special character (@$!%*?&)" },
+  { test: (pw) => /[!@#$%^&*(),.?":{}|<>]/.test(pw), label: "One special character (!@#$%^&* etc.)" },
 ];
 
 const getStrength = (pw) => {

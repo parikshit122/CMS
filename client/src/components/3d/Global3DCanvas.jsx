@@ -1,4 +1,4 @@
-import React, { Component, Suspense, lazy } from 'react';
+import React, { Component, Suspense, lazy, useEffect, useState } from 'react';
 
 class Canvas3DErrorBoundary extends Component {
   constructor(props) {
@@ -22,7 +22,7 @@ class Canvas3DErrorBoundary extends Component {
   }
 }
 
-// Lazy-load Three.js background canvas so it never blocks initial DOM paint
+// Lazy-load Three.js background canvas only after first paint/idle so startup never hitches
 const LazyScene = lazy(() =>
   import('./Scene3D').catch(() => ({
     default: () => null,
@@ -30,6 +30,36 @@ const LazyScene = lazy(() =>
 );
 
 export default function Global3DCanvas() {
+  const [shouldMount, setShouldMount] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      return undefined;
+    }
+
+    let idleId;
+    let timerId;
+    const enable = () => setShouldMount(true);
+
+    if ('requestIdleCallback' in window) {
+      idleId = window.requestIdleCallback(enable, { timeout: 900 });
+    } else {
+      timerId = window.setTimeout(enable, 650);
+    }
+
+    return () => {
+      if (idleId && 'cancelIdleCallback' in window) {
+        window.cancelIdleCallback(idleId);
+      }
+      if (timerId) {
+        window.clearTimeout(timerId);
+      }
+    };
+  }, []);
+
+  if (!shouldMount) return null;
+
   return (
     <Canvas3DErrorBoundary>
       <div

@@ -76,22 +76,31 @@ const AdminReports = () => {
         const matchesCategory = category === "all" || c.category === category;
 
         let matchesDate = true;
+        const created = new Date(c.createdAt);
         if (fromDate) {
-          if (new Date(c.createdAt) < new Date(fromDate)) matchesDate = false;
+          if (created < new Date(fromDate)) matchesDate = false;
         }
         if (toDate) {
           const to = new Date(toDate);
           to.setHours(23, 59, 59, 999);
-          if (new Date(c.createdAt) > to) matchesDate = false;
+          if (created > to) matchesDate = false;
         }
-        if (dateRange !== "all") {
+        if (matchesDate && dateRange !== "all") {
           const diffDays = Math.floor(
-            (now - new Date(c.createdAt)) / (1000 * 60 * 60 * 24)
+            (now - created) / (1000 * 60 * 60 * 24)
           );
-          if (dateRange === "today")   matchesDate = diffDays === 0;
-          if (dateRange === "week")    matchesDate = diffDays <= 7;
-          if (dateRange === "month")   matchesDate = diffDays <= 30;
-          if (dateRange === "quarter") matchesDate = diffDays <= 90;
+          if (dateRange === "today") {
+            matchesDate =
+              created.getFullYear() === now.getFullYear() &&
+              created.getMonth() === now.getMonth() &&
+              created.getDate() === now.getDate();
+          } else if (dateRange === "week") {
+            matchesDate = diffDays >= 0 && diffDays <= 7;
+          } else if (dateRange === "month") {
+            matchesDate = diffDays >= 0 && diffDays <= 30;
+          } else if (dateRange === "quarter") {
+            matchesDate = diffDays >= 0 && diffDays <= 90;
+          }
         }
 
         return (
@@ -167,11 +176,19 @@ const AdminReports = () => {
   // ── Inline status save ──────────────────────────────────
   const saveStatusEdit = async () => {
     if (!statusEdit) return;
+    if (statusEdit.value === "rejected" && !statusEdit.rejectionReason?.trim()) {
+      alert.error("Please enter a rejection reason before saving");
+      return;
+    }
     setStatusSaving(true);
     try {
+      const payload = { status: statusEdit.value };
+      if (statusEdit.value === "rejected") {
+        payload.rejectionReason = statusEdit.rejectionReason.trim();
+      }
       const res = await API.patch(
         `/complaints/${statusEdit.id}/status`,
-        { status: statusEdit.value }
+        payload
       );
       if (res.data.success) {
         alert.success("Status updated");
@@ -462,7 +479,14 @@ const AdminReports = () => {
                           <select
                             value={statusEdit.value}
                             onChange={(e) =>
-                              setStatusEdit({ ...statusEdit, value: e.target.value })
+                              setStatusEdit({
+                                ...statusEdit,
+                                value: e.target.value,
+                                rejectionReason:
+                                  e.target.value === "rejected"
+                                    ? statusEdit.rejectionReason || ""
+                                    : "",
+                              })
                             }
                             autoFocus
                           >
@@ -470,6 +494,20 @@ const AdminReports = () => {
                               <option key={s} value={s}>{s}</option>
                             ))}
                           </select>
+                          {statusEdit.value === "rejected" && (
+                            <input
+                              type="text"
+                              className="reports-rejection-input"
+                              placeholder="Rejection reason..."
+                              value={statusEdit.rejectionReason || ""}
+                              onChange={(e) =>
+                                setStatusEdit({
+                                  ...statusEdit,
+                                  rejectionReason: e.target.value,
+                                })
+                              }
+                            />
+                          )}
                           <button
                             className="reports-status-save"
                             onClick={saveStatusEdit}
@@ -493,7 +531,11 @@ const AdminReports = () => {
                         <button
                           className="reports-status-btn"
                           onClick={() =>
-                            setStatusEdit({ id: c._id, value: c.status })
+                            setStatusEdit({
+                              id: c._id,
+                              value: c.status,
+                              rejectionReason: c.rejectionReason || "",
+                            })
                           }
                           title="Click to change status"
                         >

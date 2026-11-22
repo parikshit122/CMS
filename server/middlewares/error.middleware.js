@@ -21,27 +21,17 @@ const errorHandler = (err, req, res, next) => {
     return next(err);
   }
 
-  // ── Mongoose Validation Error ─────────────────────────
-  if (err.name === "ValidationError") {
-    const messages = Object.values(err.errors).map((e) => e.message);
-    return res.status(400).json({
-      success: false,
-      message: messages[0] || "Validation failed",
-      ...(isDev && { errors: messages }),
-    });
-  }
-
-  // ── Mongoose Duplicate Key ────────────────────────────
-  if (err.code === 11000) {
-    const field = Object.keys(err.keyPattern || {})[0] || "field";
+  // ── PostgreSQL Unique Constraint Violation ────────────
+  if (err.code === "UNIQUE_VIOLATION" || err.code === "23505") {
+    const field = err.field || "field";
     return res.status(400).json({
       success: false,
       message: `This ${field} is already in use`,
     });
   }
 
-  // ── Mongoose Cast Error (invalid ObjectId) ────────────
-  if (err.name === "CastError") {
+  // ── PostgreSQL Invalid Input Syntax (e.g. bad ID) ─────
+  if (err.code === "22P02") {
     return res.status(400).json({
       success: false,
       message: "Invalid ID format",

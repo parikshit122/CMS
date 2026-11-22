@@ -1,4 +1,6 @@
-const Notification = require("../models/Notification");
+const { createNotificationRow } = require("../../src/db/notifications.ts");
+const { getSettingsSingleton } = require("../../src/db/settings.ts");
+const { findUsersByRole } = require("../../src/db/users.ts");
 
 const createNotification = async ({
   recipient,
@@ -10,19 +12,21 @@ const createNotification = async ({
   app       = null,
 }) => {
   try {
-    const notification = await Notification.create({
-      recipient,
-      sender,
+    const notification = await createNotificationRow({
+      recipientId: recipient,
+      senderId: sender,
       type,
       title,
       message,
-      complaint,
+      complaintId: complaint,
     });
+
+    if (!notification) return null;
 
     // ── Emit real-time socket event ───────────────────────
     if (app) {
       const { emitToUser } = require("../utils/socketEmitter");
-      emitToUser(app, recipient, "new_notification", {
+      emitToUser(app, String(recipient), "new_notification", {
         _id:       notification._id,
         type,
         title,
@@ -43,8 +47,7 @@ const createNotification = async ({
 
 const getSettings = async () => {
   try {
-    const Settings = require("../models/Settings");
-    return await Settings.getSingleton();
+    return await getSettingsSingleton();
   } catch {
     return {
       notifyOnSubmit:  true,
@@ -70,8 +73,7 @@ const notifyComplaintSubmitted = async (complaint, student, app = null) => {
   const settings = await getSettings();
   if (!settings.notifyOnSubmit) return;
 
-  const User   = require("../models/User");
-  const admins = await User.find({ role: "admin" }).select("_id");
+  const admins = await findUsersByRole("admin");
 
   await Promise.all(
     admins.map((admin) =>
@@ -92,152 +94,166 @@ const notifyComplaintAssigned = async (complaint, student, staff, app = null) =>
   const settings = await getSettings();
   if (!settings.notifyOnAssign) return;
 
-  const {
-    sendComplaintAssignedEmail,
-  } = require("./email.service");
+  const { sendComplaintAssignedEmail } = require("./email.service");
 
-  await Promise.all([
-    // DB notification — student
-    createNotification({
-      recipient: student._id,
-      sender:    null,
-      type:      "complaint_assigned",
-      title:     "Complaint Assigned",
-      message:   `Your complaint "${complaint.title}" has been assigned to ${staff.name}.`,
-      complaint: complaint._id,
-      app,
-    }),
-    // DB notification — staff
-    createNotification({
-      recipient: staff._id,
-      sender:    null,
-      type:      "complaint_assigned",
-      title:     "New Complaint Assigned",
-      message:   `You have been assigned: "${complaint.title}"`,
-      complaint: complaint._id,
-      app,
-    }),
-    settings.emailEnabled
-      ? trySendEmail(
-          sendComplaintAssignedEmail,
-          student,
-          complaint,
-          staff,
-          settings.emailSenderName
-        )
-      : Promise.resolve(),
-  ]);
+  const tasks = [];
+
+  if (student?._id) {
+    tasks.push(
+      createNotification({
+        recipient: student._id,
+        sender:    null,
+        type:      "complaint_assigned",
+        title:     "Complaint Assigned",
+        message:   `Your complaint "${complaint.title}" has been assigned to ${staff?.name || "a staff member"}.`,
+        complaint: complaint._id,
+        app,
+      })
+    );
+  }
+
+  if (staff?._id) {
+    tasks.push(
+      createNotification({
+        recipient: staff._id,
+        sender:    null,
+        type:      "complaint_assigned",
+        title:     "New Complaint Assigned",
+        message:   `You have been assigned: "${complaint.title}"`,
+        complaint: complaint._id,
+        app,
+      })
+    );
+  }
+
+  if (settings.emailEnabled && staff?.email) {
+    tasks.push(
+      trySendEmail(
+        sendComplaintAssignedEmail,
+        staff,
+        complaint,
+        settings.emailSenderName
+      )
+    );
+  }
+
+  await Promise.all(tasks);
 };
 
 // ── Notify student + admins when resolved ─────────────────
-const notifyComplaintResolved = async (complaint, student, staff, app = null) => {
+const notifyComplaintResolved = async (complaint, student, staff, app = null, note = "") => {
   const settings = await getSettings();
   if (!settings.notifyOnResolve) return;
 
-  const {
-    sendComplaintResolvedEmail,
-  } = require("./email.service");
+  const { sendComplaintResolvedEmail } = require("./email.service");
+  const admins = await findUsersByRole("admin");
 
-  const User   = require("../models/User");
-  const admins = await User.find({ role: "admin" }).select("_id");
-
-  await Promise.all([
-    // DB notification — student
-    createNotification({
-      recipient: student._id,
-      sender:    staff._id,
-      type:      "complaint_resolved",
-      title:     "Complaint Resolved",
-      message:   `Your complaint "${complaint.title}" has been resolved.`,
-      complaint: complaint._id,
-      app,
-    }),
-    // DB notifications — all admins
+  const tasks = [
     ...admins.map((admin) =>
       createNotification({
         recipient: admin._id,
-        sender:    staff._id,
+        sender:    staff?._id || null,
         type:      "complaint_resolved",
         title:     "Complaint Resolved",
-        message:   `${staff.name} resolved: "${complaint.title}"`,
+        message:   `${staff?.name || "Staff"} resolved: "${complaint.title}"`,
         complaint: complaint._id,
         app,
       })
     ),
-    // Email — student only
-    settings.emailEnabled
-      ? trySendEmail(
-          sendComplaintResolvedEmail,
-          student,
-          complaint,
-          staff,
-          settings.emailSenderName
-        )
-      : Promise.resolve(),
-  ]);
+  ];
+
+  if (student?._id) {
+    tasks.push(
+      createNotification({
+        recipient: student._id,
+        sender:    staff?._id || null,
+        type:      "complaint_resolved",
+        title:     "Complaint Resolved",
+        message:   `Your complaint "${complaint.title}" has been resolved.`,
+        complaint: complaint._id,
+        app,
+      })
+    );
+  }
+
+  if (settings.emailEnabled && student?.email) {
+    tasks.push(
+      trySendEmail(
+        sendComplaintResolvedEmail,
+        student,
+        complaint,
+        typeof note === "string" ? note : "",
+        settings.emailSenderName
+      )
+    );
+  }
+
+  await Promise.all(tasks);
 };
 
 // ── Notify student when rejected ──────────────────────────
 // Always notify on rejection — student must know
 const notifyComplaintRejected = async (complaint, student, rejectedBy, app = null) => {
   const settings = await getSettings();
+  const { sendComplaintRejectedEmail } = require("./email.service");
+  const admins = await findUsersByRole("admin");
 
-  const {
-    sendComplaintRejectedEmail,
-  } = require("./email.service");
-
-  const User   = require("../models/User");
-  const admins = await User.find({ role: "admin" }).select("_id");
-
-  await Promise.all([
-    // DB notification — student
-    createNotification({
-      recipient: student._id,
-      sender:    rejectedBy._id,
-      type:      "complaint_rejected",
-      title:     "Complaint Rejected",
-      message:   `Your complaint "${complaint.title}" was rejected. Reason: ${
-        complaint.rejectionReason || "No reason provided"
-      }`,
-      complaint: complaint._id,
-      app,
-    }),
-    // DB notifications — admins
+  const tasks = [
     ...admins.map((admin) =>
       createNotification({
         recipient: admin._id,
-        sender:    rejectedBy._id,
+        sender:    rejectedBy?._id || null,
         type:      "complaint_rejected",
         title:     "Complaint Rejected",
-        message:   `${rejectedBy.name} rejected: "${complaint.title}"`,
+        message:   `${rejectedBy?.name || "Staff"} rejected: "${complaint.title}"`,
         complaint: complaint._id,
         app,
       })
     ),
-    // Email — student always (rejection always notified)
-    settings.emailEnabled
-      ? trySendEmail(
-          sendComplaintRejectedEmail,
-          student,
-          complaint,
-          rejectedBy,
-          settings.emailSenderName
-        )
-      : Promise.resolve(),
-  ]);
+  ];
+
+  if (student?._id) {
+    tasks.push(
+      createNotification({
+        recipient: student._id,
+        sender:    rejectedBy?._id || null,
+        type:      "complaint_rejected",
+        title:     "Complaint Rejected",
+        message:   `Your complaint "${complaint.title}" was rejected. Reason: ${
+          complaint.rejectionReason || "No reason provided"
+        }`,
+        complaint: complaint._id,
+        app,
+      })
+    );
+  }
+
+  if (settings.emailEnabled && student?.email) {
+    tasks.push(
+      trySendEmail(
+        sendComplaintRejectedEmail,
+        student,
+        complaint,
+        complaint.rejectionReason || "",
+        settings.emailSenderName
+      )
+    );
+  }
+
+  await Promise.all(tasks);
 };
 
 // ── Notify student when in-progress ──────────────────────
 const notifyComplaintInProgress = async (complaint, student, staff, app = null) => {
   const settings = await getSettings();
-  if (!settings.notifyOnAssign) return;
+  if (!settings.notifyOnAssign || !student?._id) return;
 
   await createNotification({
     recipient: student._id,
-    sender:    staff._id,
+    sender:    staff?._id || null,
     type:      "complaint_inprogress",
     title:     "Complaint In Progress",
-    message:   `Your complaint "${complaint.title}" is now being worked on by ${staff.name}.`,
+    message:   `Your complaint "${complaint.title}" is now being worked on by ${staff?.name || "staff"}.`,
     complaint: complaint._id,
     app,
   });

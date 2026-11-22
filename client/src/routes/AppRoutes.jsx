@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import PageTransition from "../components/common/PageTransition";
@@ -5,30 +6,32 @@ import PageTransition from "../components/common/PageTransition";
 import Header from "../components/layout/Header";
 import Footer from "../components/layout/Footer";
 import Home from "../pages/Home";
-import Login from "../pages/auth/LoginRegistration";
-import ForgotPassword from "../pages/auth/ForgotPassword";
-import VerifyOtp from "../pages/auth/VerifyOtp";
-import VerifyEmail from "../pages/auth/VerifyEmail";
-import ResetPassword from "../pages/auth/ResetPassword";
-import NotFound from "../pages/NotFound";
-import Maintenance from "../pages/Maintenance";
-import ManageUsers from "../pages/admin/ManageUsers";
-import MyComplaints from "../pages/student/MyComplaints";
-import Notifications from "../pages/Notifications";
-import AdminSettings from "../pages/admin/AdminSettings";
-
-import DashboardLayout from "../layouts/DashboardLayout";
-import StudentDash from "../pages/student/StudentDash";
-import SubmitComplaint from "../pages/student/SubmitComplaint";
-import Profile from "../pages/Profilepage";
-
-import AdminDashboard from "../pages/admin/AdminDashboard";
-import AdminReports from "../pages/admin/AdminReports";
-import StaffDashboard from "../pages/staff/StaffDashboard";
-import StaffComplaints from "../pages/staff/StaffComplaints";
-
 import ProtectedRoute from "./ProtectedRoute";
 import { useAuth } from "../context/AuthContext";
+
+// Lazy-load secondary & authenticated routes so the homepage loads fast without pulling Firebase/Recharts/jsPDF upfront
+const Login = lazy(() => import("../pages/auth/LoginRegistration"));
+const ForgotPassword = lazy(() => import("../pages/auth/ForgotPassword"));
+const VerifyOtp = lazy(() => import("../pages/auth/VerifyOtp"));
+const VerifyEmail = lazy(() => import("../pages/auth/VerifyEmail"));
+const ResetPassword = lazy(() => import("../pages/auth/ResetPassword"));
+const NotFound = lazy(() => import("../pages/NotFound"));
+const Maintenance = lazy(() => import("../pages/Maintenance"));
+
+const DashboardLayout = lazy(() => import("../layouts/DashboardLayout"));
+const StudentDash = lazy(() => import("../pages/student/StudentDash"));
+const SubmitComplaint = lazy(() => import("../pages/student/SubmitComplaint"));
+const MyComplaints = lazy(() => import("../pages/student/MyComplaints"));
+const Profile = lazy(() => import("../pages/Profilepage"));
+
+const AdminDashboard = lazy(() => import("../pages/admin/AdminDashboard"));
+const ManageUsers = lazy(() => import("../pages/admin/ManageUsers"));
+const AdminReports = lazy(() => import("../pages/admin/AdminReports"));
+const AdminSettings = lazy(() => import("../pages/admin/AdminSettings"));
+
+const StaffDashboard = lazy(() => import("../pages/staff/StaffDashboard"));
+const StaffComplaints = lazy(() => import("../pages/staff/StaffComplaints"));
+const Notifications = lazy(() => import("../pages/Notifications"));
 
 const studentMenuItems = [
   { label: "Dashboard", path: "/dashboard", icon: "bx bx-grid-alt" },
@@ -72,30 +75,33 @@ const getDisplayRole = (role) => {
   return "Student";
 };
 
+const RouteFallback = (
+  <div
+    style={{
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: "100vh",
+      fontSize: "15px",
+      color: "#9ca3af",
+    }}
+  >
+    Loading...
+  </div>
+);
+
 function AppRoutes() {
   const { user, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          minHeight: "100vh",
-          fontSize: "16px",
-          color: "#6b7280",
-        }}
-      >
-        Loading...
-      </div>
-    );
+    return RouteFallback;
   }
 
   return (
-    <AnimatePresence mode="wait">
-      <Routes location={location} key={location.pathname}>
+    <Suspense fallback={RouteFallback}>
+      <AnimatePresence mode="wait" initial={false}>
+        <Routes location={location} key={location.pathname}>
         <Route
           path="/"
           element={
@@ -320,8 +326,9 @@ function AppRoutes() {
       />
 
       <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
-      </Routes>
-    </AnimatePresence>
+        </Routes>
+      </AnimatePresence>
+    </Suspense>
   );
 }
 

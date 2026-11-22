@@ -68,7 +68,7 @@ function DriftingEmbers({ isMobile, lowFpsMode }) {
 
     // Slow ambient rotation reacting slightly to cursor parallax
     meshRef.current.rotation.y = state.clock.getElapsedTime() * 0.02;
-    meshRef.current.rotation.x = state.mouse.y * 0.05;
+    meshRef.current.rotation.x = state.pointer.y * 0.05;
   });
 
   return (
@@ -100,52 +100,61 @@ function DriftingEmbers({ isMobile, lowFpsMode }) {
 }
 
 export default function Scene3D() {
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth < 768 : false
+  );
   const [lowFpsMode, setLowFpsMode] = useState(false);
+  const [isTabVisible, setIsTabVisible] = useState(() =>
+    typeof document !== "undefined" ? !document.hidden : true
+  );
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
+    const handleVisibility = () => setIsTabVisible(!document.hidden);
 
-    // FPS Auto-Downgrade Monitor (< 40 FPS -> Low FPS mode)
+    window.addEventListener("resize", checkMobile, { passive: true });
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    // One-time 1.5s FPS sample instead of running a competing RAF loop forever
     let frameCount = 0;
-    let lastTime = performance.now();
+    const startTime = performance.now();
     let animId;
 
-    const checkFps = () => {
+    const sampleFps = () => {
       frameCount++;
-      const now = performance.now();
-      if (now - lastTime >= 1000) {
-        const fps = (frameCount * 1000) / (now - lastTime);
+      const elapsed = performance.now() - startTime;
+      if (elapsed >= 1500) {
+        const fps = (frameCount * 1000) / elapsed;
         if (fps < 40) {
           setLowFpsMode(true);
         }
-        frameCount = 0;
-        lastTime = now;
+        return;
       }
-      animId = requestAnimationFrame(checkFps);
+      animId = requestAnimationFrame(sampleFps);
     };
 
-    animId = requestAnimationFrame(checkFps);
+    animId = requestAnimationFrame(sampleFps);
 
     return () => {
       window.removeEventListener("resize", checkMobile);
-      cancelAnimationFrame(animId);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      if (animId) cancelAnimationFrame(animId);
     };
   }, []);
 
   // Respect prefers-reduced-motion
-  const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const prefersReducedMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (prefersReducedMotion) return null;
 
   return (
     <Canvas
+      frameloop={isTabVisible ? "always" : "never"}
       camera={{ position: [0, 0, 12], fov: 50 }}
-      gl={{ antialias: false, powerPreference: "high-performance" }}
-      dpr={[1, 1.5]}
+      gl={{ antialias: false, powerPreference: "high-performance", depth: false }}
+      dpr={[1, 1.25]}
     >
-      <ambientLight intensity={0.5} />
       <DriftingEmbers isMobile={isMobile} lowFpsMode={lowFpsMode} />
     </Canvas>
   );

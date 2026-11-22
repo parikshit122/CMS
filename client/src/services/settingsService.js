@@ -21,7 +21,7 @@ export const addCategory = async (category) => {
 };
 
 export const deleteCategory = async (name) => {
-  const response = await API.delete(`/settings/categories/${name}`);
+  const response = await API.delete(`/settings/categories/${encodeURIComponent(name)}`);
   return response.data;
 };
 

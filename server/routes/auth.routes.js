@@ -20,7 +20,11 @@ const {
   otpLimiter,
   passwordResetLimiter,
 } = require("../middlewares/rateLimiters");
-const User = require("../models/User");
+const {
+  findUserById,
+  findUserByPhone,
+  updateUserById,
+} = require("../../src/db/users.ts");
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -45,8 +49,7 @@ router.post(
     body("name")
       .trim()
       .notEmpty().withMessage("Name is required")
-      .isLength({ min: 3, max: 50 }).withMessage("Name must be 3-50 characters")
-      .escape(), // ✅ Prevent XSS
+      .isLength({ min: 3, max: 50 }).withMessage("Name must be 3-50 characters"),
     body("email")
       .trim()
       .notEmpty().withMessage("Email is required")
@@ -208,8 +211,7 @@ router.patch(
     body("name")
       .optional()
       .trim()
-      .isLength({ min: 2, max: 50 }).withMessage("Name must be 2-50 characters")
-      .escape(),
+      .isLength({ min: 2, max: 50 }).withMessage("Name must be 2-50 characters"),
     body("phone")
       .optional()
       .trim()
@@ -217,8 +219,7 @@ router.patch(
     body("course")
       .optional()
       .trim()
-      .isLength({ max: 100 }).withMessage("Course name too long")
-      .escape(),
+      .isLength({ max: 100 }).withMessage("Course name too long"),
     body("year")
       .optional()
       .trim()
@@ -227,15 +228,14 @@ router.patch(
     body("bio")
       .optional()
       .trim()
-      .isLength({ max: 500 }).withMessage("Bio cannot exceed 500 characters")
-      .escape(),
+      .isLength({ max: 500 }).withMessage("Bio cannot exceed 500 characters"),
   ],
   validate,
   async (req, res) => {
     try {
       const { name, phone, course, year, bio } = req.body;
 
-      const user = await User.findById(req.user.id);
+      const user = await findUserById(req.user.id);
 
       if (!user) {
         return res.status(404).json({
@@ -244,39 +244,46 @@ router.patch(
         });
       }
 
-      // ✅ Only update allowed fields
-      if (name !== undefined) user.name = name;
-      if (bio !== undefined) user.bio = bio;
+      const updates = {};
 
-      // ✅ Only update role-specific fields
+      // Only update allowed fields
+      if (name !== undefined) updates.name = name;
+      if (bio !== undefined) updates.bio = bio;
+
+      // Only update role-specific fields
       if (user.role === "user") {
-        if (course !== undefined) user.course = course;
-        if (year !== undefined) user.year = year;
+        if (course !== undefined) updates.course = course;
+        if (year !== undefined) updates.year = year;
       }
 
-      // ✅ Phone update with duplicate check
+      // Phone update with duplicate check
       if (phone !== undefined && phone !== user.phone) {
-        const phoneExists = await User.findOne({
-          phone: String(phone),
-          _id: { $ne: user._id },
-        });
-        if (phoneExists) {
-          return res.status(400).json({
-            success: false,
-            message: "This phone number is already in use.",
-          });
+        if (phone !== "") {
+          const phoneExists = await findUserByPhone(String(phone), user.id);
+          if (phoneExists) {
+            return res.status(400).json({
+              success: false,
+              message: "This phone number is already in use.",
+            });
+          }
         }
-        user.phone = phone;
+        updates.phone = phone;
       }
 
-      await user.save();
+      const updatedUser = await updateUserById(user.id, updates);
 
       res.json({
         success: true,
         message: "Profile updated successfully.",
-        data: user,
+        data: updatedUser,
       });
     } catch (err) {
+      if (err.code === "UNIQUE_VIOLATION") {
+        return res.status(400).json({
+          success: false,
+          message: `This ${err.field || "field"} is already in use.`,
+        });
+      }
       res.status(500).json({
         success: false,
         message: "Profile update failed.",

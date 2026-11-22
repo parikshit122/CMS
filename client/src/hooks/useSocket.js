@@ -28,7 +28,7 @@ const useSocket = () => {
       ) {
         new window.Notification(notification.title, {
           body: notification.message,
-          icon: "/favicon.ico",
+          icon: "/favicon.svg",
         });
       }
     });

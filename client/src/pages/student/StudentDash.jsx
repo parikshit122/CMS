@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Plus, FileText } from "lucide-react";
 import { motion } from "framer-motion";
 import API from "../../services/api";
+import { useAuth } from "../../context/AuthContext";
 import StatCard from "../../components/common/StatCard";
 import SpatialCard from "../../components/layout/SpatialCard";
 import "../../styles/StudentDash.css";
@@ -20,7 +21,7 @@ import {
 } from "recharts";
 
 export default function StudentDash() {
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const { user } = useAuth();
   const userName = user?.name || "Student";
 
   const [complaints, setComplaints] = useState([]);
@@ -119,13 +120,48 @@ export default function StudentDash() {
               Recent Activity
             </h3>
             <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              {[1, 2, 3].map((_, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: "16px", padding: "16px", background: "rgba(255,255,255,0.02)", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.05)" }}>
-                  <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: "rgba(249, 115, 22, 0.1)", color: "var(--neon-orange)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <FileText size={20} />
-                  </div>
-                </div>
-              ))}
+              {complaints.length === 0 ? (
+                <p style={{ color: "var(--text-secondary)", fontSize: "14px", margin: 0 }}>
+                  No complaints submitted yet. Click &ldquo;Submit New Complaint&rdquo; to file your first request.
+                </p>
+              ) : (
+                complaints.slice(0, 3).map((c) => (
+                  <Link
+                    key={c._id}
+                    to="/my-complaints"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "16px",
+                      padding: "16px",
+                      background: "rgba(255,255,255,0.02)",
+                      borderRadius: "12px",
+                      border: "1px solid rgba(255,255,255,0.05)",
+                      textDecoration: "none",
+                      color: "inherit",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "14px", minWidth: 0 }}>
+                      <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: "rgba(249, 115, 22, 0.1)", color: "var(--neon-orange)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <FileText size={20} />
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, color: "#fff", fontSize: "14px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {c.title}
+                        </div>
+                        <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>
+                          {c.complaintId || `#${c._id?.slice(-6)}`} · {c.category} ·{" "}
+                          {c.createdAt ? new Date(c.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : ""}
+                        </div>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: "12px", fontWeight: 600, textTransform: "capitalize", color: "var(--neon-orange)", flexShrink: 0 }}>
+                      {c.status}
+                    </span>
+                  </Link>
+                ))
+              )}
             </div>
           </div>
         </SpatialCard>

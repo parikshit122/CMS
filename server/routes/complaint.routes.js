@@ -5,6 +5,7 @@ const { authorizeRoles }       = require("../middlewares/role.middleware");
 const { uploadComplaintFiles } = require("../middlewares/upload.middleware");
 const {
   submitComplaint,
+  getComplaintById,
   getMyComplaints,
   getAssignedComplaints,
   getAllComplaints,
@@ -41,5 +42,6 @@ router.get("/stats/admin", protect, authorizeRoles("admin"),         getAdminSta
 router.get("/staff",       protect, authorizeRoles("admin"),         getStaffList);
 
 router.patch("/:id/status", protect, authorizeRoles("staff", "admin"), updateComplaintStatus);
+router.get("/:id",           protect, authorizeRoles("user", "staff", "admin"), getComplaintById);
 
 module.exports = router;

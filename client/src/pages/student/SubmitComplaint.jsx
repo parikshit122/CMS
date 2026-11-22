@@ -364,11 +364,13 @@ const ALLOWED_TYPES = [
 
 // ── Helpers ───────────────────────────────────────────────
 const highlightMatch = (text, query) => {
-  if (!query.trim()) return text;
-  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const trimmed = query.trim();
+  if (!trimmed) return text;
+  const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const regex = new RegExp(`(${escaped})`, "gi");
+  const lower = trimmed.toLowerCase();
   return text.split(regex).map((part, i) =>
-    regex.test(part) ? (
+    part.toLowerCase() === lower ? (
       <mark key={i} className="sc-highlight">
         {part}
       </mark>
@@ -770,9 +772,18 @@ const LocationDropdown = React.memo(({ value, onChange }) => {
 });
 
 // ── File Upload Component ─────────────────────────────────
-const FileUpload = React.memo(({ files, onChange }) => {
+const FileUpload = React.memo(({ files, onChange, onError }) => {
   const inputRef = useRef(null);
   const [dragging, setDragging] = useState(false);
+  const [previewUrls, setPreviewUrls] = useState([]);
+
+  useEffect(() => {
+    const urls = files.map((file) => URL.createObjectURL(file));
+    setPreviewUrls(urls);
+    return () => {
+      urls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [files]);
 
   const validateAndAdd = useCallback(
     (incoming) => {
@@ -796,10 +807,10 @@ const FileUpload = React.memo(({ files, onChange }) => {
         valid.push(file);
       });
 
-      if (errors.length) alert(errors.join("\n"));
+      if (errors.length && onError) onError(errors.join(" · "));
       if (valid.length) onChange([...files, ...valid]);
     },
-    [files, onChange],
+    [files, onChange, onError],
   );
 
   const handleDrop = useCallback(
@@ -871,37 +882,35 @@ const FileUpload = React.memo(({ files, onChange }) => {
       {/* Preview grid */}
       {files.length > 0 && (
         <div className="sc-upload__previews">
-          {files.map((file, idx) => {
-            const url = URL.createObjectURL(file);
-            return (
-              <div key={idx} className="sc-upload__preview">
+          {files.map((file, idx) => (
+            <div key={`${file.name}-${file.size}-${idx}`} className="sc-upload__preview">
+              {previewUrls[idx] && (
                 <img
-                  src={url}
+                  src={previewUrls[idx]}
                   alt={file.name}
                   className="sc-upload__preview-img"
-                  onLoad={() => URL.revokeObjectURL(url)}
                 />
-                <div className="sc-upload__preview-info">
-                  <span className="sc-upload__preview-name">
-                    {file.name.length > 20
-                      ? `${file.name.slice(0, 17)}...`
-                      : file.name}
-                  </span>
-                  <span className="sc-upload__preview-size">
-                    {formatFileSize(file.size)}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  className="sc-upload__preview-remove"
-                  onClick={() => handleRemove(idx)}
-                  aria-label={`Remove ${file.name}`}
-                >
-                  <Icon.X />
-                </button>
+              )}
+              <div className="sc-upload__preview-info">
+                <span className="sc-upload__preview-name">
+                  {file.name.length > 20
+                    ? `${file.name.slice(0, 17)}...`
+                    : file.name}
+                </span>
+                <span className="sc-upload__preview-size">
+                  {formatFileSize(file.size)}
+                </span>
               </div>
-            );
-          })}
+              <button
+                type="button"
+                className="sc-upload__preview-remove"
+                onClick={() => handleRemove(idx)}
+                aria-label={`Remove ${file.name}`}
+              >
+                <Icon.X />
+              </button>
+            </div>
+          ))}
         </div>
       )}
 
@@ -921,6 +930,15 @@ const ReviewSection = React.memo(({ formData, attachmentFiles }) => {
   const cat = findCategory(formData.category);
   const loc = findLocationItem(formData.location);
   const priority = PRIORITIES.find((p) => p.key === formData.priority);
+  const [reviewUrls, setReviewUrls] = useState([]);
+
+  useEffect(() => {
+    const urls = attachmentFiles.map((file) => URL.createObjectURL(file));
+    setReviewUrls(urls);
+    return () => {
+      urls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [attachmentFiles]);
 
   const sections = [
     {
@@ -1007,12 +1025,14 @@ const ReviewSection = React.memo(({ formData, attachmentFiles }) => {
           <div className="sc-review__card-body">
             <div className="sc-review__attachments">
               {attachmentFiles.map((file, idx) => (
-                <div key={idx} className="sc-review__attachment">
-                  <img
-                    src={URL.createObjectURL(file)}
-                    alt={file.name}
-                    className="sc-review__attachment-thumb"
-                  />
+                <div key={`${file.name}-${file.size}-${idx}`} className="sc-review__attachment">
+                  {reviewUrls[idx] && (
+                    <img
+                      src={reviewUrls[idx]}
+                      alt={file.name}
+                      className="sc-review__attachment-thumb"
+                    />
+                  )}
                   <span className="sc-review__attachment-name">
                     {file.name.length > 25
                       ? `${file.name.slice(0, 22)}...`
@@ -1074,6 +1094,16 @@ const SubmitComplaint = () => {
   const next = useCallback(() => setStep((s) => Math.min(s + 1, 3)), []);
   const back = useCallback(() => setStep((s) => Math.max(s - 1, 1)), []);
 
+  const redirectTimerRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimerRef.current) {
+        clearTimeout(redirectTimerRef.current);
+      }
+    };
+  }, []);
+
   const submit = useCallback(async () => {
     if (submitting) return;
     setSubmitting(true);
@@ -1091,9 +1121,7 @@ const SubmitComplaint = () => {
         formData.append("attachments", file);
       });
 
-      const response = await API.post("/complaints", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const response = await API.post("/complaints", formData);
 
       if (response.data.success) {
         const newId = response.data.data?.complaintId || "";
@@ -1104,7 +1132,11 @@ const SubmitComplaint = () => {
             ? `Complaint submitted! ID: ${newId}`
             : "Complaint submitted successfully!",
         );
-        setTimeout(() => navigate("/dashboard", { replace: true }), 1800);
+        if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+        redirectTimerRef.current = setTimeout(
+          () => navigate("/dashboard", { replace: true }),
+          1800,
+        );
       } else {
         alert.error(response.data.message || "Failed to submit complaint");
       }
@@ -1119,6 +1151,10 @@ const SubmitComplaint = () => {
   }, [form, attachmentFiles, alert, submitting, navigate]);
 
   const reset = useCallback(() => {
+    if (redirectTimerRef.current) {
+      clearTimeout(redirectTimerRef.current);
+      redirectTimerRef.current = null;
+    }
     setForm({
       category: "",
       title: "",
@@ -1285,6 +1321,7 @@ const SubmitComplaint = () => {
                 <FileUpload
                   files={attachmentFiles}
                   onChange={setAttachmentFiles}
+                  onError={(msg) => alert.error(msg)}
                 />
               </div>
 

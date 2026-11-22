@@ -58,13 +58,25 @@ const sendMail = async (to, subject, html, label = "Email") => {
   }
 };
 
-const layout = (content, senderName = "ComplaintSync") => `
+const escapeHtml = (value) => {
+  if (value === null || value === undefined) return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+};
+
+const layout = (content, senderName = "ComplaintSync") => {
+  const safeSender = escapeHtml(senderName);
+  return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>${senderName}</title>
+  <title>${safeSender}</title>
 </head>
 <body style="margin:0;padding:0;background:#f4f6f9;font-family:Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f9;padding:32px 0;">
@@ -78,7 +90,7 @@ const layout = (content, senderName = "ComplaintSync") => `
                         padding:28px 32px;text-align:center;">
               <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;
                           letter-spacing:0.5px;">
-                ${senderName}
+                ${safeSender}
               </h1>
             </td>
           </tr>
@@ -91,7 +103,7 @@ const layout = (content, senderName = "ComplaintSync") => `
             <td style="background:#f8fafc;padding:20px 32px;
                         border-top:1px solid #e2e8f0;text-align:center;">
               <p style="margin:0;color:#94a3b8;font-size:12px;line-height:1.6;">
-                This is an automated message from <strong>${senderName}</strong>.<br/>
+                This is an automated message from <strong>${safeSender}</strong>.<br/>
                 Please do not reply to this email.
               </p>
             </td>
@@ -102,6 +114,7 @@ const layout = (content, senderName = "ComplaintSync") => `
   </table>
 </body>
 </html>`;
+};
 
 const infoRow = (label, value) => `
   <tr>
@@ -130,7 +143,7 @@ const statusBadge = (status) => {
     resolved: { bg: "#d1fae5", color: "#065f46", label: "Resolved" },
     rejected: { bg: "#fee2e2", color: "#991b1b", label: "Rejected" },
   };
-  const s = map[status?.toLowerCase()] || { bg: "#f1f5f9", color: "#475569", label: status };
+  const s = map[status?.toLowerCase()] || { bg: "#f1f5f9", color: "#475569", label: escapeHtml(status || "Unknown") };
   return `<span style="background:${s.bg};color:${s.color};padding:4px 12px;
     border-radius:20px;font-size:12px;font-weight:700;
     text-transform:uppercase;letter-spacing:0.5px;">${s.label}</span>`;
@@ -143,7 +156,7 @@ const priorityBadge = (priority) => {
     high: { color: "#dc2626", label: "High" },
     urgent: { color: "#7c3aed", label: "Urgent" },
   };
-  const p = map[priority?.toLowerCase()] || { color: "#6b7280", label: priority };
+  const p = map[priority?.toLowerCase()] || { color: "#6b7280", label: escapeHtml(priority || "Medium") };
   return `<strong style="color:${p.color};">${p.label}</strong>`;
 };
 
@@ -152,13 +165,13 @@ const divider = () =>
 
 const greeting = (name) =>
   `<p style="margin:0 0 16px;color:#1e293b;font-size:16px;">
-    Dear <strong>${name || "User"}</strong>,
+    Dear <strong>${escapeHtml(name || "User")}</strong>,
   </p>`;
 
 const signOff = (senderName = "ComplaintSync") =>
   `<p style="margin:24px 0 0;color:#64748b;font-size:13px;line-height:1.6;">
     Warm regards,<br/>
-    <strong style="color:#4f46e5;">The ${senderName} Team</strong>
+    <strong style="color:#4f46e5;">The ${escapeHtml(senderName)} Team</strong>
   </p>`;
 
 const sendEmailVerificationOTP = async (user, otp, expiryMinutes = 10, senderName) => {
@@ -223,12 +236,12 @@ const sendEmailVerifiedSuccessEmail = async (user, senderName) => {
       </p>
     </div>
     <p style="margin:0 0 16px;color:#475569;font-size:15px;line-height:1.6;">
-      You can now log in and start using <strong>${sender}</strong> to submit
+      You can now log in and start using <strong>${escapeHtml(sender)}</strong> to submit
       and track your complaints.
     </p>
     ${infoTable(
-      infoRow("Name", name) +
-      infoRow("Email", user.email) +
+      infoRow("Name", escapeHtml(name)) +
+      infoRow("Email", escapeHtml(user.email)) +
       infoRow("Status", "✅ Verified")
     )}
     ${divider()}
@@ -350,9 +363,9 @@ const sendComplaintSubmittedEmail = async (user, complaint, senderName) => {
       We will review it and keep you updated on its progress.
     </p>
     ${infoTable(
-      infoRow("Complaint ID", `<strong style="color:#4f46e5;">${complaint.complaintId}</strong>`) +
-      infoRow("Title", complaint.title) +
-      infoRow("Category", complaint.category) +
+      infoRow("Complaint ID", `<strong style="color:#4f46e5;">${escapeHtml(complaint.complaintId)}</strong>`) +
+      infoRow("Title", escapeHtml(complaint.title)) +
+      infoRow("Category", escapeHtml(complaint.category)) +
       infoRow("Priority", priorityBadge(complaint.priority)) +
       infoRow("Status", statusBadge("pending")) +
       infoRow("Submitted", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }))
@@ -386,12 +399,12 @@ const sendComplaintStatusUpdateEmail = async (user, complaint, oldStatus, note, 
       The status of your complaint has been updated.
     </p>
     ${infoTable(
-      infoRow("Complaint ID", `<strong style="color:#4f46e5;">${complaint.complaintId}</strong>`) +
-      infoRow("Title", complaint.title) +
+      infoRow("Complaint ID", `<strong style="color:#4f46e5;">${escapeHtml(complaint.complaintId)}</strong>`) +
+      infoRow("Title", escapeHtml(complaint.title)) +
       infoRow("Previous Status", statusBadge(oldStatus)) +
       infoRow("New Status", statusBadge(newStatus)) +
       infoRow("Updated", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })) +
-      (note ? infoRow("Staff Note", `<em>${note}</em>`) : "")
+      (note ? infoRow("Staff Note", `<em>${escapeHtml(note)}</em>`) : "")
     )}
     ${newStatus === "rejected" ? `
     <div style="background:#fee2e2;border-left:4px solid #ef4444;
@@ -437,12 +450,12 @@ const sendComplaintResolvedEmail = async (user, complaint, note, senderName) => 
       </p>
     </div>
     ${infoTable(
-      infoRow("Complaint ID", `<strong style="color:#4f46e5;">${complaint.complaintId}</strong>`) +
-      infoRow("Title", complaint.title) +
-      infoRow("Category", complaint.category) +
+      infoRow("Complaint ID", `<strong style="color:#4f46e5;">${escapeHtml(complaint.complaintId)}</strong>`) +
+      infoRow("Title", escapeHtml(complaint.title)) +
+      infoRow("Category", escapeHtml(complaint.category)) +
       infoRow("Status", statusBadge("resolved")) +
       infoRow("Resolved On", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })) +
-      (note ? infoRow("Resolution Note", `<em>${note}</em>`) : "")
+      (note ? infoRow("Resolution Note", `<em>${escapeHtml(note)}</em>`) : "")
     )}
     <p style="margin:20px 0 0;color:#475569;font-size:14px;line-height:1.6;">
       Thank you for using <strong>${sender}</strong>. Your feedback helps us
@@ -470,13 +483,13 @@ const sendComplaintAssignedEmail = async (staffUser, complaint, senderName) => {
       Please review the details below and take appropriate action.
     </p>
     ${infoTable(
-      infoRow("Complaint ID", `<strong style="color:#4f46e5;">${complaint.complaintId}</strong>`) +
-      infoRow("Title", complaint.title) +
-      infoRow("Description", complaint.description?.substring(0, 200) + (complaint.description?.length > 200 ? "..." : "")) +
-      infoRow("Category", complaint.category) +
+      infoRow("Complaint ID", `<strong style="color:#4f46e5;">${escapeHtml(complaint.complaintId)}</strong>`) +
+      infoRow("Title", escapeHtml(complaint.title)) +
+      infoRow("Description", escapeHtml((complaint.description?.substring(0, 200) || "") + (complaint.description?.length > 200 ? "..." : ""))) +
+      infoRow("Category", escapeHtml(complaint.category)) +
       infoRow("Priority", priorityBadge(complaint.priority)) +
       infoRow("Status", statusBadge(complaint.status)) +
-      (complaint.location ? infoRow("Location", complaint.location) : "") +
+      (complaint.location ? infoRow("Location", escapeHtml(complaint.location)) : "") +
       infoRow("Assigned On", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }))
     )}
     <div style="background:#eff6ff;border-left:4px solid #3b82f6;
@@ -513,10 +526,10 @@ const sendComplaintRejectedEmail = async (user, complaint, reason, senderName) =
       After reviewing your complaint, we were unable to process it at this time.
     </p>
     ${infoTable(
-      infoRow("Complaint ID", `<strong style="color:#4f46e5;">${complaint.complaintId}</strong>`) +
-      infoRow("Title", complaint.title) +
+      infoRow("Complaint ID", `<strong style="color:#4f46e5;">${escapeHtml(complaint.complaintId)}</strong>`) +
+      infoRow("Title", escapeHtml(complaint.title)) +
       infoRow("Status", statusBadge("rejected")) +
-      infoRow("Reason", reason || complaint.rejectionReason || "Does not meet the submission criteria.") +
+      infoRow("Reason", escapeHtml(reason || complaint.rejectionReason || "Does not meet the submission criteria.")) +
       infoRow("Date", new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }))
     )}
     <p style="margin:20px 0 0;color:#475569;font-size:14px;line-height:1.6;">
@@ -560,9 +573,9 @@ const sendWelcomeEmail = async (user, otp, expiryMinutes = 10, senderName) => {
       </p>
     </div>
     ${infoTable(
-      infoRow("Name", name) +
-      infoRow("Email", user.email) +
-      infoRow("Role", user.role || "user")
+      infoRow("Name", escapeHtml(name)) +
+      infoRow("Email", escapeHtml(user.email)) +
+      infoRow("Role", escapeHtml(user.role || "user"))
     )}
     <div style="background:#fef3c7;border-left:4px solid #f59e0b;
                 border-radius:4px;padding:12px 16px;margin:20px 0;">
@@ -587,11 +600,11 @@ const sendStaffWelcomeEmail = async (staff, password, senderName) => {
   const content = `
     ${greeting(name)}
     <p style="margin:0 0 20px;color:#475569;font-size:15px;line-height:1.6;">
-      You have been added as a staff member to <strong>${sender}</strong>.
+      You have been added as a staff member to <strong>${escapeHtml(sender)}</strong>.
     </p>
     ${infoTable(
-      infoRow("Email", staff.email) +
-      infoRow("Password", password) +
+      infoRow("Email", escapeHtml(staff.email)) +
+      infoRow("Password", escapeHtml(password)) +
       infoRow("Role", "Staff")
     )}
     <div style="background:#eff6ff;border-left:4px solid #3b82f6;
@@ -611,6 +624,7 @@ const sendStaffWelcomeEmail = async (staff, password, senderName) => {
 };
 
 module.exports = {
+  escapeHtml,
   sendMail,
   sendWelcomeEmail,
   sendStaffWelcomeEmail,

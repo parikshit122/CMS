@@ -36,11 +36,11 @@ const complaintService = {
 
   /** Assign a complaint to a staff member */
   assignComplaint: (complaintId, staffId) =>
-    API.patch(`/complaints/${complaintId}/assign`, { staffId }),
+    API.patch(`/admin/complaints/${complaintId}/assign`, { staffId }),
 
   /** Get staff members list (admin — for assignment dropdown) */
   getStaffList: () =>
-    API.get("/users/staff"),
+    API.get("/complaints/staff"),
 
   // ── Shared ───────────────────────────────────────────────
 

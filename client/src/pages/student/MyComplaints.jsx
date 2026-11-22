@@ -467,81 +467,75 @@ const MyComplaints = () => {
                   alignItems: "center",
                   flexWrap:  "wrap",
                 }}>
-                  {[
-                    { key: "pending",     label: "Submitted", icon: "bx-plus-circle",  color: "#6366f1" },
-                    { key: "in-progress", label: "In Progress",icon: "bx-loader-alt",  color: "#3b82f6" },
-                    { key: "resolved",    label: "Resolved",  icon: "bx-check-circle", color: "#10b981" },
-                    { key: "rejected",    label: "Rejected",  icon: "bx-x-circle",     color: "#ef4444" },
-                  ].map((step, idx, arr) => {
+                  {(() => {
+                    const isRejected = selected.status === "rejected";
+                    const steps = [
+                      { key: "pending",     label: "Submitted",   icon: "bx-plus-circle",  color: "#6366f1" },
+                      { key: "in-progress", label: "In Progress", icon: "bx-loader-alt",   color: "#3b82f6" },
+                      isRejected
+                        ? { key: "rejected", label: "Rejected", icon: "bx-x-circle",     color: "#ef4444" }
+                        : { key: "resolved", label: "Resolved", icon: "bx-check-circle", color: "#10b981" },
+                    ];
                     const statusOrder = {
                       pending: 0, "in-progress": 1, resolved: 2, rejected: 2,
                     };
                     const currentOrder = statusOrder[selected.status] ?? 0;
-                    const stepOrder    = statusOrder[step.key]        ?? 0;
 
-                    const isRejected   = selected.status === "rejected";
-                    const isResolved   = selected.status === "resolved";
+                    return steps.map((step, idx) => {
+                      const stepOrder = statusOrder[step.key] ?? 0;
+                      const isDone = stepOrder < currentOrder || step.key === selected.status;
+                      const isCurrent = step.key === selected.status;
 
-                    // Skip resolved step if rejected, skip rejected step if resolved
-                    if (isRejected && step.key === "resolved")  return null;
-                    if (isResolved && step.key === "rejected")  return null;
-
-                    const isDone    = stepOrder < currentOrder ||
-                      (step.key === selected.status);
-                    const isCurrent = step.key === selected.status;
-
-                    return (
-                      <React.Fragment key={step.key}>
-                        <div style={{
-                          display:    "flex",
-                          alignItems: "center",
-                          gap:        "6px",
-                          padding:    "6px 10px",
-                          borderRadius: "20px",
-                          background: isCurrent
-                            ? `${step.color}18`
-                            : isDone
-                              ? "#f0fdf4"
-                              : "#f1f5f9",
-                          border: isCurrent
-                            ? `1.5px solid ${step.color}`
-                            : isDone
-                              ? "1.5px solid #bbf7d0"
-                              : "1.5px solid #e2e8f0",
-                        }}>
-                          <i
-                            className={`bx ${isCurrent ? step.icon : isDone ? "bx-check" : step.icon}`}
-                            style={{
-                              color:    isCurrent ? step.color : isDone ? "#10b981" : "#cbd5e1",
-                              fontSize: "14px",
-                            }}
-                          />
-                          <span style={{
-                            fontSize:   "0.75rem",
-                            fontWeight: isCurrent ? "700" : "500",
-                            color:      isCurrent ? step.color : isDone ? "#16a34a" : "#94a3b8",
+                      return (
+                        <React.Fragment key={step.key}>
+                          <div style={{
+                            display:    "flex",
+                            alignItems: "center",
+                            gap:        "6px",
+                            padding:    "6px 10px",
+                            borderRadius: "20px",
+                            background: isCurrent
+                              ? `${step.color}18`
+                              : isDone
+                                ? "#f0fdf4"
+                                : "#f1f5f9",
+                            border: isCurrent
+                              ? `1.5px solid ${step.color}`
+                              : isDone
+                                ? "1.5px solid #bbf7d0"
+                                : "1.5px solid #e2e8f0",
                           }}>
-                            {step.label}
-                          </span>
-                        </div>
+                            <i
+                              className={`bx ${isCurrent ? step.icon : isDone ? "bx-check" : step.icon}`}
+                              style={{
+                                color:    isCurrent ? step.color : isDone ? "#10b981" : "#cbd5e1",
+                                fontSize: "14px",
+                              }}
+                            />
+                            <span style={{
+                              fontSize:   "0.75rem",
+                              fontWeight: isCurrent ? "700" : "500",
+                              color:      isCurrent ? step.color : isDone ? "#16a34a" : "#94a3b8",
+                            }}>
+                              {step.label}
+                            </span>
+                          </div>
 
-                        {/* Connector arrow — skip after last item */}
-                        {idx < arr.filter((s) =>
-                          !(isRejected && s.key === "resolved") &&
-                          !(isResolved && s.key === "rejected")
-                        ).length - 1 && (
-                          <i
-                            className="bx bx-chevron-right"
-                            style={{
-                              color:    "#cbd5e1",
-                              fontSize: "16px",
-                              flexShrink: 0,
-                            }}
-                          />
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
+                          {/* Connector arrow — skip after last item */}
+                          {idx < steps.length - 1 && (
+                            <i
+                              className="bx bx-chevron-right"
+                              style={{
+                                color:    "#cbd5e1",
+                                fontSize: "16px",
+                                flexShrink: 0,
+                              }}
+                            />
+                          )}
+                        </React.Fragment>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
 

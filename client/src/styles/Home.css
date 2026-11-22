@@ -171,6 +171,8 @@
     max-width: 1200px;
     margin: 10px auto;
     padding: 26px 16px 80px;
+    content-visibility: auto;
+    contain-intrinsic-size: 620px;
 }
 
 .features-grid {

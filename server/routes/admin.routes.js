@@ -53,15 +53,22 @@ router.patch("/users/:id/promote", protect, adminOnly, async (req, res) => {
       });
     }
 
-    if (id === req.user._id.toString()) {
+    if (String(id) === String(req.user._id)) {
       return res.status(400).json({
         success: false,
         message: "You cannot change your own role",
       });
     }
 
-    const User = require("../models/User");
-    const user = await User.findById(id);
+    const { findUserById, updateUserById, isValidId } = require("../../src/db/users.ts");
+    if (!isValidId(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID",
+      });
+    }
+
+    const user = await findUserById(id);
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -69,18 +76,19 @@ router.patch("/users/:id/promote", protect, adminOnly, async (req, res) => {
       });
     }
 
-    user.role            = role;
-    user.isEmailVerified = true;
-    await user.save();
+    const updated = await updateUserById(user.id, {
+      role,
+      isEmailVerified: true,
+    });
 
     res.json({
       success: true,
-      message: `${user.name} role updated to ${role}`,
+      message: `${updated.name} role updated to ${role}`,
       data: {
-        id:    user._id,
-        name:  user.name,
-        email: user.email,
-        role:  user.role,
+        id:    updated._id,
+        name:  updated.name,
+        email: updated.email,
+        role:  updated.role,
       },
     });
   } catch (err) {

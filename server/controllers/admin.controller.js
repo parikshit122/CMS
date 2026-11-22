@@ -1,74 +1,50 @@
-const User = require("../models/User");
-const Complaint = require("../models/Complaint");
-const Notification = require("../models/Notification");
+const crypto = require("crypto");
+const {
+  isValidId,
+  findUserById,
+  findUserByEmail,
+  createUser,
+  updateUserById,
+  deleteUserById,
+  getAllStudentsWithStats,
+  getAllStaffWithStats,
+  getStaffByCategoryWithActiveCount,
+} = require("../../src/db/users.ts");
+const {
+  findComplaintById,
+  updateComplaintById,
+  deleteComplaintById,
+  unassignStaffComplaints,
+  getStudentComplaintAttachments,
+  deleteComplaintsByStudent,
+  countComplaints,
+} = require("../../src/db/complaints.ts");
+const {
+  countNotifications,
+  deleteNotificationsByUserInvolvement,
+  deleteNotificationsByComplaint,
+} = require("../../src/db/notifications.ts");
 const { sendStaffWelcomeEmail } = require("../services/email.service");
 const {
   notifyComplaintAssigned,
   notifyComplaintReassigned,
 } = require("../services/notification.service");
 
-// ── Password generator ───────────────────────────────────
 const generatePassword = () => {
   const chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
   const symbols = "!@#$%&*";
   let password = "";
   for (let i = 0; i < 10; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
+    password += chars.charAt(crypto.randomInt(0, chars.length));
   }
-  password += symbols.charAt(Math.floor(Math.random() * symbols.length));
+  password += symbols.charAt(crypto.randomInt(0, symbols.length));
   return password;
 };
 
-// ── Get all students (aggregation — no N+1) ──────────────
 const getAllStudents = async (req, res) => {
   try {
-    const now = new Date();
-
-    const students = await User.aggregate([
-      { $match: { role: "user" } },
-      {
-        $lookup: {
-          from: "complaints",
-          localField: "_id",
-          foreignField: "student",
-          as: "complaints",
-        },
-      },
-      {
-        $addFields: {
-          totalComplaints: { $size: "$complaints" },
-          isSuspended: {
-            $and: [
-              { $ne: ["$suspendedUntil", null] },
-              { $gt: ["$suspendedUntil", now] },
-            ],
-          },
-        },
-      },
-      {
-        $project: {
-          password: 0,
-          complaints: 0,
-          passwordResetOTP: 0,
-          passwordResetToken: 0,
-          emailVerificationOTP: 0,
-          loginAttempts: 0,
-          __v: 0,
-        },
-      },
-      { $sort: { createdAt: -1 } },
-    ]);
-
-    const enriched = students.map((s) => ({
-      ...s,
-      status: s.isSuspended
-        ? "suspended"
-        : s.isActive === false
-          ? "inactive"
-          : "active",
-    }));
-
-    res.json({ success: true, data: enriched });
+    const students = await getAllStudentsWithStats();
+    res.json({ success: true, data: students });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -76,51 +52,13 @@ const getAllStudents = async (req, res) => {
 
 const getAllStaff = async (req, res) => {
   try {
-    const staff = await User.aggregate([
-      { $match: { role: "staff" } },
-      {
-        $lookup: {
-          from: "complaints",
-          localField: "_id",
-          foreignField: "assignedTo",
-          as: "allComplaints",
-        },
-      },
-      {
-        $addFields: {
-          assignedCount: { $size: "$allComplaints" },
-          resolvedCount: {
-            $size: {
-              $filter: {
-                input: "$allComplaints",
-                as: "c",
-                cond: { $eq: ["$$c.status", "resolved"] },
-              },
-            },
-          },
-        },
-      },
-      {
-        $project: {
-          password: 0,
-          allComplaints: 0,
-          passwordResetOTP: 0,
-          passwordResetToken: 0,
-          emailVerificationOTP: 0,
-          loginAttempts: 0,
-          __v: 0,
-        },
-      },
-      { $sort: { createdAt: -1 } },
-    ]);
-
+    const staff = await getAllStaffWithStats();
     res.json({ success: true, data: staff });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
-// ── Add staff ────────────────────────────────────────────
 const addStaff = async (req, res) => {
   try {
     const { name, email, phone, category, passwordMode, password } = req.body;
@@ -132,7 +70,8 @@ const addStaff = async (req, res) => {
       });
     }
 
-    const exists = await User.findOne({ email: String(email) });
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const exists = await findUserByEmail(normalizedEmail);
     if (exists) {
       return res.status(400).json({
         success: false,
@@ -153,13 +92,13 @@ const addStaff = async (req, res) => {
       finalPassword = password;
     }
 
-    const staff = await User.create({
-      name,
-      email,
-      phone,
+    const staff = await createUser({
+      name: String(name).trim(),
+      email: normalizedEmail,
+      phone: String(phone).trim(),
       password: finalPassword,
       role: "staff",
-      category,
+      category: String(category).trim().toLowerCase(),
       isEmailVerified: true,
     });
 
@@ -184,6 +123,12 @@ const addStaff = async (req, res) => {
       },
     });
   } catch (err) {
+    if (err.code === "UNIQUE_VIOLATION") {
+      return res.status(400).json({
+        success: false,
+        message: `This ${err.field || "field"} is already registered`,
+      });
+    }
     res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -193,7 +138,11 @@ const updateStaff = async (req, res) => {
     const { id } = req.params;
     const { name, phone, category } = req.body;
 
-    const staff = await User.findById(id);
+    if (!isValidId(id)) {
+      return res.status(400).json({ success: false, message: "Invalid staff ID" });
+    }
+
+    const staff = await findUserById(id);
     if (!staff || staff.role !== "staff") {
       return res.status(404).json({
         success: false,
@@ -208,21 +157,21 @@ const updateStaff = async (req, res) => {
       });
     }
 
-    if (name) staff.name = name;
-    if (phone) staff.phone = phone;
-    if (category) staff.category = category;
-
-    await staff.save();
+    const updated = await updateUserById(id, {
+      ...(name ? { name: String(name).trim() } : {}),
+      ...(phone ? { phone: String(phone).trim() } : {}),
+      ...(category ? { category: String(category).trim().toLowerCase() } : {}),
+    });
 
     res.json({
       success: true,
       message: "Staff updated successfully",
       data: {
-        id: staff._id,
-        name: staff.name,
-        email: staff.email,
-        phone: staff.phone,
-        category: staff.category,
+        id: updated._id,
+        name: updated.name,
+        email: updated.email,
+        phone: updated.phone,
+        category: updated.category,
       },
     });
   } catch (err) {
@@ -230,12 +179,15 @@ const updateStaff = async (req, res) => {
   }
 };
 
-// ── Delete staff (with cleanup) ──────────────────────────
 const deleteStaff = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const staff = await User.findById(id);
+    if (!isValidId(id)) {
+      return res.status(400).json({ success: false, message: "Invalid staff ID" });
+    }
+
+    const staff = await findUserById(id);
     if (!staff || staff.role !== "staff") {
       return res.status(404).json({
         success: false,
@@ -243,37 +195,9 @@ const deleteStaff = async (req, res) => {
       });
     }
 
-    const [activeCount, totalAssigned, notifReceived, notifSent] =
-      await Promise.all([
-        Complaint.countDocuments({
-          assignedTo: id,
-          status: { $in: ["pending", "in-progress"] },
-        }),
-        Complaint.countDocuments({ assignedTo: id }),
-        Notification.countDocuments({ recipient: id }),
-        Notification.countDocuments({ sender: id }),
-      ]);
-
-    // Unassign active complaints → reset to pending
-    if (activeCount > 0) {
-      await Complaint.updateMany(
-        { assignedTo: id, status: { $in: ["pending", "in-progress"] } },
-        { $unset: { assignedTo: "" }, $set: { status: "pending" } },
-      );
-    }
-
-    // Remove staff reference from closed complaints
-    await Complaint.updateMany(
-      { assignedTo: id, status: { $in: ["resolved", "rejected"] } },
-      { $unset: { assignedTo: "" } },
-    );
-
-    // Delete all notifications
-    const notifResult = await Notification.deleteMany({
-      $or: [{ recipient: id }, { sender: id }],
-    });
-
-    await User.findByIdAndDelete(id);
+    const { activeCount, totalAssigned } = await unassignStaffComplaints(id);
+    const deletedNotifications = await deleteNotificationsByUserInvolvement(id);
+    await deleteUserById(id);
 
     res.json({
       success: true,
@@ -281,7 +205,7 @@ const deleteStaff = async (req, res) => {
       data: {
         reassignedComplaints: activeCount,
         totalComplaintsAffected: totalAssigned,
-        deletedNotifications: notifResult.deletedCount,
+        deletedNotifications,
       },
     });
   } catch (err) {
@@ -289,12 +213,15 @@ const deleteStaff = async (req, res) => {
   }
 };
 
-// ── Delete complaint ─────────────────────────────────────
 const deleteComplaint = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const complaint = await Complaint.findById(id);
+    if (!isValidId(id)) {
+      return res.status(400).json({ success: false, message: "Invalid complaint ID" });
+    }
+
+    const complaint = await findComplaintById(id);
     if (!complaint) {
       return res.status(404).json({
         success: false,
@@ -302,17 +229,16 @@ const deleteComplaint = async (req, res) => {
       });
     }
 
-    // ── Delete attachments from Cloudinary ────────────────
     if (complaint.attachments && complaint.attachments.length > 0) {
       const { deleteMultipleFiles } = require("../services/cloudinary.service");
-      const publicIds = complaint.attachments.map((a) => a.publicId);
-      await deleteMultipleFiles(publicIds);
+      const publicIds = complaint.attachments.map((a) => a.publicId).filter(Boolean);
+      if (publicIds.length > 0) {
+        await deleteMultipleFiles(publicIds);
+      }
     }
 
-    await Promise.all([
-      Complaint.findByIdAndDelete(id),
-      Notification.deleteMany({ complaint: id }),
-    ]);
+    await deleteNotificationsByComplaint(id);
+    await deleteComplaintById(id);
 
     res.json({
       success: true,
@@ -328,7 +254,7 @@ const suspendStudent = async (req, res) => {
     const { id } = req.params;
     const { days, reason } = req.body;
 
-    if (!days || days < 1) {
+    if (!days || Number(days) < 1) {
       return res.status(400).json({
         success: false,
         message: "Days must be at least 1",
@@ -342,7 +268,11 @@ const suspendStudent = async (req, res) => {
       });
     }
 
-    const student = await User.findById(id);
+    if (!isValidId(id)) {
+      return res.status(400).json({ success: false, message: "Invalid student ID" });
+    }
+
+    const student = await findUserById(id);
     if (!student || student.role !== "user") {
       return res.status(404).json({
         success: false,
@@ -351,11 +281,12 @@ const suspendStudent = async (req, res) => {
     }
 
     const suspendedUntil = new Date();
-    suspendedUntil.setDate(suspendedUntil.getDate() + parseInt(days));
+    suspendedUntil.setDate(suspendedUntil.getDate() + parseInt(days, 10));
 
-    student.suspendedUntil = suspendedUntil;
-    student.suspensionReason = reason || "";
-    await student.save();
+    await updateUserById(id, {
+      suspendedUntil,
+      suspensionReason: reason.trim(),
+    });
 
     res.json({
       success: true,
@@ -371,7 +302,11 @@ const reactivateStudent = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const student = await User.findById(id);
+    if (!isValidId(id)) {
+      return res.status(400).json({ success: false, message: "Invalid student ID" });
+    }
+
+    const student = await findUserById(id);
     if (!student || student.role !== "user") {
       return res.status(404).json({
         success: false,
@@ -379,10 +314,11 @@ const reactivateStudent = async (req, res) => {
       });
     }
 
-    student.suspendedUntil = undefined;
-    student.suspensionReason = undefined;
-    student.isActive = true;
-    await student.save();
+    await updateUserById(id, {
+      suspendedUntil: null,
+      suspensionReason: null,
+      isActive: true,
+    });
 
     res.json({ success: true, message: "Student reactivated successfully" });
   } catch (err) {
@@ -390,60 +326,31 @@ const reactivateStudent = async (req, res) => {
   }
 };
 
-// ── Get staff by category (fixed N+1) ────────────────────
 const getStaffByCategory = async (req, res) => {
   try {
     const { category } = req.params;
-
-    const staff = await User.aggregate([
-      { $match: { role: "staff", category } },
-      {
-        $lookup: {
-          from: "complaints",
-          localField: "_id",
-          foreignField: "assignedTo",
-          as: "activeComplaints",
-          pipeline: [
-            {
-              $match: {
-                status: { $in: ["pending", "in-progress"] },
-              },
-            },
-          ],
-        },
-      },
-      {
-        $addFields: {
-          activeCount: { $size: "$activeComplaints" },
-        },
-      },
-      {
-        $project: {
-          name: 1,
-          email: 1,
-          category: 1,
-          activeCount: 1,
-        },
-      },
-    ]);
-
+    const staff = await getStaffByCategoryWithActiveCount(
+      String(category).toLowerCase().trim()
+    );
     res.json({ success: true, data: staff });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
-// ── Assign staff to complaint ────────────────────────────
 const assignStaffToComplaint = async (req, res) => {
   try {
     const { id } = req.params;
     const { staffId } = req.body;
 
-    const complaint = await Complaint.findById(id).populate(
-      "student",
-      "name email",
-    );
+    if (!isValidId(id)) {
+      return res.status(400).json({ success: false, message: "Invalid complaint ID" });
+    }
+    if (!staffId || !isValidId(staffId)) {
+      return res.status(400).json({ success: false, message: "Valid staffId is required" });
+    }
 
+    const complaint = await findComplaintById(id);
     if (!complaint) {
       return res.status(404).json({
         success: false,
@@ -451,7 +358,7 @@ const assignStaffToComplaint = async (req, res) => {
       });
     }
 
-    const newStaff = await User.findById(String(staffId));
+    const newStaff = await findUserById(staffId);
     if (!newStaff || newStaff.role !== "staff") {
       return res.status(400).json({
         success: false,
@@ -459,23 +366,15 @@ const assignStaffToComplaint = async (req, res) => {
       });
     }
 
-    const oldStaffId = complaint.assignedTo;
-    const oldStaff = oldStaffId ? await User.findById(oldStaffId) : null;
-
+    const oldStaffId = complaint.assignedToId;
+    const oldStaff = oldStaffId ? await findUserById(oldStaffId) : null;
     const isReassignment =
-      oldStaffId && oldStaffId.toString() !== staffId.toString();
+      Boolean(oldStaffId) && String(oldStaffId) !== String(newStaff.id);
 
-    // Update complaint
-    complaint.assignedTo = staffId;
-    if (complaint.status === "pending") {
-      complaint.status = "in-progress";
-    }
-    await complaint.save();
-
-    // Fetch fully populated for response + notifications
-    const updated = await Complaint.findById(id)
-      .populate("student", "name email")
-      .populate("assignedTo", "name email category");
+    const updated = await updateComplaintById(id, {
+      assignedToId: newStaff.id,
+      ...(complaint.status === "pending" ? { status: "in-progress" } : {}),
+    });
 
     if (isReassignment) {
       await notifyComplaintReassigned(updated, oldStaff, newStaff, req.app);
@@ -499,7 +398,11 @@ const getStudentDeletePreview = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const student = await User.findById(id);
+    if (!isValidId(id)) {
+      return res.status(400).json({ success: false, message: "Invalid student ID" });
+    }
+
+    const student = await findUserById(id);
     if (!student || student.role !== "user") {
       return res.status(404).json({
         success: false,
@@ -509,9 +412,9 @@ const getStudentDeletePreview = async (req, res) => {
 
     const [complaintsCount, notificationsReceived, notificationsSent] =
       await Promise.all([
-        Complaint.countDocuments({ student: id }),
-        Notification.countDocuments({ recipient: id }),
-        Notification.countDocuments({ sender: id }),
+        countComplaints({ studentId: id }),
+        countNotifications({ recipientId: id }),
+        countNotifications({ senderId: id }),
       ]);
 
     res.json({
@@ -537,7 +440,11 @@ const deleteStudent = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const student = await User.findById(id);
+    if (!isValidId(id)) {
+      return res.status(400).json({ success: false, message: "Invalid student ID" });
+    }
+
+    const student = await findUserById(id);
     if (!student || student.role !== "user") {
       return res.status(404).json({
         success: false,
@@ -545,21 +452,22 @@ const deleteStudent = async (req, res) => {
       });
     }
 
-    const [complaintsResult, notifResult] = await Promise.all([
-      Complaint.deleteMany({ student: id }),
-      Notification.deleteMany({
-        $or: [{ recipient: id }, { sender: id }],
-      }),
-    ]);
+    const attachmentIds = await getStudentComplaintAttachments(id);
+    if (attachmentIds.length > 0) {
+      const { deleteMultipleFiles } = require("../services/cloudinary.service");
+      await deleteMultipleFiles(attachmentIds);
+    }
 
-    await User.findByIdAndDelete(id);
+    const deletedNotifications = await deleteNotificationsByUserInvolvement(id);
+    const deletedComplaints = await deleteComplaintsByStudent(id);
+    await deleteUserById(id);
 
     res.json({
       success: true,
       message: `Student ${student.name} deleted successfully`,
       data: {
-        deletedComplaints: complaintsResult.deletedCount,
-        deletedNotifications: notifResult.deletedCount,
+        deletedComplaints,
+        deletedNotifications,
       },
     });
   } catch (err) {
@@ -571,7 +479,11 @@ const getStaffDeletePreview = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const staff = await User.findById(id);
+    if (!isValidId(id)) {
+      return res.status(400).json({ success: false, message: "Invalid staff ID" });
+    }
+
+    const staff = await findUserById(id);
     if (!staff || staff.role !== "staff") {
       return res.status(404).json({
         success: false,
@@ -586,14 +498,11 @@ const getStaffDeletePreview = async (req, res) => {
       notificationsReceived,
       notificationsSent,
     ] = await Promise.all([
-      Complaint.countDocuments({
-        assignedTo: id,
-        status: { $in: ["pending", "in-progress"] },
-      }),
-      Complaint.countDocuments({ assignedTo: id, status: "resolved" }),
-      Complaint.countDocuments({ assignedTo: id, status: "rejected" }),
-      Notification.countDocuments({ recipient: id }),
-      Notification.countDocuments({ sender: id }),
+      countComplaints({ assignedToId: id, status: ["pending", "in-progress"] }),
+      countComplaints({ assignedToId: id, status: "resolved" }),
+      countComplaints({ assignedToId: id, status: "rejected" }),
+      countNotifications({ recipientId: id }),
+      countNotifications({ senderId: id }),
     ]);
 
     const totalComplaints =

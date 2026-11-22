@@ -13,7 +13,7 @@ const AssignStaffModal = ({ complaint, onClose, onAssigned }) => {
       try {
         setLoading(true);
         const res = await API.get(
-          `/admin/staff/by-category/${complaint.category}`
+          `/admin/staff/by-category/${encodeURIComponent(complaint.category || "")}`
         );
         if (res.data.success) {
           setStaffList(res.data.data);

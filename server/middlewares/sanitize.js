@@ -1,17 +1,28 @@
 const isDev = process.env.NODE_ENV !== "production";
 
+const PASSWORD_KEYS = new Set([
+  "password",
+  "currentPassword",
+  "newPassword",
+  "confirmPassword",
+]);
+
 // ── Sanitize a single value ───────────────────────────────
-const sanitizeValue = (value) => {
+const sanitizeValue = (value, keyName = "") => {
   if (value === null || value === undefined) return value;
 
   if (typeof value === "string") {
+    // Preserve passwords verbatim so valid special characters like < and > are never altered
+    if (PASSWORD_KEYS.has(keyName)) {
+      return value;
+    }
     return value
       .replace(/[<>]/g, "")
       .trim();
   }
 
   if (Array.isArray(value)) {
-    return value.map(sanitizeValue);
+    return value.map((item) => sanitizeValue(item));
   }
 
   if (typeof value === "object") {
@@ -35,7 +46,7 @@ const sanitizeObject = (obj) => {
         .replace(/^\$/g, "_")
         .replace(/\./g, "_");
 
-      clean[safeKey] = sanitizeValue(obj[key]);
+      clean[safeKey] = sanitizeValue(obj[key], safeKey);
 
       // Only log suspicious keys in development
       if (isDev) {
@@ -44,11 +55,23 @@ const sanitizeObject = (obj) => {
         );
       }
     } else {
-      clean[key] = sanitizeValue(obj[key]);
+      clean[key] = sanitizeValue(obj[key], key);
     }
   }
 
   return clean;
+};
+
+// ── Express 5 safe in-place sanitization for getter-only req.query ──
+const sanitizeInPlace = (target) => {
+  if (!target || typeof target !== "object") return;
+  const cleaned = sanitizeObject(target);
+  for (const key of Object.keys(target)) {
+    delete target[key];
+  }
+  for (const [key, value] of Object.entries(cleaned)) {
+    target[key] = value;
+  }
 };
 
 // ── Express middleware ────────────────────────────────────
@@ -59,15 +82,14 @@ const mongoSanitize = (req, res, next) => {
     }
 
     if (req.params && typeof req.params === "object") {
-      req.params = sanitizeObject(req.params);
+      sanitizeInPlace(req.params);
     }
 
     if (req.query && typeof req.query === "object") {
-      req.query = sanitizeObject(req.query);
+      sanitizeInPlace(req.query);
     }
   } catch (err) {
     // Never crash the app due to sanitization error
-    // Log in dev only
     if (isDev) {
       console.error("[sanitize] Error during sanitization:", err.message);
     }
@@ -75,5 +97,9 @@ const mongoSanitize = (req, res, next) => {
     next();
   }
 };
+
+mongoSanitize.sanitizeValue = sanitizeValue;
+mongoSanitize.sanitizeObject = sanitizeObject;
+mongoSanitize.sanitizeInPlace = sanitizeInPlace;
 
 module.exports = mongoSanitize;

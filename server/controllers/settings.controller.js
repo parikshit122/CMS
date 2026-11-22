@@ -1,30 +1,61 @@
-const Settings = require("../models/Settings");
-const Notification = require("../models/Notification");
-const Complaint = require("../models/Complaint");
-const User = require("../models/User");
+const {
+  getSettingsSingleton,
+  updateSettingsSingleton,
+} = require("../../src/db/settings.ts");
+const {
+  countComplaints,
+  deleteOldResolvedComplaints,
+} = require("../../src/db/complaints.ts");
+const {
+  countNotifications,
+  deleteAllNotificationsGlobal,
+} = require("../../src/db/notifications.ts");
+const { countUsers } = require("../../src/db/users.ts");
 const { sendMail } = require("../services/email.service");
 
 const getSettings = async (req, res) => {
   try {
-    const settings = await Settings.getSingleton();
+    const settings = await getSettingsSingleton();
     res.json({ success: true, data: settings });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 };
 
+const ALLOWED_SETTING_FIELDS = new Set([
+  "siteName",
+  "siteTagline",
+  "maintenanceMode",
+  "maintenanceMessage",
+  "defaultPriority",
+  "autoCloseResolvedDays",
+  "passwordMinLength",
+  "passwordRequireSpecial",
+  "passwordRequireNumber",
+  "passwordRequireUppercase",
+  "sessionTimeoutMinutes",
+  "maxLoginAttempts",
+  "otpExpiryMinutes",
+  "emailEnabled",
+  "emailSenderName",
+  "notifyOnSubmit",
+  "notifyOnAssign",
+  "notifyOnResolve",
+  "categories",
+]);
+
 const updateSettings = async (req, res) => {
   try {
-    const settings = await Settings.getSingleton();
-    const updates = req.body;
+    const updates = req.body || {};
+    const sanitizedUpdates = {};
 
     Object.keys(updates).forEach((key) => {
-      if (updates[key] !== undefined) {
-        settings[key] = updates[key];
+      if (ALLOWED_SETTING_FIELDS.has(key) && updates[key] !== undefined) {
+        sanitizedUpdates[key] = updates[key];
       }
     });
 
-    await settings.save();
+    const settings = await updateSettingsSingleton(sanitizedUpdates);
 
     res.json({
       success: true,
@@ -48,23 +79,26 @@ const addCategory = async (req, res) => {
     }
 
     const cleaned = category.trim().toLowerCase();
+    const settings = await getSettingsSingleton();
+    const currentCategories = Array.isArray(settings.categories)
+      ? settings.categories
+      : [];
 
-    const settings = await Settings.getSingleton();
-
-    if (settings.categories.includes(cleaned)) {
+    if (currentCategories.includes(cleaned)) {
       return res.status(400).json({
         success: false,
         message: "Category already exists",
       });
     }
 
-    settings.categories.push(cleaned);
-    await settings.save();
+    const updated = await updateSettingsSingleton({
+      categories: [...currentCategories, cleaned],
+    });
 
     res.json({
       success: true,
       message: "Category added successfully",
-      data: settings.categories,
+      data: updated.categories,
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -74,16 +108,19 @@ const addCategory = async (req, res) => {
 const deleteCategory = async (req, res) => {
   try {
     const { name } = req.params;
-    const settings = await Settings.getSingleton();
+    const settings = await getSettingsSingleton();
+    const currentCategories = Array.isArray(settings.categories)
+      ? settings.categories
+      : [];
 
-    if (!settings.categories.includes(name)) {
+    if (!currentCategories.includes(name)) {
       return res.status(404).json({
         success: false,
         message: "Category not found",
       });
     }
 
-    const inUse = await Complaint.countDocuments({ category: name });
+    const inUse = await countComplaints({ category: name });
     if (inUse > 0) {
       return res.status(400).json({
         success: false,
@@ -91,13 +128,14 @@ const deleteCategory = async (req, res) => {
       });
     }
 
-    settings.categories = settings.categories.filter((c) => c !== name);
-    await settings.save();
+    const updated = await updateSettingsSingleton({
+      categories: currentCategories.filter((c) => c !== name),
+    });
 
     res.json({
       success: true,
       message: "Category deleted successfully",
-      data: settings.categories,
+      data: updated.categories,
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -115,15 +153,16 @@ const sendTestEmail = async (req, res) => {
       });
     }
 
-    const settings = await Settings.getSingleton();
+    const settings = await getSettingsSingleton();
+    const senderName = settings.emailSenderName || "ComplaintSync";
 
     const result = await sendMail(
       email,
-      "ComplaintSync — Test Email",
+      `${senderName} — Test Email`,
       `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px;">
       <h2 style="color: #6366f1;">Test Email Successful</h2>
-      <p>This is a test email from your ComplaintSync admin settings.</p>
+      <p>This is a test email from your admin settings.</p>
       <p>If you received this, your email configuration is working correctly.</p>
       <p style="margin-top: 24px; color: #8a94a6; font-size: 13px;">
         Sent at: ${new Date().toLocaleString()}
@@ -155,20 +194,17 @@ const sendTestEmail = async (req, res) => {
 const clearOldResolved = async (req, res) => {
   try {
     const { days } = req.body;
-    const cutoffDays = parseInt(days) || 30;
+    const cutoffDays = parseInt(days, 10) || 30;
 
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - cutoffDays);
 
-    const result = await Complaint.deleteMany({
-      status: "resolved",
-      updatedAt: { $lt: cutoffDate },
-    });
+    const deletedCount = await deleteOldResolvedComplaints(cutoffDate);
 
     res.json({
       success: true,
-      message: `Deleted ${result.deletedCount} resolved complaint(s) older than ${cutoffDays} days`,
-      deletedCount: result.deletedCount,
+      message: `Deleted ${deletedCount} resolved complaint(s) older than ${cutoffDays} days`,
+      deletedCount,
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -177,11 +213,11 @@ const clearOldResolved = async (req, res) => {
 
 const clearAllNotifications = async (req, res) => {
   try {
-    const result = await Notification.deleteMany({});
+    const deletedCount = await deleteAllNotificationsGlobal();
     res.json({
       success: true,
-      message: `Cleared ${result.deletedCount} notification(s)`,
-      deletedCount: result.deletedCount,
+      message: `Cleared ${deletedCount} notification(s)`,
+      deletedCount,
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -200,14 +236,14 @@ const getSystemStats = async (req, res) => {
       pendingComplaints,
       resolvedComplaints,
     ] = await Promise.all([
-      User.countDocuments(),
-      User.countDocuments({ role: "user" }),
-      User.countDocuments({ role: "staff" }),
-      User.countDocuments({ role: "admin" }),
-      Complaint.countDocuments(),
-      Notification.countDocuments(),
-      Complaint.countDocuments({ status: "pending" }),
-      Complaint.countDocuments({ status: "resolved" }),
+      countUsers(),
+      countUsers("user"),
+      countUsers("staff"),
+      countUsers("admin"),
+      countComplaints(),
+      countNotifications(),
+      countComplaints({ status: "pending" }),
+      countComplaints({ status: "resolved" }),
     ]);
 
     res.json({

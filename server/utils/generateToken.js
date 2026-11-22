@@ -1,10 +1,18 @@
+const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
+
+const fallbackJwtSecret = crypto.randomBytes(32).toString("hex");
+const fallbackJwtRefreshSecret = crypto.randomBytes(32).toString("hex");
+
+const getJwtSecret = () => process.env.JWT_SECRET || fallbackJwtSecret;
+const getJwtRefreshSecret = () =>
+  process.env.JWT_REFRESH_SECRET || fallbackJwtRefreshSecret;
 
 const generateAccessToken = (userId) => {
   if (!userId) throw new Error("userId is required");
   return jwt.sign(
     { id: userId },
-    process.env.JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: "15m" }
   );
 };
@@ -14,7 +22,7 @@ const generateRefreshToken = (userId) => {
   if (!userId) throw new Error("userId is required");
   return jwt.sign(
     { id: userId },
-    process.env.JWT_REFRESH_SECRET,
+    getJwtRefreshSecret(),
     { expiresIn: "7d" }
   );
 };
@@ -22,4 +30,6 @@ const generateRefreshToken = (userId) => {
 module.exports = {
   generateAccessToken,
   generateRefreshToken,
+  getJwtSecret,
+  getJwtRefreshSecret,
 };

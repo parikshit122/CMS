@@ -1,16 +1,25 @@
-# React + Vite
+# ComplaintSync Client
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 18 + Vite 6 single-page application for **ComplaintSync**.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **UI & Routing**: React 18, React Router 7, Framer Motion, Three.js / React Three Fiber
+- **State & Data**: Redux Toolkit, Axios, Socket.IO Client
+- **Auth & Reporting**: Firebase Web Auth, Recharts, jsPDF, html2canvas
+- **Testing**: Vitest + React Testing Library
 
-## React Compiler
+## Scripts
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+# Start Vite dev server
+npm run dev
 
-## Expanding the ESLint configuration
+# Build production bundle into dist/
+npm run build
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+# Run unit tests
+npm run test -- --run
+```
+
+See the root [`README.md`](../README.md) for full-stack setup, PostgreSQL schema details, and environment variable documentation.

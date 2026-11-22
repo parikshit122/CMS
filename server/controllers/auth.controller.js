@@ -1,14 +1,27 @@
-// E:\CMS\server\controllers\auth.controller.js
 "use strict";
 
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const admin = require("../config/firebaseadmin");
-const User = require("../models/User");
-const Settings = require("../models/Settings");
+const {
+  findUserById,
+  findUserByEmail,
+  findUserByPhone,
+  createUser,
+  getOrCreateFirebaseUser,
+  updateUserById,
+  comparePassword,
+  incrementLoginAttempts,
+  resetLoginAttempts,
+} = require("../../src/db/users.ts");
+const { getSettingsSingleton } = require("../../src/db/settings.ts");
 
-const { generateAccessToken, generateRefreshToken } = require("../utils/generateToken");
+const {
+  generateAccessToken,
+  generateRefreshToken,
+  getJwtRefreshSecret,
+} = require("../utils/generateToken");
 const {
   generateOTP,
   hashOTP,
@@ -28,6 +41,7 @@ const {
 
 const buildUserResponse = (user) => ({
   _id: user._id,
+  id: user.id,
   name: user.name,
   email: user.email,
   phone: user.phone,
@@ -42,21 +56,19 @@ const buildUserResponse = (user) => ({
   createdAt: user.createdAt,
 });
 
-// â”€â”€ Register â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Register ──────────────────────────────────────────────
 const register = async (req, res) => {
   try {
     const { name, email, phone, password } = req.body;
 
-    // Validate email
     const emailCheck = validateEmail(email);
     if (!emailCheck.valid) {
       return res.status(400).json({ success: false, message: emailCheck.reason });
     }
 
-    const settings = await Settings.getSingleton();
+    const settings = await getSettingsSingleton();
 
-    // Check duplicates
-    const existingEmail = await User.findOne({ email: emailCheck.email });
+    const existingEmail = await findUserByEmail(emailCheck.email);
     if (existingEmail) {
       return res.status(409).json({
         success: false,
@@ -67,7 +79,7 @@ const register = async (req, res) => {
     }
 
     if (phone) {
-      const existingPhone = await User.findOne({ phone: String(phone) });
+      const existingPhone = await findUserByPhone(String(phone));
       if (existingPhone) {
         return res.status(409).json({
           success: false,
@@ -76,46 +88,60 @@ const register = async (req, res) => {
       }
     }
 
-    // Create user
-    const user = await User.create({
+    const emailServiceReady = Boolean(
+      settings.emailEnabled && process.env.BREVO_API_KEY && process.env.EMAIL_FROM
+    );
+
+    const createdUser = await createUser({
       name: name.trim(),
       email: emailCheck.email,
-      phone: phone || undefined,
+      phone: phone || null,
       password,
       provider: "local",
+      isEmailVerified: !emailServiceReady,
     });
 
-    // Generate OTP
+    if (!emailServiceReady) {
+      const accessToken = generateAccessToken(createdUser._id);
+      const refreshToken = generateRefreshToken(createdUser._id);
+
+      return res.status(201).json({
+        success: true,
+        message: "Account created successfully!",
+        requiresVerification: false,
+        accessToken,
+        refreshToken,
+        user: buildUserResponse(createdUser),
+      });
+    }
+
     const otp = generateOTP();
     const hashedOTP = await hashOTP(otp);
     const otpExpiryMins = settings.otpExpiryMinutes || 10;
 
-    user.emailVerificationOTP = hashedOTP;
-    user.emailVerificationOTPExpiry = getOTPExpiry(otpExpiryMins);
-    user.emailVerificationAttempts = 0;
-    user.lastOTPSentAt = new Date();
-    await user.save();
+    const user = await updateUserById(createdUser.id, {
+      emailVerificationOTP: hashedOTP,
+      emailVerificationOTPExpiry: getOTPExpiry(otpExpiryMins),
+      emailVerificationAttempts: 0,
+      lastOTPSentAt: new Date(),
+    });
 
-    // Send welcome + OTP email (one email, not two)
-    if (settings.emailEnabled) {
-      sendWelcomeEmail(user, otp, otpExpiryMins, settings.emailSenderName).catch(
-        (err) => console.error("[Register] Email failed:", err.message)
-      );
-    }
+    sendWelcomeEmail(user, otp, otpExpiryMins, settings.emailSenderName).catch(
+      (err) => console.error("[Register] Email failed:", err.message)
+    );
 
     return res.status(201).json({
       success: true,
-      message: `Account created! Please check your email for the verification code.`,
+      message: "Account created! Please check your email for the verification code.",
       requiresVerification: true,
       otpExpiryMinutes: otpExpiryMins,
       email: user.email,
     });
   } catch (err) {
-    if (err.code === 11000) {
-      const field = Object.keys(err.keyPattern)[0];
+    if (err.code === "UNIQUE_VIOLATION") {
       return res.status(409).json({
         success: false,
-        message: `This ${field} is already registered.`,
+        message: `This ${err.field || "field"} is already registered.`,
       });
     }
     console.error("[Register] Error:", err);
@@ -123,14 +149,21 @@ const register = async (req, res) => {
   }
 };
 
-// â”€â”€ Login â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Login ─────────────────────────────────────────────────
 const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({
-      email: email.toLowerCase().trim(),
-    }).select("+password");
+    if (typeof email !== "string" || typeof password !== "string" || !email.trim() || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and password are required.",
+      });
+    }
+
+    const user = await findUserByEmail(email.toLowerCase().trim(), {
+      includeSensitive: true,
+    });
 
     if (!user) {
       return res.status(401).json({
@@ -146,20 +179,21 @@ const login = async (req, res) => {
       });
     }
 
-    // Check lock
-    if (user.isLocked()) {
-      const minutesLeft = Math.ceil((user.lockUntil - new Date()) / (1000 * 60));
+    if (user.lockUntil && new Date(user.lockUntil) > new Date()) {
+      const minutesLeft = Math.ceil((new Date(user.lockUntil) - new Date()) / (1000 * 60));
       return res.status(423).json({
         success: false,
         message: `Account locked. Try again in ${minutesLeft} minute(s).`,
       });
     }
 
-    const isMatch = await user.matchPassword(password);
+    const isMatch = await comparePassword(password, user.password);
     if (!isMatch) {
-      await user.incrementLoginAttempts();
-      const maxAttempts = (await Settings.getSingleton()).maxLoginAttempts || 5;
-      const remaining = Math.max(0, maxAttempts - user.loginAttempts);
+      const settings = await getSettingsSingleton();
+      const maxAttempts = settings.maxLoginAttempts || 5;
+      const updated = await incrementLoginAttempts(user.id, maxAttempts);
+      const isNowLocked = Boolean(updated?.lockUntil && new Date(updated.lockUntil) > new Date());
+      const remaining = isNowLocked ? 0 : Math.max(0, maxAttempts - (updated?.loginAttempts || 0));
       return res.status(401).json({
         success: false,
         message: remaining > 0
@@ -168,7 +202,7 @@ const login = async (req, res) => {
       });
     }
 
-    if (user.suspendedUntil && user.suspendedUntil > new Date()) {
+    if (user.suspendedUntil && new Date(user.suspendedUntil) > new Date()) {
       return res.status(403).json({
         success: false,
         message: "Your account has been suspended.",
@@ -185,7 +219,7 @@ const login = async (req, res) => {
     }
 
     if (!user.isEmailVerified) {
-      const settings = await Settings.getSingleton();
+      const settings = await getSettingsSingleton();
       const cooldown = canResendOTP(user.lastOTPSentAt, 60);
       let otpMessage = "";
 
@@ -194,11 +228,12 @@ const login = async (req, res) => {
         const hashedOTP = await hashOTP(otp);
         const otpExpiryMins = settings.otpExpiryMinutes || 10;
 
-        user.emailVerificationOTP = hashedOTP;
-        user.emailVerificationOTPExpiry = getOTPExpiry(otpExpiryMins);
-        user.emailVerificationAttempts = 0;
-        user.lastOTPSentAt = new Date();
-        await user.save();
+        await updateUserById(user.id, {
+          emailVerificationOTP: hashedOTP,
+          emailVerificationOTPExpiry: getOTPExpiry(otpExpiryMins),
+          emailVerificationAttempts: 0,
+          lastOTPSentAt: new Date(),
+        });
 
         if (settings.emailEnabled) {
           sendEmailVerificationOTP(user, otp, otpExpiryMins, settings.emailSenderName).catch(
@@ -216,17 +251,17 @@ const login = async (req, res) => {
       });
     }
 
-    await user.resetLoginAttempts(req.ip);
+    const freshUser = await resetLoginAttempts(user.id, req.ip);
 
-    const accessToken = generateAccessToken(user._id);
-    const refreshToken = generateRefreshToken(user._id);
+    const accessToken = generateAccessToken(freshUser._id);
+    const refreshToken = generateRefreshToken(freshUser._id);
 
     return res.json({
       success: true,
       message: "Login successful.",
       accessToken,
       refreshToken,
-      user: buildUserResponse(user),
+      user: buildUserResponse(freshUser),
     });
   } catch (err) {
     console.error("[Login] Error:", err);
@@ -234,6 +269,7 @@ const login = async (req, res) => {
   }
 };
 
+// ── Social Login (Firebase Auth -> PostgreSQL Upsert) ─────
 const socialLogin = async (req, res) => {
   try {
     const { idToken } = req.body;
@@ -242,7 +278,6 @@ const socialLogin = async (req, res) => {
       return res.status(400).json({ success: false, message: "ID token is required." });
     }
 
-    // admin is now getAuth() directly â€” call verifyIdToken() on it directly
     if (!admin) {
       return res.status(503).json({
         success: false,
@@ -252,56 +287,61 @@ const socialLogin = async (req, res) => {
 
     const decoded = await admin.verifyIdToken(idToken);
     let { email, name, picture, firebase, uid } = decoded;
-    const provider = firebase?.sign_in_provider?.replace(".com", "") || req.body.provider || "google";
+    const provider =
+      firebase?.sign_in_provider?.replace(".com", "") || req.body.provider || "google";
 
-    // If the token doesn't contain the email (common for Github/Twitter), fetch the full UserRecord
     if (!email && uid) {
       try {
         const userRecord = await admin.getUser(uid);
-        email = userRecord.email || (userRecord.providerData && userRecord.providerData[0]?.email);
+        email =
+          userRecord.email ||
+          (userRecord.providerData && userRecord.providerData[0]?.email);
       } catch (err) {
         console.error("[SocialLogin] Error fetching user record:", err.message);
       }
     }
 
-    // Fallback to body properties for cosmetic fields if token is missing them
     name = name || req.body.name || email?.split("@")[0];
     picture = picture || req.body.avatar || "";
 
     if (!email) {
       return res.status(400).json({
         success: false,
-        message: "Email not provided by social provider. Please ensure your email is public or verified.",
+        message:
+          "Email not provided by social provider. Please ensure your email is public or verified.",
       });
     }
 
-    let user = await User.findOne({ email: email.toLowerCase() });
+    const { user, created } = await getOrCreateFirebaseUser({
+      uid,
+      email: email.toLowerCase(),
+      name: name || email.split("@")[0],
+      avatar: picture || "",
+      provider,
+    });
 
-    if (!user) {
-      user = await User.create({
-        name: name || email.split("@")[0],
-        email: email.toLowerCase(),
-        provider,
-        avatar: picture || "",
-        isEmailVerified: true,
-        isActive: true,
-      });
-
-      const settings = await Settings.getSingleton();
+    if (created) {
+      const settings = await getSettingsSingleton();
       if (settings.emailEnabled) {
-        sendEmailVerifiedSuccessEmail(user, settings.emailSenderName).catch(
-          (err) => console.error("[SocialLogin] Welcome email failed:", err.message)
+        sendEmailVerifiedSuccessEmail(user, settings.emailSenderName).catch((err) =>
+          console.error("[SocialLogin] Welcome email failed:", err.message)
         );
       }
     } else {
+      if (user.suspendedUntil && new Date(user.suspendedUntil) > new Date()) {
+        return res.status(403).json({
+          success: false,
+          message: "Your account has been suspended.",
+          suspendedUntil: user.suspendedUntil,
+          reason: user.suspensionReason,
+        });
+      }
       if (!user.isActive) {
         return res.status(403).json({
           success: false,
           message: "Account deactivated. Please contact admin.",
         });
       }
-      user.lastLoginAt = new Date();
-      await user.save();
     }
 
     const accessToken = generateAccessToken(user._id);
@@ -326,14 +366,40 @@ const socialLogin = async (req, res) => {
   }
 };
 
+// ── Refresh Token ─────────────────────────────────────────
 const refreshTokenController = async (req, res) => {
   try {
     const { refreshToken } = req.body;
-    if (!refreshToken) {
+    if (!refreshToken || typeof refreshToken !== "string") {
       return res.status(401).json({ success: false, message: "No refresh token" });
     }
-    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-    const accessToken = generateAccessToken(decoded.id);
+    const decoded = jwt.verify(refreshToken, getJwtRefreshSecret());
+    if (!decoded?.id) {
+      return res.status(401).json({ success: false, message: "Invalid refresh token" });
+    }
+
+    const user = await findUserById(decoded.id, { includeSensitive: true });
+    if (!user) {
+      return res.status(401).json({ success: false, message: "User no longer exists" });
+    }
+    if (user.isActive === false) {
+      return res.status(403).json({
+        success: false,
+        message: "Account deactivated. Please contact admin.",
+      });
+    }
+    if (user.suspendedUntil && new Date(user.suspendedUntil) > new Date()) {
+      return res.status(403).json({
+        success: false,
+        message: "Account suspended.",
+        suspendedUntil: user.suspendedUntil,
+      });
+    }
+    if (user.lockUntil && new Date(user.lockUntil) > new Date()) {
+      return res.status(423).json({ success: false, message: "Account temporarily locked." });
+    }
+
+    const accessToken = generateAccessToken(user._id);
     res.json({ success: true, accessToken });
   } catch {
     res.status(401).json({
@@ -343,17 +409,20 @@ const refreshTokenController = async (req, res) => {
   }
 };
 
-// â”€â”€ Get Me â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Get Me ────────────────────────────────────────────────
 const getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select("-password");
+    const user = await findUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
     res.json({ success: true, user });
   } catch {
     res.status(500).json({ success: false, message: "Failed to get user" });
   }
 };
 
-// â”€â”€ Forgot Password â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Forgot Password ───────────────────────────────────────
 const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
@@ -367,18 +436,16 @@ const forgotPassword = async (req, res) => {
       return res.status(400).json({ success: false, message: emailCheck.reason });
     }
 
-    const settings = await Settings.getSingleton();
+    const settings = await getSettingsSingleton();
 
-    if (!settings.emailEnabled) {
+    if (!settings.emailEnabled || !process.env.BREVO_API_KEY || !process.env.EMAIL_FROM) {
       return res.status(503).json({
         success: false,
-        message: "Email service is currently disabled. Please contact admin.",
+        message: "Email service is not configured yet. Please add Brevo keys in server settings or contact admin.",
       });
     }
 
-    const user = await User.findOne({ email: emailCheck.email }).select(
-      "+passwordResetOTP +passwordResetOTPExpiry +passwordResetToken +passwordResetTokenExpiry"
-    );
+    const user = await findUserByEmail(emailCheck.email, { includeSensitive: true });
 
     if (!user) {
       return res.status(404).json({
@@ -394,7 +461,7 @@ const forgotPassword = async (req, res) => {
       });
     }
 
-    if (user.suspendedUntil && user.suspendedUntil > new Date()) {
+    if (user.suspendedUntil && new Date(user.suspendedUntil) > new Date()) {
       return res.status(403).json({
         success: false,
         message: "Your account is suspended. Please contact admin.",
@@ -402,16 +469,16 @@ const forgotPassword = async (req, res) => {
     }
 
     const otpExpiryMinutes = settings.otpExpiryMinutes || 10;
-
     const otp = generateOTP();
     const hashedOTP = await hashOTP(otp);
     const expiry = getOTPExpiry(otpExpiryMinutes);
 
-    user.passwordResetOTP = hashedOTP;
-    user.passwordResetOTPExpiry = expiry;
-    user.passwordResetToken = null;
-    user.passwordResetTokenExpiry = null;
-    await user.save();
+    await updateUserById(user.id, {
+      passwordResetOTP: hashedOTP,
+      passwordResetOTPExpiry: expiry,
+      passwordResetToken: null,
+      passwordResetTokenExpiry: null,
+    });
 
     await sendPasswordResetOTPEmail(user, otp, otpExpiryMinutes, settings.emailSenderName);
 
@@ -425,20 +492,21 @@ const forgotPassword = async (req, res) => {
   }
 };
 
+// ── Verify OTP ────────────────────────────────────────────
 const verifyOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    if (!email || !otp) {
+    if (typeof email !== "string" || !email.trim() || typeof otp !== "string" || !otp.trim()) {
       return res.status(400).json({ success: false, message: "Email and OTP are required." });
     }
     if (!/^\d{6}$/.test(otp)) {
       return res.status(400).json({ success: false, message: "OTP must be exactly 6 digits." });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() }).select(
-      "+passwordResetOTP +passwordResetOTPExpiry +passwordResetToken +passwordResetTokenExpiry"
-    );
+    const user = await findUserByEmail(email.toLowerCase().trim(), {
+      includeSensitive: true,
+    });
 
     if (!user) {
       return res.status(404).json({ success: false, message: "No account found with this email." });
@@ -451,10 +519,11 @@ const verifyOTP = async (req, res) => {
       });
     }
 
-    if (user.passwordResetOTPExpiry < new Date()) {
-      user.passwordResetOTP = null;
-      user.passwordResetOTPExpiry = null;
-      await user.save();
+    if (new Date(user.passwordResetOTPExpiry) < new Date()) {
+      await updateUserById(user.id, {
+        passwordResetOTP: null,
+        passwordResetOTPExpiry: null,
+      });
       return res.status(400).json({ success: false, message: "OTP has expired. Please request a new one." });
     }
 
@@ -470,11 +539,12 @@ const verifyOTP = async (req, res) => {
     const hashedToken = await bcrypt.hash(rawToken, 10);
     const tokenExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
-    user.passwordResetOTP = null;
-    user.passwordResetOTPExpiry = null;
-    user.passwordResetToken = hashedToken;
-    user.passwordResetTokenExpiry = tokenExpiry;
-    await user.save();
+    await updateUserById(user.id, {
+      passwordResetOTP: null,
+      passwordResetOTPExpiry: null,
+      passwordResetToken: hashedToken,
+      passwordResetTokenExpiry: tokenExpiry,
+    });
 
     return res.status(200).json({
       success: true,
@@ -488,22 +558,22 @@ const verifyOTP = async (req, res) => {
   }
 };
 
-// â”€â”€ Reset Password â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Reset Password ────────────────────────────────────────
 const resetPassword = async (req, res) => {
   try {
     const { email, resetToken, newPassword, confirmPassword } = req.body;
 
-    if (!email || !resetToken) {
+    if (typeof email !== "string" || !email.trim() || typeof resetToken !== "string" || !resetToken) {
       return res.status(400).json({ success: false, message: "Invalid reset session. Please start over." });
     }
-    if (!newPassword || !confirmPassword) {
+    if (typeof newPassword !== "string" || typeof confirmPassword !== "string" || !newPassword || !confirmPassword) {
       return res.status(400).json({ success: false, message: "Please fill in both password fields." });
     }
     if (newPassword !== confirmPassword) {
       return res.status(400).json({ success: false, message: "Passwords do not match." });
     }
 
-    const settings = await Settings.getSingleton();
+    const settings = await getSettingsSingleton();
     const minLength = settings.passwordMinLength || 8;
 
     if (newPassword.length < minLength) {
@@ -518,21 +588,22 @@ const resetPassword = async (req, res) => {
     if (settings.passwordRequireNumber && !/\d/.test(newPassword)) {
       return res.status(400).json({ success: false, message: "Password must contain at least one number." });
     }
-    if (settings.passwordRequireSpecial && !/[@$!%*?&#]/.test(newPassword)) {
+    if (settings.passwordRequireSpecial && !/[!@#$%^&*(),.?":{}|<>]/.test(newPassword)) {
       return res.status(400).json({ success: false, message: "Password must contain at least one special character." });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() }).select(
-      "+password +passwordResetToken +passwordResetTokenExpiry"
-    );
+    const user = await findUserByEmail(email.toLowerCase().trim(), {
+      includeSensitive: true,
+    });
 
     if (!user || !user.passwordResetToken) {
       return res.status(400).json({ success: false, message: "Reset session not found. Please request a new OTP." });
     }
-    if (user.passwordResetTokenExpiry < new Date()) {
-      user.passwordResetToken = null;
-      user.passwordResetTokenExpiry = null;
-      await user.save();
+    if (new Date(user.passwordResetTokenExpiry) < new Date()) {
+      await updateUserById(user.id, {
+        passwordResetToken: null,
+        passwordResetTokenExpiry: null,
+      });
       return res.status(400).json({ success: false, message: "Reset session expired. Please request a new OTP." });
     }
 
@@ -541,20 +612,22 @@ const resetPassword = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid reset token. Please start over." });
     }
 
-    const isSamePassword = await bcrypt.compare(newPassword, user.password);
-    if (isSamePassword) {
-      return res.status(400).json({
-        success: false,
-        message: "New password cannot be the same as your current password.",
-      });
+    if (user.password) {
+      const isSamePassword = await bcrypt.compare(newPassword, user.password);
+      if (isSamePassword) {
+        return res.status(400).json({
+          success: false,
+          message: "New password cannot be the same as your current password.",
+        });
+      }
     }
 
-    user.password = newPassword;
-    user.passwordResetToken = null;
-    user.passwordResetTokenExpiry = null;
-    await user.save();
+    await updateUserById(user.id, {
+      password: newPassword,
+      passwordResetToken: null,
+      passwordResetTokenExpiry: null,
+    });
 
-    // Send success confirmation email
     if (settings.emailEnabled) {
       sendPasswordResetSuccessEmail(user, settings.emailSenderName).catch(
         (err) => console.error("[ResetPassword] Email failed:", err.message)
@@ -571,21 +644,21 @@ const resetPassword = async (req, res) => {
   }
 };
 
-// â”€â”€ Verify Email â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Verify Email ──────────────────────────────────────────
 const verifyEmail = async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    if (!email || !otp) {
+    if (typeof email !== "string" || !email.trim() || typeof otp !== "string" || !otp.trim()) {
       return res.status(400).json({ success: false, message: "Email and OTP are required." });
     }
     if (!/^\d{6}$/.test(otp)) {
       return res.status(400).json({ success: false, message: "OTP must be exactly 6 digits." });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() }).select(
-      "+emailVerificationOTP +emailVerificationOTPExpiry +emailVerificationAttempts"
-    );
+    const user = await findUserByEmail(email.toLowerCase().trim(), {
+      includeSensitive: true,
+    });
 
     if (!user) {
       return res.status(404).json({ success: false, message: "Account not found." });
@@ -599,16 +672,17 @@ const verifyEmail = async (req, res) => {
         message: "No verification code found. Please request a new one.",
       });
     }
-    if (user.emailVerificationOTPExpiry < new Date()) {
-      user.emailVerificationOTP = null;
-      user.emailVerificationOTPExpiry = null;
-      await user.save();
+    if (new Date(user.emailVerificationOTPExpiry) < new Date()) {
+      await updateUserById(user.id, {
+        emailVerificationOTP: null,
+        emailVerificationOTPExpiry: null,
+      });
       return res.status(400).json({
         success: false,
         message: "Verification code expired. Please request a new one.",
       });
     }
-    if (user.emailVerificationAttempts >= 5) {
+    if ((user.emailVerificationAttempts || 0) >= 5) {
       return res.status(429).json({
         success: false,
         message: "Too many failed attempts. Please request a new code.",
@@ -617,39 +691,38 @@ const verifyEmail = async (req, res) => {
 
     const isValid = await verifyOTPCode(otp, user.emailVerificationOTP);
     if (!isValid) {
-      user.emailVerificationAttempts += 1;
-      await user.save();
+      const nextAttempts = (user.emailVerificationAttempts || 0) + 1;
+      await updateUserById(user.id, { emailVerificationAttempts: nextAttempts });
       return res.status(400).json({
         success: false,
-        message: `Incorrect code. ${5 - user.emailVerificationAttempts} attempts remaining.`,
+        message: `Incorrect code. ${5 - nextAttempts} attempts remaining.`,
       });
     }
 
-    // Mark verified
-    user.isEmailVerified = true;
-    user.emailVerificationOTP = null;
-    user.emailVerificationOTPExpiry = null;
-    user.emailVerificationAttempts = 0;
-    user.lastOTPSentAt = null;
-    await user.save();
+    const verifiedUser = await updateUserById(user.id, {
+      isEmailVerified: true,
+      emailVerificationOTP: null,
+      emailVerificationOTPExpiry: null,
+      emailVerificationAttempts: 0,
+      lastOTPSentAt: null,
+    });
 
-    // Send verified success email
-    const settings = await Settings.getSingleton();
+    const settings = await getSettingsSingleton();
     if (settings.emailEnabled) {
-      sendEmailVerifiedSuccessEmail(user, settings.emailSenderName).catch(
+      sendEmailVerifiedSuccessEmail(verifiedUser, settings.emailSenderName).catch(
         (err) => console.error("[VerifyEmail] Success email failed:", err.message)
       );
     }
 
-    const accessToken = generateAccessToken(user._id);
-    const refreshToken = generateRefreshToken(user._id);
+    const accessToken = generateAccessToken(verifiedUser._id);
+    const refreshToken = generateRefreshToken(verifiedUser._id);
 
     return res.json({
       success: true,
       message: "Email verified successfully! Welcome aboard!",
       accessToken,
       refreshToken,
-      user: buildUserResponse(user),
+      user: buildUserResponse(verifiedUser),
     });
   } catch (err) {
     console.error("[VerifyEmail] Error:", err);
@@ -657,17 +730,18 @@ const verifyEmail = async (req, res) => {
   }
 };
 
+// ── Resend Verification OTP ───────────────────────────────
 const resendVerificationOTP = async (req, res) => {
   try {
     const { email } = req.body;
 
-    if (!email) {
+    if (typeof email !== "string" || !email.trim()) {
       return res.status(400).json({ success: false, message: "Email is required." });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() }).select(
-      "+emailVerificationOTP +emailVerificationOTPExpiry +emailVerificationAttempts"
-    );
+    const user = await findUserByEmail(email.toLowerCase().trim(), {
+      includeSensitive: true,
+    });
 
     if (!user) {
       return res.status(404).json({ success: false, message: "Account not found." });
@@ -685,17 +759,18 @@ const resendVerificationOTP = async (req, res) => {
       });
     }
 
-    const settings = await Settings.getSingleton();
+    const settings = await getSettingsSingleton();
     const otpExpiryMinutes = settings.otpExpiryMinutes || 10;
 
     const otp = generateOTP();
     const hashedOTP = await hashOTP(otp);
 
-    user.emailVerificationOTP = hashedOTP;
-    user.emailVerificationOTPExpiry = getOTPExpiry(otpExpiryMinutes);
-    user.emailVerificationAttempts = 0;
-    user.lastOTPSentAt = new Date();
-    await user.save();
+    await updateUserById(user.id, {
+      emailVerificationOTP: hashedOTP,
+      emailVerificationOTPExpiry: getOTPExpiry(otpExpiryMinutes),
+      emailVerificationAttempts: 0,
+      lastOTPSentAt: new Date(),
+    });
 
     if (settings.emailEnabled) {
       sendEmailVerificationOTP(user, otp, otpExpiryMinutes, settings.emailSenderName).catch(

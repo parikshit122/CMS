@@ -136,20 +136,33 @@ const Profile = () => {
     };
   };
 
+  const avatarBlobUrlRef = useRef(null);
+
   // ── Load user from localStorage ───────────────────────
   useEffect(() => {
     const loadUser = () => {
-      const storedUser = JSON.parse(localStorage.getItem("user"));
-      if (storedUser) {
-        setUser(storedUser);
-        setFormData(buildFormData(storedUser));
-        setOriginalData(buildFormData(storedUser));
+      try {
+        const raw = localStorage.getItem("user");
+        const storedUser = raw ? JSON.parse(raw) : null;
+        if (storedUser) {
+          setUser(storedUser);
+          setFormData(buildFormData(storedUser));
+          setOriginalData(buildFormData(storedUser));
+        }
+      } catch {
+        // Ignore malformed localStorage value
       }
     };
 
     loadUser();
     window.addEventListener("user-updated", loadUser);
-    return () => window.removeEventListener("user-updated", loadUser);
+    return () => {
+      window.removeEventListener("user-updated", loadUser);
+      if (avatarBlobUrlRef.current) {
+        URL.revokeObjectURL(avatarBlobUrlRef.current);
+        avatarBlobUrlRef.current = null;
+      }
+    };
   }, []);
 
   // ── Track dirty state ─────────────────────────────────
@@ -303,9 +316,15 @@ const Profile = () => {
       return;
     }
 
+    if (avatarBlobUrlRef.current) {
+      URL.revokeObjectURL(avatarBlobUrlRef.current);
+    }
+    const blobUrl = URL.createObjectURL(file);
+    avatarBlobUrlRef.current = blobUrl;
+
     setFormData((prev) => ({
       ...prev,
-      avatar: URL.createObjectURL(file),
+      avatar: blobUrl,
       avatarFile: file,
     }));
   };

@@ -9,6 +9,7 @@ import {
   browserLocalPersistence,
   setPersistence,
 } from "firebase/auth";
+import firebaseAppletConfig from "../../firebase-applet-config.json";
 
 const cleanEnv = (value) => {
   if (!value) return "";
@@ -20,13 +21,15 @@ const cleanEnv = (value) => {
 };
 
 const firebaseConfig = {
-  apiKey: cleanEnv(import.meta.env.VITE_FIREBASE_API_KEY),
-  authDomain: cleanEnv(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN),
-  projectId: cleanEnv(import.meta.env.VITE_FIREBASE_PROJECT_ID),
-  storageBucket: cleanEnv(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET),
-  messagingSenderId: cleanEnv(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID),
-  appId: cleanEnv(import.meta.env.VITE_FIREBASE_APP_ID),
-  measurementId: cleanEnv(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID),
+  apiKey: cleanEnv(import.meta.env.VITE_FIREBASE_API_KEY) || firebaseAppletConfig.apiKey,
+  authDomain: cleanEnv(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN) || firebaseAppletConfig.authDomain,
+  projectId: cleanEnv(import.meta.env.VITE_FIREBASE_PROJECT_ID) || firebaseAppletConfig.projectId,
+  storageBucket: cleanEnv(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET) || firebaseAppletConfig.storageBucket,
+  messagingSenderId:
+    cleanEnv(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID) || firebaseAppletConfig.messagingSenderId,
+  appId: cleanEnv(import.meta.env.VITE_FIREBASE_APP_ID) || firebaseAppletConfig.appId,
+  measurementId:
+    cleanEnv(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID) || firebaseAppletConfig.measurementId,
 };
 
 const hasFirebaseConfig = Boolean(
@@ -45,10 +48,10 @@ export const authReady = (async () => {
   if (!auth) return null;
   try {
     await setPersistence(auth, indexedDBLocalPersistence);
-  } catch (e) {
+  } catch {
     try {
       await setPersistence(auth, browserLocalPersistence);
-    } catch (e2) {
+    } catch {
       // ignore persistence fallback failure
     }
   }
@@ -70,11 +73,15 @@ facebookProvider.addScope("email");
 
 export const isMobileDevice = () => {
   if (typeof window === "undefined") return false;
-  
+
   const userAgent = navigator.userAgent || navigator.vendor || "";
-  const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|mobile|CriOS|FxiOS/i.test(userAgent);
-  const isTouchDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  const isMobileUA =
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|mobile|CriOS|FxiOS/i.test(
+      userAgent
+    );
+  const isTouchDevice =
+    "ontouchstart" in window || navigator.maxTouchPoints > 0;
   const isSmallScreen = window.innerWidth <= 1024;
-  
+
   return isMobileUA || (isTouchDevice && isSmallScreen);
 };

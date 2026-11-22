@@ -1,23 +1,22 @@
-const Notification = require("../models/Notification");
+const {
+  getNotificationsForUser,
+  countNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
+  deleteNotificationForUser,
+  deleteAllNotificationsForUser,
+} = require("../../src/db/notifications.ts");
 
 const getNotifications = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
-    const skip = (page - 1) * limit;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, parseInt(req.query.limit, 10) || 20);
 
-    const notifications = await Notification.find({ recipient: req.user.id })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .populate("sender", "name avatar")
-      .populate("complaint", "title status");
-
-    const total = await Notification.countDocuments({ recipient: req.user.id });
-    const unreadCount = await Notification.countDocuments({
-      recipient: req.user.id,
-      isRead: false,
-    });
+    const { notifications, total, unreadCount } = await getNotificationsForUser(
+      req.user.id,
+      page,
+      limit
+    );
 
     res.json({
       success: true,
@@ -37,8 +36,8 @@ const getNotifications = async (req, res) => {
 
 const getUnreadCount = async (req, res) => {
   try {
-    const count = await Notification.countDocuments({
-      recipient: req.user.id,
+    const count = await countNotifications({
+      recipientId: req.user.id,
       isRead: false,
     });
     res.json({ success: true, unreadCount: count });
@@ -50,12 +49,7 @@ const getUnreadCount = async (req, res) => {
 const markAsRead = async (req, res) => {
   try {
     const { id } = req.params;
-
-    const notification = await Notification.findOneAndUpdate(
-      { _id: id, recipient: req.user.id },
-      { isRead: true },
-      { new: true },
-    );
+    const notification = await markNotificationRead(id, req.user.id);
 
     if (!notification) {
       return res.status(404).json({
@@ -72,10 +66,7 @@ const markAsRead = async (req, res) => {
 
 const markAllAsRead = async (req, res) => {
   try {
-    await Notification.updateMany(
-      { recipient: req.user.id, isRead: false },
-      { isRead: true },
-    );
+    await markAllNotificationsRead(req.user.id);
     res.json({ success: true, message: "All notifications marked as read." });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -85,11 +76,7 @@ const markAllAsRead = async (req, res) => {
 const deleteNotification = async (req, res) => {
   try {
     const { id } = req.params;
-
-    const notification = await Notification.findOneAndDelete({
-      _id: id,
-      recipient: req.user.id,
-    });
+    const notification = await deleteNotificationForUser(id, req.user.id);
 
     if (!notification) {
       return res.status(404).json({
@@ -106,7 +93,7 @@ const deleteNotification = async (req, res) => {
 
 const deleteAllNotifications = async (req, res) => {
   try {
-    await Notification.deleteMany({ recipient: req.user.id });
+    await deleteAllNotificationsForUser(req.user.id);
     res.json({ success: true, message: "All notifications cleared." });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

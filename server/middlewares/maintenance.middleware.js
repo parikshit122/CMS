@@ -1,13 +1,8 @@
-const mongoose = require("mongoose");
-const Settings = require("../models/Settings");
+const { getSettingsSingleton } = require("../../src/db/settings.ts");
 
 const checkMaintenance = async (req, res, next) => {
-  if (mongoose.connection.readyState !== 1) {
-    return next();
-  }
-
   try {
-    const settings = await Settings.getSingleton();
+    const settings = await getSettingsSingleton();
 
     if (!settings.maintenanceMode) {
       return next();
@@ -24,12 +19,9 @@ const checkMaintenance = async (req, res, next) => {
         settings.maintenanceMessage ||
         "Site is under maintenance. Please try again later.",
     });
-  } catch (err) {
-    return res.status(503).json({
-      success: false,
-      maintenance: true,
-      message: "Service temporarily unavailable. Please try again later.",
-    });
+  } catch {
+    // Allow request to proceed if settings check fails transiently
+    return next();
   }
 };
 

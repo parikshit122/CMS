@@ -52,8 +52,8 @@ export default function Notifications() {
     if (search) {
       const q = search.toLowerCase();
       return (
-        item.title.toLowerCase().includes(q) ||
-        item.message.toLowerCase().includes(q)
+        (item.title || "").toLowerCase().includes(q) ||
+        (item.message || "").toLowerCase().includes(q)
       );
     }
     return true;

@@ -174,7 +174,7 @@ function Login() {
       const alreadyProcessed = localStorage.getItem(REDIRECT_PROCESSED_KEY);
       if (alreadyProcessed) {
         localStorage.removeItem(REDIRECT_PROCESSED_KEY);
-        await auth.signOut().catch(() => {});
+        if (auth) await auth.signOut().catch(() => {});
         return;
       }
 
@@ -411,8 +411,8 @@ function Login() {
 
     const { name, email, phone, password } = registerData;
 
-    if (!name || name.trim().length < 2) {
-      alert.error("Name must be at least 2 characters long.");
+    if (!name || name.trim().length < 3) {
+      alert.error("Name must be at least 3 characters long.");
       return;
     }
 
@@ -451,7 +451,7 @@ function Login() {
       return;
     }
 
-    if (!/[@$!%*?&#]/.test(password)) {
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
       alert.error("Password must contain at least one special character.");
       return;
     }
@@ -685,8 +685,8 @@ function Login() {
           </form>
         </div>
 
-        <div className="toggle-box" aria-hidden="true">
-          <div className="toggle-panel toggle-left">
+        <div className="toggle-box">
+          <div className="toggle-panel toggle-left" aria-hidden={isActive}>
             <h1>Hello, Welcome!</h1>
             <p>Don't have an account?</p>
             <Button
@@ -697,7 +697,7 @@ function Login() {
               Register
             </Button>
           </div>
-          <div className="toggle-panel toggle-right">
+          <div className="toggle-panel toggle-right" aria-hidden={!isActive}>
             <h1>Welcome Back!</h1>
             <p>Already have an account?</p>
             <Button

@@ -85,26 +85,7 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// ── 8. Debug Route (development only) ────────────────────
-if (process.env.NODE_ENV !== "production") {
-  app.get("/api/debug/env", (req, res) => {
-    const cloudinary = require("./config/cloudinary");
-    res.json({
-      envVars: {
-        CLOUDINARY_CLOUD_NAME: !!process.env.CLOUDINARY_CLOUD_NAME,
-        CLOUDINARY_API_KEY:    !!process.env.CLOUDINARY_API_KEY,
-        CLOUDINARY_API_SECRET: !!process.env.CLOUDINARY_API_SECRET,
-      },
-      cloudinaryConfig: {
-        cloud_name: cloudinary.config().cloud_name ? "SET" : "MISSING",
-        api_key:    cloudinary.config().api_key    ? "SET" : "MISSING",
-        api_secret: cloudinary.config().api_secret ? "SET" : "MISSING",
-      },
-    });
-  });
-}
-
-// ── API Routes ────────────────────────────────────────────
+// ── 8. API Routes ─────────────────────────────────────────
 app.use("/api", require("./routes"));
 
 // ── Static Frontend (Built Vite SPA) ──────────────────────
@@ -122,28 +103,8 @@ app.use((req, res, next) => {
   next();
 });
 
-// ── 404 + Offline DB Fallback + Global Error Handler ──────
+// ── 404 + Global Error Handler ────────────────────────────
 app.use(notFoundHandler);
-app.use((err, req, res, next) => {
-  const msg = err?.message || "";
-  if (
-    err?.name === "MongooseError" ||
-    err?.name === "MongoNetworkError" ||
-    err?.name === "MongoServerSelectionError" ||
-    msg.includes("buffering timed out") ||
-    msg.includes("before initial connection is complete")
-  ) {
-    console.warn("[AI Studio] Database offline — returning fallback response");
-    if (req.method === "GET") {
-      return res.json(req.path.endsWith("s") || req.path.endsWith("s/") ? [] : {});
-    }
-    return res.status(503).json({
-      success: false,
-      message: "Database is not connected yet. Please configure MONGODB_URI to enable persistence.",
-    });
-  }
-  next(err);
-});
 app.use(errorHandler);
 
 module.exports = app;
