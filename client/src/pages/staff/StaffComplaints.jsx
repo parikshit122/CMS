@@ -9,11 +9,13 @@ import {
 
 import AssignedComplaintsTable from "../../components/staff/AssignedComplaintsTable";
 import ComplaintActionModal from "../../components/staff/ComplaintActionModal";
+import { useToast } from "../../components/common/Alert";
 
 import "../../styles/StaffDashboard.css";
 
 const StaffComplaints = () => {
   const dispatch = useDispatch();
+  const toast = useToast();
 
   const {
     assigned,
@@ -24,7 +26,6 @@ const StaffComplaints = () => {
   } = useSelector((state) => state.complaints);
 
   const [selectedComplaint, setSelectedComplaint] = useState(null);
-  const [successToast, setSuccessToast] = useState(false);
   const [minLoadDone, setMinLoadDone] = useState(false);
 
   useEffect(() => {
@@ -38,17 +39,19 @@ const StaffComplaints = () => {
   useEffect(() => {
     if (updateSuccess) {
       setSelectedComplaint(null);
-      setSuccessToast(true);
+      toast.success("Complaint status updated successfully.", {
+        title: "Status Updated",
+      });
       dispatch(clearUpdateState());
       dispatch(fetchAssignedComplaints());
     }
-  }, [updateSuccess, dispatch]);
+  }, [updateSuccess, dispatch, toast]);
 
   useEffect(() => {
-    if (!successToast) return;
-    const t = setTimeout(() => setSuccessToast(false), 3500);
-    return () => clearTimeout(t);
-  }, [successToast]);
+    if (updateError) {
+      toast.error(updateError, { title: "Update Failed" });
+    }
+  }, [updateError, toast]);
 
   const handleSelectComplaint = useCallback((complaint) => {
     dispatch(clearUpdateState());
@@ -74,14 +77,6 @@ const StaffComplaints = () => {
 
   return (
     <div className="ssd-page">
-
-      {successToast && (
-        <div className="ssd-toast ssd-toast--success">
-          <i className="bx bx-check-circle" />
-          Complaint status updated successfully!
-        </div>
-      )}
-
       <div className="ssd-page__header">
         <div className="ssd-page__header-left">
           <span className="ssd-page__eyebrow">
@@ -104,7 +99,10 @@ const StaffComplaints = () => {
           </div>
           <button
             className="ssd-refresh-btn"
-            onClick={() => dispatch(fetchAssignedComplaints())}
+            onClick={() => {
+              dispatch(fetchAssignedComplaints());
+              toast.info("Refreshing assigned complaints...", { duration: 2200 });
+            }}
             title="Refresh complaints"
           >
             <i className="bx bx-refresh" />

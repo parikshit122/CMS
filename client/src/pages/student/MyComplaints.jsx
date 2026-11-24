@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import API from "../../services/api";
 import StatusBadge from "../../components/complaint/StatusBadge";
+import SlaBadge from "../../components/complaint/SlaBadge";
+import ComplaintActivityPanel from "../../components/complaint/ComplaintActivityPanel";
+import ComplaintRatingPanel from "../../components/complaint/ComplaintRatingPanel";
 import { useAlert } from "../../components/common/Alert";
 import "../../styles/AdminReports.css";
 
@@ -13,6 +17,18 @@ const MyComplaints = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy,       setSortBy]       = useState("newest");
   const [selected,     setSelected]     = useState(null);
+  const [activityRefreshKey, setActivityRefreshKey] = useState(0);
+
+  const handleComplaintRated = useCallback((updatedComplaint) => {
+    if (!updatedComplaint) return;
+    setSelected(updatedComplaint);
+    setComplaints((prev) =>
+      prev.map((item) =>
+        item._id === updatedComplaint._id ? updatedComplaint : item
+      )
+    );
+    setActivityRefreshKey((k) => k + 1);
+  }, []);
 
   // ── Fetch ─────────────────────────────────────────────
   const fetchComplaints = useCallback(async () => {
@@ -201,9 +217,22 @@ const MyComplaints = () => {
                     </span>
                   </td>
 
-                  {/* Status */}
+                  {/* Status & SLA */}
                   <td>
-                    <StatusBadge status={c.status} />
+                    <div style={{ display: "flex", flexDirection: "column", gap: "5px", alignItems: "flex-start" }}>
+                      <StatusBadge status={c.status} />
+                      <SlaBadge complaint={c} compact />
+                      {c.rating ? (
+                        <span className="cs-mini-rating" title={`Rated ${c.rating} out of 5`}>
+                          <i className="bx bxs-star" aria-hidden="true" />
+                          {c.rating}/5
+                        </span>
+                      ) : c.status === "resolved" ? (
+                        <span style={{ fontSize: "0.68rem", color: "#f97316", fontWeight: 600 }}>
+                          Rate resolution
+                        </span>
+                      ) : null}
+                    </div>
                   </td>
 
                   {/* Assigned To */}
@@ -245,7 +274,7 @@ const MyComplaints = () => {
       )}
 
       {/* ── Detail Modal ── */}
-      {selected && (
+      {selected && createPortal(
         <div
           className="modal-overlay"
           onClick={() => setSelected(null)}
@@ -301,6 +330,12 @@ const MyComplaints = () => {
                   <span>Status</span>
                   <strong>
                     <StatusBadge status={selected.status} />
+                  </strong>
+                </div>
+                <div className="assign-row">
+                  <span>SLA Target</span>
+                  <strong>
+                    <SlaBadge complaint={selected} />
                   </strong>
                 </div>
                 <div className="assign-row">
@@ -539,9 +574,22 @@ const MyComplaints = () => {
                 </div>
               </div>
 
+              {/* ── Student Satisfaction Rating (for Resolved Complaints) ── */}
+              <ComplaintRatingPanel
+                complaint={selected}
+                onRated={handleComplaintRated}
+              />
+
+              {/* ── Chronological Audit Timeline & Comments ── */}
+              <ComplaintActivityPanel
+                complaintId={selected._id}
+                refreshKey={activityRefreshKey}
+              />
+
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>

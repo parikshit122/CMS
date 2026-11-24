@@ -1,0 +1,594 @@
+/* ============================================================
+   COMMAND PALETTE & KEYBOARD SHORTCUTS — Ember Forge Dark/Light
+   ============================================================ */
+
+.cs-cmd-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  background: rgba(5, 7, 15, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 11vh 16px 24px;
+  animation: cs-cmd-fade 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes cs-cmd-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.cs-cmd-dialog {
+  width: 100%;
+  max-width: 600px;
+  background: #12151f;
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.62);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: cs-cmd-pop 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cs-cmd-dialog--help {
+  max-width: 660px;
+}
+
+@keyframes cs-cmd-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ── Search Row ──────────────────────────────────────────── */
+.cs-cmd-search-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  transition: border-color 0.16s ease;
+}
+
+.cs-cmd-search-row:focus-within {
+  border-bottom-color: rgba(249, 115, 22, 0.45);
+}
+
+.cs-cmd-search-icon {
+  font-size: 20px;
+  color: #f97316;
+  flex-shrink: 0;
+}
+
+.cs-cmd-input,
+.cs-cmd-input:focus,
+.cs-cmd-input:focus-visible {
+  flex: 1;
+  background: transparent;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  font-size: 0.96rem;
+  font-family: inherit;
+  color: #f8fafc;
+}
+
+.cs-cmd-input::placeholder {
+  color: #94a3b8;
+}
+
+.cs-cmd-esc {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* ── Command List ────────────────────────────────────────── */
+.cs-cmd-list {
+  max-height: 370px;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cs-cmd-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cs-cmd-group-title {
+  margin: 0;
+  padding: 4px 10px 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+}
+
+.cs-cmd-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.cs-cmd-item--active,
+.cs-cmd-item:hover {
+  background: rgba(249, 115, 22, 0.12);
+  border-color: rgba(249, 115, 22, 0.28);
+}
+
+.cs-cmd-item:focus-visible {
+  outline: 2px solid #f97316;
+  outline-offset: -2px;
+}
+
+.cs-cmd-item__icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 18px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #cbd5e1;
+}
+
+.cs-cmd-item--active .cs-cmd-item__icon {
+  background: rgba(249, 115, 22, 0.2);
+  color: #fb923c;
+}
+
+.cs-cmd-item__copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cs-cmd-item__label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cs-cmd-item__desc {
+  font-size: 0.76rem;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cs-cmd-empty {
+  padding: 36px 16px;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.cs-cmd-empty i {
+  font-size: 30px;
+  margin-bottom: 6px;
+  display: block;
+  color: #64748b;
+}
+
+.cs-cmd-empty p {
+  margin: 0;
+  font-size: 0.88rem;
+}
+
+/* ── Keycaps ─────────────────────────────────────────────── */
+.cs-kbd-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.cs-kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1;
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+}
+
+.cs-kbd-sep {
+  font-size: 0.68rem;
+  color: #94a3b8;
+  padding: 0 2px;
+}
+
+/* ── Footer ──────────────────────────────────────────────── */
+.cs-cmd-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 0.74rem;
+  color: #94a3b8;
+}
+
+.cs-cmd-footer__hints {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.cs-cmd-footer__hints > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.cs-cmd-footer__role {
+  font-weight: 600;
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+
+.cs-cmd-footer__note {
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+/* ── Keyboard Shortcuts Help Modal ───────────────────────── */
+.cs-help-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cs-help-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.cs-help-sub {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.cs-help-close {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #cbd5e1;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.cs-help-close:hover {
+  background: rgba(239, 68, 68, 0.14);
+  color: #fca5a5;
+}
+
+.cs-help-body {
+  padding: 14px 20px 18px;
+  max-height: 60vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.cs-help-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cs-help-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.cs-help-row__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cs-help-row__label {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.cs-help-row__desc {
+  font-size: 0.74rem;
+  color: #94a3b8;
+}
+
+.cs-help-row__keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.cs-help-done-btn {
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: #f8fafc;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cs-help-done-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ── Chord Hint Toastlet ─────────────────────────────────── */
+.cs-chord-hint {
+  position: fixed;
+  bottom: 92px;
+  right: 24px;
+  z-index: 1350;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #12151f;
+  border: 1px solid rgba(249, 115, 22, 0.35);
+  color: #e2e8f0;
+  font-size: 0.78rem;
+  font-weight: 500;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+/* ── Dynamic Island Command Trigger Button ───────────────── */
+.island-cmd-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.island-cmd-trigger:hover {
+  background: rgba(249, 115, 22, 0.14);
+  border-color: rgba(249, 115, 22, 0.38);
+  color: #ffffff;
+}
+
+.island-cmd-trigger:focus-visible {
+  outline: 2px solid #f97316;
+  outline-offset: 2px;
+}
+
+.island-cmd-trigger i {
+  font-size: 15px;
+  color: #f97316;
+}
+
+.island-shortcuts-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #cbd5e1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.island-shortcuts-btn:hover {
+  background: rgba(249, 115, 22, 0.14);
+  border-color: rgba(249, 115, 22, 0.38);
+  color: #f97316;
+}
+
+@media (max-width: 640px) {
+  .island-cmd-trigger__text,
+  .island-cmd-trigger .cs-kbd-group {
+    display: none;
+  }
+  .island-cmd-trigger {
+    width: 34px;
+    padding: 0;
+    justify-content: center;
+  }
+}
+
+/* ============================================================
+   LIGHT THEME OVERRIDES
+   ============================================================ */
+html[data-theme="light"] .cs-cmd-dialog,
+html[data-bs-theme="light"] .cs-cmd-dialog {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #e2e8f0;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+}
+
+html[data-theme="light"] .cs-cmd-search-row,
+html[data-bs-theme="light"] .cs-cmd-search-row,
+html[data-theme="light"] .cs-help-header,
+html[data-bs-theme="light"] .cs-help-header {
+  border-bottom-color: #e2e8f0;
+}
+
+html[data-theme="light"] .cs-cmd-input,
+html[data-bs-theme="light"] .cs-cmd-input,
+html[data-theme="light"] .cs-cmd-item__label,
+html[data-bs-theme="light"] .cs-cmd-item__label,
+html[data-theme="light"] .cs-help-title,
+html[data-bs-theme="light"] .cs-help-title,
+html[data-theme="light"] .cs-help-row__label,
+html[data-bs-theme="light"] .cs-help-row__label,
+html[data-theme="light"] .cs-help-done-btn,
+html[data-bs-theme="light"] .cs-help-done-btn {
+  color: #0f172a;
+}
+
+html[data-theme="light"] .cs-cmd-item__icon,
+html[data-bs-theme="light"] .cs-cmd-item__icon {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+html[data-theme="light"] .cs-cmd-item--active,
+html[data-theme="light"] .cs-cmd-item:hover,
+html[data-bs-theme="light"] .cs-cmd-item--active,
+html[data-bs-theme="light"] .cs-cmd-item:hover {
+  background: #fff7ed;
+  border-color: #fdba74;
+}
+
+html[data-theme="light"] .cs-cmd-item--active .cs-cmd-item__icon,
+html[data-bs-theme="light"] .cs-cmd-item--active .cs-cmd-item__icon {
+  background: #ffedd5;
+  color: #ea580c;
+}
+
+html[data-theme="light"] .cs-kbd,
+html[data-bs-theme="light"] .cs-kbd {
+  background: #f8fafc;
+  color: #334155;
+  border-color: #cbd5e1;
+  box-shadow: 0 1px 0 #cbd5e1;
+}
+
+html[data-theme="light"] .cs-cmd-footer,
+html[data-bs-theme="light"] .cs-cmd-footer {
+  background: #f8fafc;
+  border-top-color: #e2e8f0;
+  color: #64748b;
+}
+
+html[data-theme="light"] .cs-cmd-footer__role,
+html[data-bs-theme="light"] .cs-cmd-footer__role {
+  color: #334155;
+}
+
+html[data-theme="light"] .cs-help-row,
+html[data-bs-theme="light"] .cs-help-row {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+html[data-theme="light"] .cs-help-close,
+html[data-bs-theme="light"] .cs-help-close,
+html[data-theme="light"] .cs-help-done-btn,
+html[data-bs-theme="light"] .cs-help-done-btn {
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
+html[data-theme="light"] .cs-chord-hint,
+html[data-bs-theme="light"] .cs-chord-hint {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: #fdba74;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+}
+
+html[data-theme="light"] .island-cmd-trigger,
+html[data-bs-theme="light"] .island-cmd-trigger,
+html[data-theme="light"] .island-shortcuts-btn,
+html[data-bs-theme="light"] .island-shortcuts-btn {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #334155;
+}
+
+html[data-theme="light"] .island-cmd-trigger:hover,
+html[data-bs-theme="light"] .island-cmd-trigger:hover,
+html[data-theme="light"] .island-shortcuts-btn:hover,
+html[data-bs-theme="light"] .island-shortcuts-btn:hover {
+  background: #fff7ed;
+  border-color: #fdba74;
+  color: #ea580c;
+}

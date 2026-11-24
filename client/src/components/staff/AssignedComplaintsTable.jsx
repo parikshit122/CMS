@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback } from "react";
 import StatusBadge from "../complaint/StatusBadge";
+import SlaBadge from "../complaint/SlaBadge";
 
 const STATUS_FILTERS = [
   { key: "all", label: "All" },
@@ -42,7 +43,6 @@ const AssignedComplaintsTable = ({
 
   const handleRowClick = useCallback(
     (complaint) => {
-      if (LOCKED_STATUSES.includes(complaint.status)) return;
       onSelectComplaint(complaint);
     },
     [onSelectComplaint],
@@ -122,21 +122,20 @@ const AssignedComplaintsTable = ({
                     key={complaint._id}
                     className={[
                       "ssd-table__row",
-                      isLocked
-                        ? "ssd-table__row--locked"
-                        : "ssd-table__row--clickable",
+                      "ssd-table__row--clickable",
+                      isLocked ? "ssd-table__row--locked" : "",
                     ].join(" ")}
                     onClick={() => handleRowClick(complaint)}
                     title={
                       isLocked
-                        ? `This complaint is ${complaint.status} and cannot be modified`
-                        : "Click to update status"
+                        ? `View ${complaint.status} complaint timeline & comments`
+                        : "Click to update status or comment"
                     }
                   >
                     {/* ID */}
                     <td className="ssd-table__cell ssd-table__cell--id">
                       <span className="ssd-complaint-id">
-                        #{complaint._id?.slice(-6).toUpperCase()}
+                        {complaint.complaintId || `#${complaint._id?.slice(-6).toUpperCase()}`}
                       </span>
                     </td>
 
@@ -165,29 +164,32 @@ const AssignedComplaintsTable = ({
                       <PriorityBadge priority={complaint.priority} />
                     </td>
 
-                    {/* Status */}
+                    {/* Status & SLA */}
                     <td className="ssd-table__cell">
-                      <StatusBadge status={complaint.status} />
+                      <div style={{ display: "flex", flexDirection: "column", gap: "5px", alignItems: "flex-start" }}>
+                        <StatusBadge status={complaint.status} />
+                        <SlaBadge complaint={complaint} compact />
+                        {complaint.rating ? (
+                          <span className="cs-mini-rating" title={`Student rated ${complaint.rating}/5`}>
+                            <i className="bx bxs-star" aria-hidden="true" />
+                            {complaint.rating}/5
+                          </span>
+                        ) : null}
+                      </div>
                     </td>
 
                     {/* Action */}
                     <td className="ssd-table__cell ssd-table__cell--action">
-                      {isLocked ? (
-                        <span className="ssd-lock-icon" title="Locked">
-                          <i className="bx bx-lock-alt" />
-                        </span>
-                      ) : (
-                        <button
-                          className="ssd-update-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onSelectComplaint(complaint);
-                          }}
-                        >
-                          Update
-                          <i className="bx bx-chevron-right" />
-                        </button>
-                      )}
+                      <button
+                        className="ssd-update-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectComplaint(complaint);
+                        }}
+                      >
+                        {isLocked ? "View" : "Update"}
+                        <i className={isLocked ? "bx bx-show" : "bx bx-chevron-right"} />
+                      </button>
                     </td>
                   </tr>
                 );

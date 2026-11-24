@@ -1,4 +1,4 @@
-import { useState, useId } from "react";
+import { useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
@@ -6,6 +6,11 @@ import { useTheme } from "../context/ThemeContext";
 import SpatialDock from "../components/layout/SpatialDock";
 import NotificationBell from "../components/notification/NotificationBell";
 import useAuthSync from "../hooks/useAuthSync";
+import {
+  OPEN_COMMAND_PALETTE_EVENT,
+  OPEN_SHORTCUTS_HELP_EVENT,
+  isMacPlatform,
+} from "../utils/shortcuts";
 import "../styles/Dashboard.css";
 
 export default function DashboardLayout({
@@ -18,6 +23,7 @@ export default function DashboardLayout({
 
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const mac = useMemo(() => isMacPlatform(), []);
   useAuthSync();
 
   const displayRole = user?.role
@@ -70,13 +76,38 @@ export default function DashboardLayout({
             role="button"
             tabIndex={0}
             style={{ cursor: "pointer" }}
-            title={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`}
+            title={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode (${mac ? "⌘⇧L" : "Ctrl+Shift+L"})`}
             aria-label="Toggle Theme"
           >
             <i className={`bx ${theme === "dark" ? "bx-sun" : "bx-moon"} neon-text-orange`} />
           </div>
 
+          <button
+            type="button"
+            className="island-cmd-trigger"
+            onClick={() => window.dispatchEvent(new Event(OPEN_COMMAND_PALETTE_EVENT))}
+            aria-label="Open quick search and command palette"
+            title={`Quick Search (${mac ? "⌘K" : "Ctrl+K"})`}
+          >
+            <i className="bx bx-search" aria-hidden="true" />
+            <span className="island-cmd-trigger__text">Search...</span>
+            <span className="cs-kbd-group" aria-hidden="true">
+              <kbd className="cs-kbd">{mac ? "⌘" : "Ctrl"}</kbd>
+              <kbd className="cs-kbd">K</kbd>
+            </span>
+          </button>
+
           <div className="island-actions">
+            <button
+              type="button"
+              className="island-shortcuts-btn"
+              onClick={() => window.dispatchEvent(new Event(OPEN_SHORTCUTS_HELP_EVENT))}
+              aria-label="Keyboard shortcuts"
+              title="Keyboard shortcuts (?)"
+            >
+              <i className="bx bx-command" aria-hidden="true" />
+            </button>
+
             <NotificationBell />
             
             <div

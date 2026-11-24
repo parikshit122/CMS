@@ -2,6 +2,9 @@ import React, {
   useState, useEffect, useCallback, useRef,
 } from "react";
 import StatusBadge from "../complaint/StatusBadge";
+import SlaBadge from "../complaint/SlaBadge";
+import ComplaintActivityPanel from "../complaint/ComplaintActivityPanel";
+import ComplaintRatingPanel from "../complaint/ComplaintRatingPanel";
 
 /* ============================================================
    COMPLAINT ACTION MODAL
@@ -159,6 +162,9 @@ const ComplaintActionModal = ({
             } />
             <DetailRow label="Status" value={
               <StatusBadge status={complaint.status} />
+            } />
+            <DetailRow label="SLA" value={
+              <SlaBadge complaint={complaint} />
             } />
           </div>
 
@@ -331,6 +337,12 @@ const ComplaintActionModal = ({
               )}
             </>
           )}
+
+          {/* Read-only student satisfaction rating (if rated) */}
+          <ComplaintRatingPanel complaint={complaint} readOnly />
+
+          {/* Activity timeline & live staff comment thread */}
+          <ComplaintActivityPanel complaintId={complaint._id} />
         </div>
 
         {/* ── Footer ── */}

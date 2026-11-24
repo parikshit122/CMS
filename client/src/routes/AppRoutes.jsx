@@ -32,11 +32,13 @@ const AdminSettings = lazy(() => import("../pages/admin/AdminSettings"));
 const StaffDashboard = lazy(() => import("../pages/staff/StaffDashboard"));
 const StaffComplaints = lazy(() => import("../pages/staff/StaffComplaints"));
 const Notifications = lazy(() => import("../pages/Notifications"));
+const LostFound = lazy(() => import("../pages/LostFound"));
 
 const studentMenuItems = [
   { label: "Dashboard", path: "/dashboard", icon: "bx bx-grid-alt" },
   { label: "Submit Complaint", path: "/submit", icon: "bx bx-plus-circle" },
   { label: "My Complaints", path: "/complaints", icon: "bx bx-file" },
+  { label: "Lost & Found", path: "/lost-found", icon: "bx bx-search-alt-2" },
   { label: "Notifications", path: "/notifications", icon: "bx bx-bell" },
   { label: "Profile", path: "/profile", icon: "bx bx-user" },
 ];
@@ -45,6 +47,7 @@ const adminMenuItems = [
   { label: "Dashboard", path: "/admin", icon: "bx bx-grid-alt" },
   { label: "Users", path: "/admin/users", icon: "bx bx-group" },
   { label: "Reports", path: "/admin/reports", icon: "bx bx-bar-chart-alt-2" },
+  { label: "Lost & Found", path: "/lost-found", icon: "bx bx-search-alt-2" },
   { label: "Notifications", path: "/admin/notifications", icon: "bx bx-bell" },
   { label: "Settings", path: "/admin/settings", icon: "bx bx-cog" },
   { label: "Profile", path: "/profile", icon: "bx bx-user" },
@@ -57,6 +60,7 @@ const staffMenuItems = [
     path: "/staff/complaints",
     icon: "bx bx-task",
   },
+  { label: "Lost & Found", path: "/lost-found", icon: "bx bx-search-alt-2" },
   { label: "Notifications", path: "/staff/notifications", icon: "bx bx-bell" },
   { label: "Profile", path: "/profile", icon: "bx bx-user" },
 ];
@@ -299,6 +303,27 @@ function AppRoutes() {
               role={getDisplayRole(user?.role)}
             >
               <Notifications />
+            </DashboardLayout></PageTransition>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/lost-found"
+        element={
+          <ProtectedRoute allowedRoles={["user", "staff", "admin"]}>
+            <PageTransition><DashboardLayout
+              menuItems={
+                user?.role === "admin"
+                  ? adminMenuItems
+                  : user?.role === "staff"
+                    ? staffMenuItems
+                    : studentMenuItems
+              }
+              userName={user?.name}
+              role={getDisplayRole(user?.role)}
+            >
+              <LostFound />
             </DashboardLayout></PageTransition>
           </ProtectedRoute>
         }

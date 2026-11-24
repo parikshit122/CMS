@@ -13,7 +13,14 @@ const {
   countComplaints,
   getAverageResolutionHours,
   getCategoryBreakdown,
+  rateComplaintById,
+  countOverdueComplaints,
+  getSatisfactionMetrics,
 } = require("../../src/db/complaints.ts");
+const {
+  addComplaintActivity,
+  getComplaintActivities,
+} = require("../../src/db/activities.ts");
 const { getSettingsSingleton } = require("../../src/db/settings.ts");
 const {
   sendComplaintSubmittedEmail,
@@ -25,7 +32,26 @@ const {
   notifyComplaintResolved,
   notifyComplaintRejected,
   notifyComplaintInProgress,
+  notifyComplaintComment,
+  notifyComplaintRated,
 } = require("../services/notification.service");
+
+const canAccessComplaint = (user, complaint) => {
+  if (!user || !complaint) return false;
+  if (user.role === "admin") return true;
+  const studentOwnerId = complaint.student?._id ?? String(complaint.studentId);
+  const assignedStaffId =
+    complaint.assignedTo?._id ??
+    (complaint.assignedToId ? String(complaint.assignedToId) : null);
+
+  if (user.role === "user") {
+    return String(studentOwnerId) === String(user._id);
+  }
+  if (user.role === "staff") {
+    return assignedStaffId !== null && String(assignedStaffId) === String(user._id);
+  }
+  return false;
+};
 
 const submitComplaint = async (req, res) => {
   try {
@@ -71,6 +97,24 @@ const submitComplaint = async (req, res) => {
       studentId: req.user.id,
       attachments,
     });
+
+    try {
+      await addComplaintActivity({
+        complaintId: complaint.id,
+        authorId: req.user.id,
+        authorName: req.user.name || "Student",
+        authorRole: req.user.role || "user",
+        kind: "submitted",
+        body: `Complaint submitted under ${complaint.category} (${complaint.priority} priority).`,
+        meta: {
+          category: complaint.category,
+          priority: complaint.priority,
+          slaDueAt: complaint.slaDueAt,
+        },
+      });
+    } catch (actErr) {
+      console.error("[submitComplaint] Activity log failed:", actErr.message);
+    }
 
     res.status(201).json({
       success: true,
@@ -166,12 +210,17 @@ const getAllComplaints = async (req, res) => {
       }
     }
 
+    const overdueFlag =
+      req.query.overdue === "true" || req.query.overdue === "1";
+
     const { complaints, total } = await findAllComplaints({
       page,
       limit,
       status: req.query.status ? String(req.query.status) : undefined,
       priority: req.query.priority ? String(req.query.priority) : undefined,
       category: req.query.category ? String(req.query.category) : undefined,
+      search: req.query.search ? String(req.query.search) : undefined,
+      overdue: overdueFlag,
       from: fromDate,
       to: toDate,
     });
@@ -239,6 +288,26 @@ const updateComplaintStatus = async (req, res) => {
 
     const app = req.app;
     if (oldStatus !== status) {
+      try {
+        const reasonSuffix =
+          status === "rejected" && rejectionReason
+            ? ` — Reason: ${String(rejectionReason).trim()}`
+            : note
+              ? ` — ${String(note).trim()}`
+              : "";
+        await addComplaintActivity({
+          complaintId: updated.id,
+          authorId: req.user.id,
+          authorName: req.user.name || "Staff",
+          authorRole: req.user.role || "staff",
+          kind: "status_change",
+          body: `Status changed from ${oldStatus} to ${status}${reasonSuffix}`,
+          meta: { from: oldStatus, to: status },
+        });
+      } catch (actErr) {
+        console.error("[updateStatus] Activity log failed:", actErr.message);
+      }
+
       try {
         if (status === "resolved") {
           await notifyComplaintResolved(updated, updated.student, req.user, app, note || "");
@@ -309,6 +378,20 @@ const assignComplaint = async (req, res) => {
       ...(complaint.status === "pending" ? { status: "in-progress" } : {}),
     });
 
+    try {
+      await addComplaintActivity({
+        complaintId: updated.id,
+        authorId: req.user.id,
+        authorName: req.user.name || "Admin",
+        authorRole: req.user.role || "admin",
+        kind: "assignment",
+        body: `Assigned complaint to ${staff.name}.`,
+        meta: { staffId: staff.id, staffName: staff.name },
+      });
+    } catch (actErr) {
+      console.error("[assignComplaint] Activity log failed:", actErr.message);
+    }
+
     res.json({
       success: true,
       message: `Complaint assigned to ${staff.name}.`,
@@ -336,13 +419,14 @@ const getStaffStats = async (req, res) => {
   try {
     const staffId = req.user.id;
 
-    const [totalAssigned, pending, inProgress, resolved, rejected] =
+    const [totalAssigned, pending, inProgress, resolved, rejected, overdueCount] =
       await Promise.all([
         countComplaints({ assignedToId: staffId }),
         countComplaints({ assignedToId: staffId, status: "pending" }),
         countComplaints({ assignedToId: staffId, status: "in-progress" }),
         countComplaints({ assignedToId: staffId, status: "resolved" }),
         countComplaints({ assignedToId: staffId, status: "rejected" }),
+        countOverdueComplaints(staffId),
       ]);
 
     const now = new Date();
@@ -413,6 +497,7 @@ const getStaffStats = async (req, res) => {
         inProgress,
         resolved,
         rejected,
+        overdueCount,
         weeklyTrend,
         statusBreakdown,
         trendMeta: {
@@ -459,6 +544,8 @@ const getAdminStats = async (req, res) => {
       avgResponseTime,
       avgResponseThis,
       avgResponsePrev,
+      overdueCount,
+      satisfaction,
     ] = await Promise.all([
       countComplaints(),
       countComplaints({ status: "pending" }),
@@ -473,6 +560,8 @@ const getAdminStats = async (req, res) => {
       getAverageResolutionHours(),
       getAverageResolutionHours({ from: startThisMonth, to: now }),
       getAverageResolutionHours({ from: startPrevMonth, to: endPrevMonth }),
+      countOverdueComplaints(),
+      getSatisfactionMetrics(),
     ]);
 
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -571,6 +660,8 @@ const getAdminStats = async (req, res) => {
         resolved,
         inProgress,
         avgResponseTime,
+        overdueCount,
+        satisfaction,
         weeklyData,
         monthlyData,
         categoryBreakdown,
@@ -600,6 +691,187 @@ const getStaffList = async (req, res) => {
   }
 };
 
+const getComplaintActivitiesController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!isValidId(id)) {
+      return res.status(400).json({ success: false, message: "Invalid complaint ID." });
+    }
+
+    const complaint = await findComplaintById(id);
+    if (!complaint) {
+      return res.status(404).json({ success: false, message: "Complaint not found." });
+    }
+
+    if (!canAccessComplaint(req.user, complaint)) {
+      return res.status(403).json({ success: false, message: "Access denied." });
+    }
+
+    const activities = await getComplaintActivities(complaint.id);
+    const hasSubmitted = activities.some((a) => a.kind === "submitted");
+    const timeline = hasSubmitted
+      ? activities
+      : [
+          {
+            _id: `submitted-${complaint.id}`,
+            id: 0,
+            complaintId: complaint.id,
+            authorId: complaint.studentId,
+            authorName: complaint.student?.name || "Student",
+            authorRole: "user",
+            kind: "submitted",
+            body: `Complaint submitted under ${complaint.category} (${complaint.priority} priority).`,
+            meta: { synthetic: true },
+            createdAt: complaint.createdAt,
+          },
+          ...activities,
+        ];
+
+    res.json({ success: true, data: timeline });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const addComplaintCommentController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!isValidId(id)) {
+      return res.status(400).json({ success: false, message: "Invalid complaint ID." });
+    }
+
+    const rawBody = typeof req.body?.body === "string" ? req.body.body.trim() : "";
+    if (!rawBody) {
+      return res.status(400).json({ success: false, message: "Comment cannot be empty." });
+    }
+    if (rawBody.length > 1000) {
+      return res.status(400).json({
+        success: false,
+        message: "Comment must be 1000 characters or fewer.",
+      });
+    }
+
+    const complaint = await findComplaintById(id);
+    if (!complaint) {
+      return res.status(404).json({ success: false, message: "Complaint not found." });
+    }
+
+    if (!canAccessComplaint(req.user, complaint)) {
+      return res.status(403).json({ success: false, message: "Access denied." });
+    }
+
+    const activity = await addComplaintActivity({
+      complaintId: complaint.id,
+      authorId: req.user.id,
+      authorName: req.user.name || "User",
+      authorRole: req.user.role || "user",
+      kind: "comment",
+      body: rawBody,
+      meta: {},
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Comment added.",
+      data: activity,
+    });
+
+    (async () => {
+      try {
+        await notifyComplaintComment(complaint, req.user, rawBody, req.app);
+      } catch (notifyErr) {
+        console.error("[addComment] Notification failed:", notifyErr.message);
+      }
+    })();
+  } catch (err) {
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+};
+
+const rateComplaintController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!isValidId(id)) {
+      return res.status(400).json({ success: false, message: "Invalid complaint ID." });
+    }
+
+    const parsedRating = Number(req.body?.rating);
+    if (!Number.isInteger(parsedRating) || parsedRating < 1 || parsedRating > 5) {
+      return res.status(400).json({
+        success: false,
+        message: "Rating must be a whole number between 1 and 5.",
+      });
+    }
+
+    const feedback =
+      typeof req.body?.feedback === "string" ? req.body.feedback.trim() : "";
+    if (feedback.length > 500) {
+      return res.status(400).json({
+        success: false,
+        message: "Feedback must be 500 characters or fewer.",
+      });
+    }
+
+    const complaint = await findComplaintById(id);
+    if (!complaint) {
+      return res.status(404).json({ success: false, message: "Complaint not found." });
+    }
+
+    const studentOwnerId = complaint.student?._id ?? String(complaint.studentId);
+    if (String(studentOwnerId) !== String(req.user._id)) {
+      return res.status(403).json({
+        success: false,
+        message: "Only the student who submitted this complaint can rate it.",
+      });
+    }
+
+    if (complaint.status !== "resolved") {
+      return res.status(400).json({
+        success: false,
+        message: "Only resolved complaints can be rated.",
+      });
+    }
+
+    const updated = await rateComplaintById(complaint.id, parsedRating, feedback || null);
+
+    try {
+      await addComplaintActivity({
+        complaintId: complaint.id,
+        authorId: req.user.id,
+        authorName: req.user.name || "Student",
+        authorRole: "user",
+        kind: "rating",
+        body: feedback
+          ? `Rated ${parsedRating}/5 stars — "${feedback}"`
+          : `Rated resolution ${parsedRating}/5 stars.`,
+        meta: { rating: parsedRating },
+      });
+    } catch (actErr) {
+      console.error("[rateComplaint] Activity log failed:", actErr.message);
+    }
+
+    res.json({
+      success: true,
+      message: "Thank you for your feedback!",
+      data: updated,
+    });
+
+    (async () => {
+      try {
+        await notifyComplaintRated(updated, req.user, parsedRating, req.app);
+      } catch (notifyErr) {
+        console.error("[rateComplaint] Notification failed:", notifyErr.message);
+      }
+    })();
+  } catch (err) {
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+};
+
 module.exports = {
   submitComplaint,
   getComplaintById,
@@ -611,4 +883,7 @@ module.exports = {
   getStaffStats,
   getAdminStats,
   getStaffList,
+  getComplaintActivitiesController,
+  addComplaintCommentController,
+  rateComplaintController,
 };

@@ -1,11 +1,18 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchAllComplaints } from "../../redux/complaintSlice";
 import StatusBadge from "../../components/complaint/StatusBadge";
+import SlaBadge from "../../components/complaint/SlaBadge";
+import ComplaintActivityPanel from "../../components/complaint/ComplaintActivityPanel";
+import ComplaintRatingPanel from "../../components/complaint/ComplaintRatingPanel";
 import AssignStaffModal from "../../components/admin/AssignStaffModal";
 import ConfirmModal from "../../components/common/ConfirmModal";
 import { useAlert } from "../../components/common/Alert";
 import { exportSinglePDF, exportBulkPDF } from "../../utils/pdfExport";
+import { exportComplaintsCSV } from "../../utils/csvExport";
+import { evaluateSlaStatus } from "../../utils/sla";
+import useDebounce from "../../hooks/useDebounce";
 import API from "../../services/api";
 import "../../styles/AdminReports.css";
 
@@ -21,14 +28,17 @@ const AdminReports = () => {
 
   // ── Filters ────────────────────────────────────────────
   const [q, setQ]                   = useState("");
+  const debouncedQ                  = useDebounce(q, 300);
   const [status, setStatus]         = useState("all");
   const [priority, setPriority]     = useState("all");
   const [category, setCategory]     = useState("all");
+  const [overdueOnly, setOverdueOnly] = useState(false);
   const [dateRange, setDateRange]   = useState("all");
   const [fromDate, setFromDate]     = useState("");
   const [toDate, setToDate]         = useState("");
   const [sortBy, setSortBy]         = useState("newest");
   const [currentPage, setCurrentPage] = useState(1);
+  const [knownCategories, setKnownCategories] = useState([]);
   const perPage = 10;
 
   // ── Modals ─────────────────────────────────────────────
@@ -42,17 +52,40 @@ const AdminReports = () => {
   const [statusEdit, setStatusEdit]     = useState(null);
   const [statusSaving, setStatusSaving] = useState(false);
 
+  const serverQueryParams = useMemo(
+    () => ({
+      search: debouncedQ.trim() || undefined,
+      status,
+      priority,
+      category,
+      overdue: overdueOnly || undefined,
+      from: fromDate || undefined,
+      to: toDate || undefined,
+      limit: 100,
+    }),
+    [debouncedQ, status, priority, category, overdueOnly, fromDate, toDate]
+  );
+
   useEffect(() => {
-    dispatch(fetchAllComplaints());
-  }, [dispatch]);
+    dispatch(fetchAllComplaints(serverQueryParams));
+  }, [dispatch, serverQueryParams]);
+
+  useEffect(() => {
+    if (!complaints?.length) return;
+    setKnownCategories((prev) => {
+      const merged = new Set(prev);
+      complaints.forEach((c) => {
+        if (c.category) merged.add(c.category);
+      });
+      return Array.from(merged).sort();
+    });
+  }, [complaints]);
 
   // ── Derived categories ──────────────────────────────────
-  const categories = useMemo(() => {
-    const set = new Set(
-      (complaints || []).map((c) => c.category).filter(Boolean)
-    );
-    return ["all", ...Array.from(set)];
-  }, [complaints]);
+  const categories = useMemo(
+    () => ["all", ...knownCategories],
+    [knownCategories]
+  );
 
   // ── Filtered + sorted list ──────────────────────────────
   const filtered = useMemo(() => {
@@ -67,6 +100,7 @@ const AdminReports = () => {
           (c.description  || "").toLowerCase().includes(query) ||
           (c._id          || "").toLowerCase().includes(query) ||
           (c.complaintId  || "").toLowerCase().includes(query) ||
+          (c.location     || "").toLowerCase().includes(query) ||
           (c.student?.name  || "").toLowerCase().includes(query) ||
           (c.student?.email || "").toLowerCase().includes(query) ||
           (c.assignedTo?.name || "").toLowerCase().includes(query);
@@ -74,6 +108,7 @@ const AdminReports = () => {
         const matchesStatus   = status === "all"   || c.status   === status;
         const matchesPriority = priority === "all" || c.priority === priority;
         const matchesCategory = category === "all" || c.category === category;
+        const matchesOverdue  = !overdueOnly || evaluateSlaStatus(c, now).state === "overdue";
 
         let matchesDate = true;
         const created = new Date(c.createdAt);
@@ -108,6 +143,7 @@ const AdminReports = () => {
           matchesStatus &&
           matchesPriority &&
           matchesCategory &&
+          matchesOverdue &&
           matchesDate
         );
       })
@@ -122,12 +158,12 @@ const AdminReports = () => {
         }
         return 0;
       });
-  }, [complaints, q, status, priority, category, dateRange, fromDate, toDate, sortBy]);
+  }, [complaints, q, status, priority, category, overdueOnly, dateRange, fromDate, toDate, sortBy]);
 
   // Reset page on filter change
   useEffect(() => {
     setCurrentPage(1);
-  }, [q, status, priority, category, dateRange, fromDate, toDate, sortBy]);
+  }, [q, status, priority, category, overdueOnly, dateRange, fromDate, toDate, sortBy]);
 
   const totalPages = Math.ceil(filtered.length / perPage);
   const paginated  = filtered.slice(
@@ -137,9 +173,11 @@ const AdminReports = () => {
 
   // ── Summary counts ──────────────────────────────────────
   const statusCounts = useMemo(() => {
-    const counts = { pending: 0, "in-progress": 0, resolved: 0, rejected: 0 };
+    const counts = { pending: 0, "in-progress": 0, resolved: 0, rejected: 0, overdue: 0 };
+    const now = new Date();
     (complaints || []).forEach((c) => {
       if (counts[c.status] !== undefined) counts[c.status]++;
+      if (evaluateSlaStatus(c, now).state === "overdue") counts.overdue++;
     });
     return counts;
   }, [complaints]);
@@ -147,13 +185,14 @@ const AdminReports = () => {
   // ── Helpers ─────────────────────────────────────────────
   const hasActiveFilters =
     q || status !== "all" || priority !== "all" || category !== "all" ||
-    dateRange !== "all" || fromDate || toDate;
+    overdueOnly || dateRange !== "all" || fromDate || toDate;
 
   const clearFilters = () => {
     setQ("");
     setStatus("all");
     setPriority("all");
     setCategory("all");
+    setOverdueOnly(false);
     setDateRange("all");
     setFromDate("");
     setToDate("");
@@ -170,8 +209,8 @@ const AdminReports = () => {
       `Complaint ${updatedComplaint.complaintId || ""} assigned successfully`
     );
     setAssignTarget(null);
-    dispatch(fetchAllComplaints());
-  }, [alert, dispatch]);
+    dispatch(fetchAllComplaints(serverQueryParams));
+  }, [alert, dispatch, serverQueryParams]);
 
   // ── Inline status save ──────────────────────────────────
   const saveStatusEdit = async () => {
@@ -193,7 +232,7 @@ const AdminReports = () => {
       if (res.data.success) {
         alert.success("Status updated");
         setStatusEdit(null);
-        dispatch(fetchAllComplaints());
+        dispatch(fetchAllComplaints(serverQueryParams));
       }
     } catch (err) {
       alert.error(err.response?.data?.message || "Failed to update status");
@@ -211,12 +250,26 @@ const AdminReports = () => {
       if (res.data.success) {
         alert.success("Complaint deleted");
         setDeleteTarget(null);
-        dispatch(fetchAllComplaints());
+        dispatch(fetchAllComplaints(serverQueryParams));
       }
     } catch (err) {
       alert.error(err.response?.data?.message || "Delete failed");
     } finally {
       setDeleteLoading(false);
+    }
+  };
+
+  // ── CSV Export ──────────────────────────────────────────
+  const handleExportCSV = () => {
+    if (!filtered.length) {
+      alert.error("No complaints to export");
+      return;
+    }
+    try {
+      exportComplaintsCSV(filtered, "complaintsync-report");
+      alert.success(`CSV exported with ${filtered.length} complaint${filtered.length === 1 ? "" : "s"}`);
+    } catch {
+      alert.error("Failed to export CSV");
     }
   };
 
@@ -272,9 +325,16 @@ const AdminReports = () => {
         <div className="reports-header__right">
           <button
             className="reports-btn reports-btn--outline"
-            onClick={() => dispatch(fetchAllComplaints())}
+            onClick={() => dispatch(fetchAllComplaints(serverQueryParams))}
           >
             <i className="bx bx-refresh"></i> Refresh
+          </button>
+          <button
+            className="reports-btn reports-btn--outline"
+            onClick={handleExportCSV}
+            disabled={!filtered.length}
+          >
+            <i className="bx bx-spreadsheet"></i> Export CSV
           </button>
           <button
             className="reports-btn reports-btn--primary"
@@ -312,6 +372,16 @@ const AdminReports = () => {
           <i className="bx bx-x-circle"></i>
           <div><span>{statusCounts.rejected}</span><p>Rejected</p></div>
         </div>
+        <button
+          type="button"
+          className={`reports-summary__card reports-summary__card--overdue ${overdueOnly ? "reports-overdue-toggle--active" : ""}`}
+          onClick={() => setOverdueOnly((v) => !v)}
+          title="Filter overdue SLA complaints"
+          style={{ textAlign: "left", cursor: "pointer" }}
+        >
+          <i className="bx bx-alarm-exclamation"></i>
+          <div><span>{statusCounts.overdue}</span><p>Overdue SLA</p></div>
+        </button>
       </div>
 
       {/* ── Filters ── */}
@@ -378,6 +448,16 @@ const AdminReports = () => {
             <option value="oldest">Oldest First</option>
             <option value="priority">Priority</option>
           </select>
+
+          <button
+            type="button"
+            className={`reports-overdue-toggle ${overdueOnly ? "reports-overdue-toggle--active" : ""}`}
+            onClick={() => setOverdueOnly((v) => !v)}
+            aria-pressed={overdueOnly}
+          >
+            <i className="bx bx-alarm-exclamation" aria-hidden="true" />
+            Overdue Only
+          </button>
 
           {hasActiveFilters && (
             <button
@@ -528,20 +608,29 @@ const AdminReports = () => {
                           </button>
                         </div>
                       ) : (
-                        <button
-                          className="reports-status-btn"
-                          onClick={() =>
-                            setStatusEdit({
-                              id: c._id,
-                              value: c.status,
-                              rejectionReason: c.rejectionReason || "",
-                            })
-                          }
-                          title="Click to change status"
-                        >
-                          <StatusBadge status={c.status} />
-                          <i className="bx bx-pencil reports-status-edit-icon"></i>
-                        </button>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "5px", alignItems: "flex-start" }}>
+                          <button
+                            className="reports-status-btn"
+                            onClick={() =>
+                              setStatusEdit({
+                                id: c._id,
+                                value: c.status,
+                                rejectionReason: c.rejectionReason || "",
+                              })
+                            }
+                            title="Click to change status"
+                          >
+                            <StatusBadge status={c.status} />
+                            <i className="bx bx-pencil reports-status-edit-icon"></i>
+                          </button>
+                          <SlaBadge complaint={c} compact />
+                          {c.rating ? (
+                            <span className="cs-mini-rating" title={`Student rated ${c.rating}/5`}>
+                              <i className="bx bxs-star" aria-hidden="true" />
+                              {c.rating}/5
+                            </span>
+                          ) : null}
+                        </div>
                       )}
                     </td>
 
@@ -703,7 +792,7 @@ const AdminReports = () => {
       )}
 
       {/* ── Detail Modal ── */}
-      {detailTarget && (
+      {detailTarget && createPortal(
         <div className="modal-overlay" onClick={() => setDetailTarget(null)}>
           <div
             className="modal-content modal-content--wide"
@@ -753,6 +842,12 @@ const AdminReports = () => {
                   <span>Status</span>
                   <strong>
                     <StatusBadge status={detailTarget.status} />
+                  </strong>
+                </div>
+                <div className="assign-row">
+                  <span>SLA Status</span>
+                  <strong>
+                    <SlaBadge complaint={detailTarget} />
                   </strong>
                 </div>
                 <div className="assign-row">
@@ -898,6 +993,12 @@ const AdminReports = () => {
                     </div>
                   </>
                 )}
+
+              {/* ── Student Satisfaction Rating (Read-Only) ── */}
+              <ComplaintRatingPanel complaint={detailTarget} readOnly />
+
+              {/* ── Activity Audit Timeline & Comments ── */}
+              <ComplaintActivityPanel complaintId={detailTarget._id} />
             </div>
 
             {/* ── Footer ── */}
@@ -922,7 +1023,8 @@ const AdminReports = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── Assign Staff Modal ── */}

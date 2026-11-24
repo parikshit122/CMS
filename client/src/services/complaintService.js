@@ -30,9 +30,16 @@ const complaintService = {
 
   // ── Admin ────────────────────────────────────────────────
 
-  /** Get ALL complaints (admin only) */
-  getAllComplaints: () =>
-    API.get("/complaints"),
+  /** Get ALL complaints (admin only) with optional server-side filters */
+  getAllComplaints: (params = {}) => {
+    const cleanParams = {};
+    Object.entries(params || {}).forEach(([key, val]) => {
+      if (val !== undefined && val !== null && val !== "" && val !== "all" && val !== false) {
+        cleanParams[key] = val;
+      }
+    });
+    return API.get("/complaints", { params: cleanParams });
+  },
 
   /** Assign a complaint to a staff member */
   assignComplaint: (complaintId, staffId) =>
@@ -47,6 +54,18 @@ const complaintService = {
   /** Get single complaint detail */
   getComplaintById: (complaintId) =>
     API.get(`/complaints/${complaintId}`),
+
+  /** Get chronological activity timeline & comments for a complaint */
+  getComplaintActivities: (complaintId) =>
+    API.get(`/complaints/${complaintId}/activities`),
+
+  /** Post a comment on a complaint */
+  addComplaintComment: (complaintId, body) =>
+    API.post(`/complaints/${complaintId}/comments`, { body }),
+
+  /** Submit student satisfaction rating (1-5 stars + optional feedback) */
+  rateComplaint: (complaintId, payload) =>
+    API.post(`/complaints/${complaintId}/rate`, payload),
 
   /** Get dashboard stats for staff */
   getStaffStats: () =>

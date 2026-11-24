@@ -1,4 +1,18 @@
-import { and, count, desc, eq, gte, inArray, lt, lte, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNotNull,
+  lt,
+  lte,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "./index.ts";
 import {
@@ -7,6 +21,7 @@ import {
   users,
   type ComplaintAttachment,
 } from "./schema.ts";
+import { computeSlaDueAt } from "./sla.ts";
 import { toNumericId } from "./users.ts";
 
 export type ComplaintRow = typeof complaints.$inferSelect;
@@ -55,6 +70,10 @@ const formatPopulatedComplaint = (
   assignedToId: row.assignedToId,
   rejectionReason: row.rejectionReason ?? undefined,
   resolvedAt: row.resolvedAt ?? null,
+  slaDueAt: row.slaDueAt ?? computeSlaDueAt(row.priority, row.createdAt),
+  rating: row.rating ?? null,
+  ratingFeedback: row.ratingFeedback ?? undefined,
+  ratedAt: row.ratedAt ?? null,
   attachments: Array.isArray(row.attachments) ? row.attachments : [],
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
@@ -93,6 +112,10 @@ export async function createComplaint(data: {
   if (!numStudentId) throw new Error("Invalid student ID.");
   try {
     const complaintId = await generateNextComplaintId();
+    const priority = data.priority || "medium";
+    const now = new Date();
+    const slaDueAt = computeSlaDueAt(priority, now);
+
     const rows = await db
       .insert(complaints)
       .values({
@@ -100,10 +123,11 @@ export async function createComplaint(data: {
         title: data.title.trim(),
         description: data.description.trim(),
         category: data.category.toLowerCase().trim(),
-        priority: data.priority || "medium",
+        priority,
         location: data.location?.trim() || null,
         status: "pending",
         studentId: numStudentId,
+        slaDueAt,
         attachments: data.attachments || [],
       })
       .returning();
@@ -212,10 +236,17 @@ export async function findComplaintsByStaff(staffId: unknown) {
       location: complaint.location ?? undefined,
       status: complaint.status,
       rejectionReason: complaint.rejectionReason ?? undefined,
+      resolvedAt: complaint.resolvedAt ?? null,
+      slaDueAt: complaint.slaDueAt ?? computeSlaDueAt(complaint.priority, complaint.createdAt),
+      rating: complaint.rating ?? null,
+      ratingFeedback: complaint.ratingFeedback ?? undefined,
+      ratedAt: complaint.ratedAt ?? null,
       attachments: Array.isArray(complaint.attachments) ? complaint.attachments : [],
+      studentId: complaint.studentId,
       studentName: student?.name || "Unknown",
       studentEmail: student?.email || "",
       createdAt: complaint.createdAt,
+      updatedAt: complaint.updatedAt,
     }));
   } catch (error) {
     throw wrapDbError("findComplaintsByStaff", error);
@@ -228,6 +259,8 @@ export async function findAllComplaints(params: {
   status?: string;
   priority?: string;
   category?: string;
+  search?: string;
+  overdue?: boolean;
   from?: Date;
   to?: Date;
 }) {
@@ -247,6 +280,24 @@ export async function findAllComplaints(params: {
     }
     if (params.to) {
       conditions.push(lte(complaints.createdAt, params.to));
+    }
+    if (params.overdue) {
+      conditions.push(inArray(complaints.status, ["pending", "in-progress"]));
+      conditions.push(lt(complaints.slaDueAt, new Date()));
+    }
+    const trimmedSearch = params.search?.trim();
+    if (trimmedSearch) {
+      const pattern = `%${trimmedSearch}%`;
+      const searchCond = or(
+        ilike(complaints.complaintId, pattern),
+        ilike(complaints.title, pattern),
+        ilike(complaints.description, pattern),
+        ilike(complaints.location, pattern),
+        ilike(studentAlias.name, pattern),
+        ilike(studentAlias.email, pattern),
+        ilike(staffAlias.name, pattern)
+      );
+      if (searchCond) conditions.push(searchCond);
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -279,7 +330,12 @@ export async function findAllComplaints(params: {
         .orderBy(desc(complaints.createdAt))
         .limit(params.limit)
         .offset(offset),
-      db.select({ value: count() }).from(complaints).where(whereClause),
+      db
+        .select({ value: count() })
+        .from(complaints)
+        .leftJoin(studentAlias, eq(complaints.studentId, studentAlias.id))
+        .leftJoin(staffAlias, eq(complaints.assignedToId, staffAlias.id))
+        .where(whereClause),
     ]);
 
     return {
@@ -529,5 +585,94 @@ export async function getCategoryBreakdown() {
     return rows;
   } catch (error) {
     throw wrapDbError("getCategoryBreakdown", error);
+  }
+}
+
+export async function rateComplaintById(
+  id: unknown,
+  rating: number,
+  feedback?: string | null
+) {
+  const numId = toNumericId(id);
+  if (!numId) return null;
+  try {
+    const now = new Date();
+    await db
+      .update(complaints)
+      .set({
+        rating,
+        ratingFeedback: feedback ? String(feedback).trim() : null,
+        ratedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(complaints.id, numId));
+    return findComplaintById(numId);
+  } catch (error) {
+    throw wrapDbError("rateComplaintById", error);
+  }
+}
+
+export async function countOverdueComplaints(assignedToId?: unknown): Promise<number> {
+  try {
+    const conditions: SQL[] = [
+      inArray(complaints.status, ["pending", "in-progress"]),
+      lt(complaints.slaDueAt, new Date()),
+    ];
+    if (assignedToId !== undefined) {
+      const numId = toNumericId(assignedToId);
+      if (!numId) return 0;
+      conditions.push(eq(complaints.assignedToId, numId));
+    }
+    const res = await db
+      .select({ value: count() })
+      .from(complaints)
+      .where(and(...conditions));
+    return Number(res[0]?.value || 0);
+  } catch (error) {
+    throw wrapDbError("countOverdueComplaints", error);
+  }
+}
+
+export async function getSatisfactionMetrics() {
+  try {
+    const [summaryRows, distRows] = await Promise.all([
+      db
+        .select({
+          avgRating: sql<number | null>`avg(${complaints.rating})`,
+          totalRated: sql<number>`count(${complaints.rating})::int`,
+        })
+        .from(complaints)
+        .where(isNotNull(complaints.rating)),
+      db
+        .select({
+          rating: complaints.rating,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(complaints)
+        .where(isNotNull(complaints.rating))
+        .groupBy(complaints.rating),
+    ]);
+
+    const totalRated = Number(summaryRows[0]?.totalRated || 0);
+    const avgRaw = summaryRows[0]?.avgRating;
+    const averageRating =
+      totalRated > 0 && avgRaw !== null && avgRaw !== undefined
+        ? Number(Number(avgRaw).toFixed(2))
+        : 0;
+
+    const distribution: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    for (const row of distRows) {
+      if (row.rating && distribution[row.rating] !== undefined) {
+        distribution[row.rating] = Number(row.count || 0);
+      }
+    }
+
+    return {
+      averageRating,
+      totalRated,
+      distribution,
+    };
+  } catch (error) {
+    throw wrapDbError("getSatisfactionMetrics", error);
   }
 }

@@ -24,6 +24,7 @@ const {
   deleteNotificationsByUserInvolvement,
   deleteNotificationsByComplaint,
 } = require("../../src/db/notifications.ts");
+const { addComplaintActivity } = require("../../src/db/activities.ts");
 const { sendStaffWelcomeEmail } = require("../services/email.service");
 const {
   notifyComplaintAssigned,
@@ -375,6 +376,27 @@ const assignStaffToComplaint = async (req, res) => {
       assignedToId: newStaff.id,
       ...(complaint.status === "pending" ? { status: "in-progress" } : {}),
     });
+
+    try {
+      await addComplaintActivity({
+        complaintId: updated.id,
+        authorId: req.user?.id,
+        authorName: req.user?.name || "Admin",
+        authorRole: req.user?.role || "admin",
+        kind: "assignment",
+        body: isReassignment
+          ? `Reassigned from ${oldStaff?.name || "previous staff"} to ${newStaff.name}.`
+          : `Assigned to ${newStaff.name}.`,
+        meta: {
+          staffId: newStaff.id,
+          staffName: newStaff.name,
+          previousStaffId: oldStaff?.id ?? null,
+          reassigned: isReassignment,
+        },
+      });
+    } catch (actErr) {
+      console.error("[assignStaffToComplaint] Activity log failed:", actErr.message);
+    }
 
     if (isReassignment) {
       await notifyComplaintReassigned(updated, oldStaff, newStaff, req.app);

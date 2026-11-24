@@ -103,6 +103,10 @@ export const complaints = pgTable(
     }),
     rejectionReason: text("rejection_reason"),
     resolvedAt: timestamp("resolved_at"),
+    slaDueAt: timestamp("sla_due_at"),
+    rating: integer("rating"),
+    ratingFeedback: text("rating_feedback"),
+    ratedAt: timestamp("rated_at"),
     attachments: jsonb("attachments")
       .$type<ComplaintAttachment[]>()
       .notNull()
@@ -115,6 +119,36 @@ export const complaints = pgTable(
     index("complaints_assigned_status_idx").on(table.assignedToId, table.status),
     index("complaints_status_created_idx").on(table.status, table.createdAt),
     index("complaints_category_idx").on(table.category),
+    index("complaints_sla_due_at_idx").on(table.slaDueAt),
+  ]
+);
+
+// ── Complaint Activities & Comments Table ─────────────────
+export const complaintActivities = pgTable(
+  "complaint_activities",
+  {
+    id: serial("id").primaryKey(),
+    complaintId: integer("complaint_id")
+      .notNull()
+      .references(() => complaints.id, { onDelete: "cascade" }),
+    authorId: integer("author_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    authorName: text("author_name").notNull(),
+    authorRole: text("author_role").notNull(), // "user" | "staff" | "admin" | "system"
+    kind: text("kind").notNull(), // "submitted" | "comment" | "status_change" | "assignment" | "rating"
+    body: text("body").notNull(),
+    meta: jsonb("meta")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("complaint_activities_complaint_created_idx").on(
+      table.complaintId,
+      table.createdAt
+    ),
   ]
 );
 
@@ -199,10 +233,88 @@ export const settings = pgTable("settings", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// ── Campus Lost & Found Items Table ───────────────────────
+export const lostFoundItems = pgTable(
+  "lost_found_items",
+  {
+    id: serial("id").primaryKey(),
+    itemCode: text("item_code").notNull().unique(), // LF-YYYY-NNNN
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    category: text("category").notNull().default("other"), // electronics | id_card | wallet_keys | books_notes | accessories | clothing | other
+    foundLocation: text("found_location").notNull(),
+    foundAt: timestamp("found_at").defaultNow().notNull(),
+    custodyType: text("custody_type").notNull().default("finder"), // finder | security_desk | admin_office
+    custodyLocation: text("custody_location").default(""),
+    imageUrl: text("image_url").default(""),
+    imagePublicId: text("image_public_id").default(""),
+    blurImagePublicly: boolean("blur_image_publicly").notNull().default(true),
+    verificationQuestion: text("verification_question").notNull(),
+    verificationAnswerSecret: text("verification_answer_secret").notNull(),
+    privateNotes: text("private_notes").default(""),
+    status: text("status").notNull().default("open"), // open | claim_pending | approved | returned | archived
+    finderId: integer("finder_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    approvedClaimId: integer("approved_claim_id"),
+    returnedToId: integer("returned_to_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    returnedAt: timestamp("returned_at"),
+    handoverCodeHash: text("handover_code_hash"),
+    handoverCodePlain: text("handover_code_plain"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("lost_found_items_status_created_idx").on(table.status, table.createdAt),
+    index("lost_found_items_finder_idx").on(table.finderId),
+    index("lost_found_items_category_idx").on(table.category),
+  ]
+);
+
+// ── Campus Lost & Found Claims (Anti-Fraud Appeals) ───────
+export const lostFoundClaims = pgTable(
+  "lost_found_claims",
+  {
+    id: serial("id").primaryKey(),
+    itemId: integer("item_id")
+      .notNull()
+      .references(() => lostFoundItems.id, { onDelete: "cascade" }),
+    claimantId: integer("claimant_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    attemptNumber: integer("attempt_number").notNull().default(1),
+    verificationAnswer: text("verification_answer").notNull(),
+    identifyingDetails: text("identifying_details").notNull(),
+    lostLocation: text("lost_location").default(""),
+    proofImageUrl: text("proof_image_url").default(""),
+    proofImagePublicId: text("proof_image_public_id").default(""),
+    honestyPledgeAccepted: boolean("honesty_pledge_accepted").notNull().default(false),
+    answerMatchScore: integer("answer_match_score").notNull().default(0),
+    answerMatchLevel: text("answer_match_level").notNull().default("low"), // high | partial | low
+    status: text("status").notNull().default("pending"), // pending | approved | rejected | fraud_flagged | completed
+    isFlaggedFraud: boolean("is_flagged_fraud").notNull().default(false),
+    reviewerId: integer("reviewer_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    reviewNote: text("review_note").default(""),
+    reviewedAt: timestamp("reviewed_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("lost_found_claims_item_status_idx").on(table.itemId, table.status),
+    index("lost_found_claims_claimant_idx").on(table.claimantId, table.createdAt),
+    index("lost_found_claims_fraud_idx").on(table.claimantId, table.isFlaggedFraud),
+  ]
+);
+
 // ── Drizzle Relations ─────────────────────────────────────
 export const usersRelations = relations(users, ({ many }) => ({
   submittedComplaints: many(complaints, { relationName: "studentComplaints" }),
   assignedComplaints: many(complaints, { relationName: "staffComplaints" }),
+  complaintActivities: many(complaintActivities),
   receivedNotifications: many(notifications, {
     relationName: "receivedNotifications",
   }),
@@ -222,8 +334,23 @@ export const complaintsRelations = relations(complaints, ({ one, many }) => ({
     references: [users.id],
     relationName: "staffComplaints",
   }),
+  activities: many(complaintActivities),
   notifications: many(notifications),
 }));
+
+export const complaintActivitiesRelations = relations(
+  complaintActivities,
+  ({ one }) => ({
+    complaint: one(complaints, {
+      fields: [complaintActivities.complaintId],
+      references: [complaints.id],
+    }),
+    author: one(users, {
+      fields: [complaintActivities.authorId],
+      references: [users.id],
+    }),
+  })
+);
 
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   recipient: one(users, {
@@ -239,5 +366,32 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
   complaint: one(complaints, {
     fields: [notifications.complaintId],
     references: [complaints.id],
+  }),
+}));
+
+export const lostFoundItemsRelations = relations(lostFoundItems, ({ one, many }) => ({
+  finder: one(users, {
+    fields: [lostFoundItems.finderId],
+    references: [users.id],
+  }),
+  returnedTo: one(users, {
+    fields: [lostFoundItems.returnedToId],
+    references: [users.id],
+  }),
+  claims: many(lostFoundClaims),
+}));
+
+export const lostFoundClaimsRelations = relations(lostFoundClaims, ({ one }) => ({
+  item: one(lostFoundItems, {
+    fields: [lostFoundClaims.itemId],
+    references: [lostFoundItems.id],
+  }),
+  claimant: one(users, {
+    fields: [lostFoundClaims.claimantId],
+    references: [users.id],
+  }),
+  reviewer: one(users, {
+    fields: [lostFoundClaims.reviewerId],
+    references: [users.id],
   }),
 }));

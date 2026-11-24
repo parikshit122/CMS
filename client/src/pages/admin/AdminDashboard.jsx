@@ -14,7 +14,9 @@ import { motion } from "framer-motion";
 import API from "../../services/api";
 import SpatialCard from "../../components/layout/SpatialCard";
 import StatCard from "../../components/common/StatCard";
+import { useToast } from "../../components/common/Alert";
 import "../../styles/AdminDashboard.css";
+import "../../styles/ComplaintExtras.css";
 
 // Helpers
 const calcShareOfTotal = (current, total) => {
@@ -69,12 +71,19 @@ const CategoryCard = ({ icon, label, value }) => (
 );
 
 const AdminDashboard = () => {
+  const toast = useToast();
   const [stats, setStats] = useState({
     totalComplaints: 0,
     pending: 0,
     resolved: 0,
     inProgress: 0,
     avgResponseTime: 0,
+    overdueCount: 0,
+    satisfaction: {
+      averageRating: 0,
+      totalRated: 0,
+      distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+    },
     weeklyData: [],
     monthlyData: [],
     categoryBreakdown: [],
@@ -93,6 +102,7 @@ const AdminDashboard = () => {
       }
     } catch (err) {
       console.error("Failed to fetch admin stats:", err);
+      toast.error(err?.response?.data?.message || "Failed to load dashboard statistics.");
     } finally {
       setLoading(false);
     }
@@ -215,6 +225,81 @@ const AdminDashboard = () => {
             isFeatured={item.isFeatured}
           />
         ))}
+      </div>
+
+      {/* Student Satisfaction & SLA Compliance Telemetry */}
+      <div className="cs-telemetry-row">
+        <SpatialCard className="cs-telemetry-card">
+          <div className="cs-telemetry-card__top">
+            <span className="cs-telemetry-card__label">Student Satisfaction</span>
+            <span className="cs-rating-score">
+              <i className="bx bxs-star" aria-hidden="true" />{" "}
+              {stats.satisfaction?.totalRated
+                ? `${stats.satisfaction.averageRating} / 5`
+                : "No ratings yet"}
+            </span>
+          </div>
+          <div className="cs-telemetry-card__metric">
+            <span className="cs-telemetry-card__value">
+              {loading ? "—" : stats.satisfaction?.totalRated ? `${stats.satisfaction.averageRating}` : "—"}
+            </span>
+            <span className="cs-telemetry-card__sub">
+              based on {stats.satisfaction?.totalRated || 0} rated resolution
+              {(stats.satisfaction?.totalRated || 0) === 1 ? "" : "s"}
+            </span>
+          </div>
+          <div className="cs-rating-bars" aria-label="Rating distribution">
+            {[5, 4, 3, 2, 1].map((star) => {
+              const count = stats.satisfaction?.distribution?.[star] || 0;
+              const total = stats.satisfaction?.totalRated || 0;
+              const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+              return (
+                <div key={star} className="cs-rating-bar-row">
+                  <span>{star}★</span>
+                  <div className="cs-rating-bar-track">
+                    <div
+                      className="cs-rating-bar-fill"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span style={{ textAlign: "right" }}>{count}</span>
+                </div>
+              );
+            })}
+          </div>
+        </SpatialCard>
+
+        <SpatialCard className="cs-telemetry-card">
+          <div className="cs-telemetry-card__top">
+            <span className="cs-telemetry-card__label">Active SLA Watch</span>
+            <span
+              className={`cs-sla ${
+                (stats.overdueCount || 0) > 0 ? "cs-sla--overdue" : "cs-sla--met"
+              }`}
+            >
+              <i
+                className={`bx ${
+                  (stats.overdueCount || 0) > 0 ? "bx-error-circle" : "bx-check-shield"
+                }`}
+                aria-hidden="true"
+              />
+              {(stats.overdueCount || 0) > 0
+                ? `${stats.overdueCount} Overdue`
+                : "All Within SLA"}
+            </span>
+          </div>
+          <div className="cs-telemetry-card__metric">
+            <span className="cs-telemetry-card__value">
+              {loading ? 0 : stats.overdueCount || 0}
+            </span>
+            <span className="cs-telemetry-card__sub">
+              active ticket{(stats.overdueCount || 0) === 1 ? "" : "s"} past priority deadline
+            </span>
+          </div>
+          <p style={{ margin: "4px 0 0", fontSize: "0.78rem", color: "var(--text-secondary)" }}>
+            SLA Windows: Urgent 4h • High 24h • Medium 72h • Low 7d
+          </p>
+        </SpatialCard>
       </div>
 
       {/* 3D Charts Row (Using CSS box-shadow container glow to eliminate live SVG filter lag) */}

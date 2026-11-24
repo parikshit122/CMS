@@ -5,114 +5,203 @@ import React, {
   useCallback,
   useEffect,
   useRef,
+  useSyncExternalStore,
+  useMemo,
 } from "react";
 import { createPortal } from "react-dom";
+import toast from "../../utils/toastStore";
 import "../../styles/Alert.css";
 import "boxicons/css/boxicons.min.css";
 
-const icons = {
+const TOAST_ICONS = {
   success: "bx bx-check-circle",
-  error: "bx bx-x-circle",
+  error: "bx bx-error-circle",
   warning: "bx bx-error",
   info: "bx bx-info-circle",
 };
 
-const titles = {
-  success: "Success",
-  error: "Error",
-  warning: "Warning",
-  info: "Info",
-};
+const EXIT_DURATION_MS = 200;
 
 const AlertContext = createContext(null);
 
-const Toast = ({ message, type, onClose }) => {
+const ToastItem = ({ item, onDismiss }) => {
   const [closing, setClosing] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const remainingRef = useRef(item.duration);
+  const startedAtRef = useRef(Date.now());
   const timerRef = useRef(null);
+  const exitTimerRef = useRef(null);
+  const closedRef = useRef(false);
 
-  const handleClose = useCallback(() => {
+  const triggerClose = useCallback(() => {
+    if (closedRef.current) return;
+    closedRef.current = true;
+    clearTimeout(timerRef.current);
     setClosing(true);
-    setTimeout(onClose, 350);
-  }, [onClose]);
+    exitTimerRef.current = setTimeout(() => {
+      onDismiss(item.id);
+    }, EXIT_DURATION_MS);
+  }, [item.id, onDismiss]);
+
+  const scheduleTimer = useCallback(() => {
+    if (item.duration <= 0 || closedRef.current) return;
+    clearTimeout(timerRef.current);
+    startedAtRef.current = Date.now();
+    timerRef.current = setTimeout(triggerClose, Math.max(0, remainingRef.current));
+  }, [item.duration, triggerClose]);
 
   useEffect(() => {
-    timerRef.current = setTimeout(handleClose, 3000);
-    return () => clearTimeout(timerRef.current);
-  }, [handleClose]);
+    remainingRef.current = item.duration;
+    closedRef.current = false;
+    setClosing(false);
+    if (item.duration > 0) {
+      scheduleTimer();
+    }
+    return () => {
+      clearTimeout(timerRef.current);
+      clearTimeout(exitTimerRef.current);
+    };
+  }, [item.id, item.createdAt, item.duration, scheduleTimer]);
+
+  const handlePause = () => {
+    if (item.duration <= 0 || closedRef.current || paused) return;
+    clearTimeout(timerRef.current);
+    const elapsed = Date.now() - startedAtRef.current;
+    remainingRef.current = Math.max(0, remainingRef.current - elapsed);
+    setPaused(true);
+  };
+
+  const handleResume = () => {
+    if (item.duration <= 0 || closedRef.current || !paused) return;
+    setPaused(false);
+    scheduleTimer();
+  };
+
+  const handleActionClick = () => {
+    if (item.action?.onClick) {
+      item.action.onClick();
+    }
+    triggerClose();
+  };
+
+  const isUrgent = item.type === "error" || item.type === "warning";
 
   return (
     <div
-      className={`global-toast-label ${type} ${
-        closing ? "slide-out" : "slide-in"
+      role={isUrgent ? "alert" : "status"}
+      aria-live={isUrgent ? "assertive" : "polite"}
+      aria-atomic="true"
+      data-testid="global-toast-item"
+      data-toast-type={item.type}
+      className={`cs-toast cs-toast--${item.type} ${closing ? "is-closing" : "is-entering"} ${
+        paused ? "is-paused" : ""
       }`}
+      onMouseEnter={handlePause}
+      onMouseLeave={handleResume}
+      onFocus={handlePause}
+      onBlur={handleResume}
     >
-      <div className="global-toast-label-icon">
-        <i className={icons[type]}></i>
+      <div className="cs-toast__icon" aria-hidden="true">
+        <i className={TOAST_ICONS[item.type] || TOAST_ICONS.info} />
       </div>
 
-      <div className="global-toast-label-body">
-        <span className="global-toast-label-title">
-          {titles[type]}
-        </span>
-        <span className="global-toast-label-message">
-          {message}
-        </span>
+      <div className="cs-toast__body">
+        <div className="cs-toast__title">{item.title}</div>
+        <div className="cs-toast__message">{item.message}</div>
+        {item.action && (
+          <button
+            type="button"
+            className="cs-toast__action"
+            onClick={handleActionClick}
+          >
+            {item.action.label}
+          </button>
+        )}
       </div>
 
       <button
-        className="global-toast-label-close"
-        onClick={handleClose}
+        type="button"
+        className="cs-toast__close"
+        onClick={triggerClose}
+        aria-label="Dismiss notification"
       >
-        <i className="bx bx-x"></i>
+        <i className="bx bx-x" aria-hidden="true" />
       </button>
 
-      <div
-        className="global-toast-label-progress"
-        style={{ animationDuration: "3000ms" }}
-      />
+      {item.duration > 0 && (
+        <div
+          key={`${item.id}-${item.createdAt}`}
+          className="cs-toast__progress"
+          style={{ animationDuration: `${item.duration}ms` }}
+          aria-hidden="true"
+        />
+      )}
     </div>
   );
 };
 
-export const AlertProvider = ({ children }) => {
-  const [alertData, setAlertData] = useState(null);
+export const ToastProvider = ({ children }) => {
+  const items = useSyncExternalStore(
+    toast.subscribe,
+    toast.getSnapshot,
+    toast.getSnapshot
+  );
 
-  const removeAlert = useCallback(() => setAlertData(null), []);
+  useEffect(() => {
+    if (items.length === 0) return;
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape" && items[0]) {
+        toast.dismiss(items[0].id);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [items]);
 
-  const showAlert = useCallback((message, type = "info") => {
-    setAlertData({ message, type });
-  }, []);
-
-  const alert = {
-    show: (msg, type) => showAlert(msg, type),
-    success: (msg) => showAlert(msg, "success"),
-    error: (msg) => showAlert(msg, "error"),
-    warning: (msg) => showAlert(msg, "warning"),
-    info: (msg) => showAlert(msg, "info"),
-  };
+  const api = useMemo(
+    () => ({
+      show: toast.show,
+      success: toast.success,
+      error: toast.error,
+      warning: toast.warning,
+      info: toast.info,
+      dismiss: toast.dismiss,
+      clear: toast.clear,
+      promise: toast.promise,
+    }),
+    []
+  );
 
   return (
-    <AlertContext.Provider value={alert}>
+    <AlertContext.Provider value={api}>
       {children}
 
-      {alertData &&
+      {typeof document !== "undefined" &&
         createPortal(
-          <div className="global-toast-container">
-            <Toast
-              message={alertData.message}
-              type={alertData.type}
-              onClose={removeAlert}
-            />
-          </div>,
+          <section
+            className="cs-toast-region"
+            aria-label="Notifications"
+            data-testid="global-toast-region"
+          >
+            {items.map((item) => (
+              <ToastItem key={item.id} item={item} onDismiss={toast.dismiss} />
+            ))}
+          </section>,
           document.body
         )}
     </AlertContext.Provider>
   );
 };
 
-export const useAlert = () => {
+export const AlertProvider = ToastProvider;
+
+export const useToast = () => {
   const context = useContext(AlertContext);
-  if (!context)
-    throw new Error("useAlert must be used within <AlertProvider>");
+  if (!context) {
+    throw new Error("useToast must be used within <ToastProvider> / <AlertProvider>");
+  }
   return context;
 };
+
+export const useAlert = useToast;
+export { toast };

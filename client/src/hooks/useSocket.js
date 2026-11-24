@@ -2,6 +2,13 @@ import { useEffect, useRef } from "react";
 import { useDispatch } from "react-redux";
 import { connectSocket, disconnectSocket, onSocketEvent } from "../services/socketService";
 import { loadUnreadCount, loadNotifications } from "../redux/notificationSlice";
+import toast from "../utils/toastStore";
+
+const mapNotificationToastType = (type) => {
+  if (type === "complaint_resolved") return "success";
+  if (type === "complaint_rejected") return "warning";
+  return "info";
+};
 
 const useSocket = () => {
   const dispatch    = useDispatch();
@@ -20,6 +27,12 @@ const useSocket = () => {
     const offNewNotif = onSocketEvent("new_notification", (notification) => {
       // Refresh unread count immediately
       dispatch(loadUnreadCount());
+
+      if (notification?.message) {
+        toast.show(notification.message, mapNotificationToastType(notification.type), {
+          title: notification.title || "Notification",
+        });
+      }
 
       // Show browser notification if permitted
       if (

@@ -13,6 +13,9 @@ const {
   getStaffStats,
   getAdminStats,
   getStaffList,
+  getComplaintActivitiesController,
+  addComplaintCommentController,
+  rateComplaintController,
 } = require("../controllers/complaint.controller");
 
 // ── Student routes ────────────────────────────────────────
@@ -41,7 +44,10 @@ router.get("/",            protect, authorizeRoles("admin"),         getAllCompl
 router.get("/stats/admin", protect, authorizeRoles("admin"),         getAdminStats);
 router.get("/staff",       protect, authorizeRoles("admin"),         getStaffList);
 
-router.patch("/:id/status", protect, authorizeRoles("staff", "admin"), updateComplaintStatus);
-router.get("/:id",           protect, authorizeRoles("user", "staff", "admin"), getComplaintById);
+router.get("/:id/activities",  protect, authorizeRoles("user", "staff", "admin"), getComplaintActivitiesController);
+router.post("/:id/comments",   protect, authorizeRoles("user", "staff", "admin"), addComplaintCommentController);
+router.post("/:id/rate",       protect, authorizeRoles("user"),                   rateComplaintController);
+router.patch("/:id/status",    protect, authorizeRoles("staff", "admin"),         updateComplaintStatus);
+router.get("/:id",             protect, authorizeRoles("user", "staff", "admin"), getComplaintById);
 
 module.exports = router;

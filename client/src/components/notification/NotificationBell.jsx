@@ -103,6 +103,10 @@ export default function NotificationBell() {
   const handleItemClick = (item) => {
     if (!item.isRead) dispatch(readNotification(item._id));
     setOpen(false);
+    if (String(item.type || "").startsWith("lost_found_")) {
+      navigate("/lost-found");
+      return;
+    }
     navigate(getNotifPath());
   };
 

@@ -8,16 +8,25 @@ import {
   removeNotification,
   clearNotifications,
 } from "../redux/notificationSlice";
+import { useToast } from "../components/common/Alert";
 import "../styles/Notifications.css";
 import "boxicons/css/boxicons.min.css";
 
 const TYPE_CONFIG = {
-  complaint_submitted:  { icon: "bx-plus-circle",   color: "#3b82f6", bg: "#eff6ff",   label: "Submitted"   },
-  complaint_assigned:   { icon: "bx-user-check",    color: "#8b5cf6", bg: "#f5f3ff",   label: "Assigned"    },
-  complaint_resolved:   { icon: "bx-check-circle",  color: "#22c55e", bg: "#f0fdf4",   label: "Resolved"    },
-  complaint_rejected:   { icon: "bx-x-circle",      color: "#ef4444", bg: "#fef2f2",   label: "Rejected"    },
-  complaint_reassigned: { icon: "bx-transfer",      color: "#f59e0b", bg: "#fffbeb",   label: "Reassigned"  },
-  complaint_inprogress: { icon: "bx-loader-circle", color: "#0ea0e9", bg: "#f0f9ff",   label: "In Progress" },
+  complaint_submitted:          { icon: "bx-plus-circle",    color: "#3b82f6", bg: "#eff6ff", label: "Submitted"       },
+  complaint_assigned:           { icon: "bx-user-check",     color: "#8b5cf6", bg: "#f5f3ff", label: "Assigned"        },
+  complaint_resolved:           { icon: "bx-check-circle",   color: "#22c55e", bg: "#f0fdf4", label: "Resolved"        },
+  complaint_rejected:           { icon: "bx-x-circle",       color: "#ef4444", bg: "#fef2f2", label: "Rejected"        },
+  complaint_reassigned:         { icon: "bx-transfer",       color: "#f59e0b", bg: "#fffbeb", label: "Reassigned"      },
+  complaint_inprogress:         { icon: "bx-loader-circle",  color: "#0ea0e9", bg: "#f0f9ff", label: "In Progress"     },
+  complaint_comment:            { icon: "bx-message-detail", color: "#0284c7", bg: "#f0f9ff", label: "Comment"         },
+  complaint_rated:              { icon: "bx-star",           color: "#d97706", bg: "#fffbeb", label: "Rating"          },
+  lost_found_posted:            { icon: "bx-search-alt-2",   color: "#ea580c", bg: "#fff7ed", label: "Found Item"      },
+  lost_found_claim_submitted:   { icon: "bx-shield-quarter", color: "#2563eb", bg: "#eff6ff", label: "Claim Appeal"    },
+  lost_found_claim_approved:    { icon: "bx-key",            color: "#16a34a", bg: "#f0fdf4", label: "Claim Approved"  },
+  lost_found_claim_rejected:    { icon: "bx-x-circle",       color: "#64748b", bg: "#f1f5f9", label: "Claim Rejected"  },
+  lost_found_fraud_alert:       { icon: "bx-shield-x",       color: "#dc2626", bg: "#fef2f2", label: "Fraud Alert"     },
+  lost_found_handover_completed:{ icon: "bx-check-double",   color: "#16a34a", bg: "#f0fdf4", label: "Item Returned"   },
 };
 
 const timeAgo = (date) => {
@@ -35,6 +44,7 @@ const timeAgo = (date) => {
 export default function Notifications() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const toast = useToast();
   const { items, unreadCount, loading } = useSelector(
     (state) => state.notifications,
   );
@@ -61,16 +71,42 @@ export default function Notifications() {
 
   const handleClick = (item) => {
     if (!item.isRead) dispatch(readNotification(item._id));
+    if (String(item.type || "").startsWith("lost_found_")) {
+      navigate("/lost-found");
+    }
   };
 
-  const handleDelete = (e, id) => {
+  const handleDelete = async (e, id) => {
     e.stopPropagation();
-    dispatch(removeNotification(id));
+    const res = await dispatch(removeNotification(id));
+    if (res.meta.requestStatus === "fulfilled") {
+      toast.success("Notification removed.", { duration: 2500 });
+    } else {
+      toast.error("Failed to remove notification.");
+    }
   };
 
   const handleMarkRead = (e, id) => {
     e.stopPropagation();
     dispatch(readNotification(id));
+  };
+
+  const handleMarkAllRead = async () => {
+    const res = await dispatch(readAllNotifications());
+    if (res.meta.requestStatus === "fulfilled") {
+      toast.success("All notifications marked as read.");
+    } else {
+      toast.error("Could not mark notifications as read.");
+    }
+  };
+
+  const handleClearAll = async () => {
+    const res = await dispatch(clearNotifications());
+    if (res.meta.requestStatus === "fulfilled") {
+      toast.success("All notifications cleared.");
+    } else {
+      toast.error("Could not clear notifications.");
+    }
   };
 
   return (
@@ -88,7 +124,7 @@ export default function Notifications() {
             {unreadCount > 0 && (
               <button
                 className="notif-page-btn"
-                onClick={() => dispatch(readAllNotifications())}
+                onClick={handleMarkAllRead}
               >
                 <i className="bx bx-check-double" />
                 Mark all read
@@ -97,7 +133,7 @@ export default function Notifications() {
             {items.length > 0 && (
               <button
                 className="notif-page-btn notif-page-btn-danger"
-                onClick={() => dispatch(clearNotifications())}
+                onClick={handleClearAll}
               >
                 <i className="bx bx-trash" />
                 Clear all

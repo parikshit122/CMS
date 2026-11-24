@@ -8,11 +8,13 @@ import {
 
 import StaffStatCards from "../../components/staff/StaffStatCards";
 import StaffChartsRow from "../../components/staff/StaffChartsRow";
+import { useToast } from "../../components/common/Alert";
 
 import "../../styles/StaffDashboard.css";
 
 const StaffDashboard = () => {
   const dispatch = useDispatch();
+  const toast = useToast();
 
   const { stats, statsLoading } = useSelector((state) => state.complaints);
 
@@ -62,6 +64,7 @@ const StaffDashboard = () => {
             onClick={() => {
               dispatch(fetchAssignedComplaints());
               dispatch(fetchStaffStats());
+              toast.info("Refreshing dashboard metrics...", { duration: 2200 });
             }}
             title="Refresh data"
           >

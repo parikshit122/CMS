@@ -17,9 +17,9 @@ export const fetchAssignedComplaints = createAsyncThunk(
 
 export const fetchAllComplaints = createAsyncThunk(
   "complaints/fetchAll",
-  async (_, { rejectWithValue }) => {
+  async (params = {}, { rejectWithValue }) => {
     try {
-      const res = await complaintService.getAllComplaints();
+      const res = await complaintService.getAllComplaints(params);
       return res.data.data;
     } catch (err) {
       return rejectWithValue(

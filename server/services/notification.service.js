@@ -1,6 +1,7 @@
 const { createNotificationRow } = require("../../src/db/notifications.ts");
 const { getSettingsSingleton } = require("../../src/db/settings.ts");
-const { findUsersByRole } = require("../../src/db/users.ts");
+const { findUsersByRole, findUserById } = require("../../src/db/users.ts");
+const { getAllActiveUserIds } = require("../../src/db/lostFound.ts");
 
 const createNotification = async ({
   recipient,
@@ -292,6 +293,223 @@ const notifyComplaintReassigned = async (complaint, oldStaff, newStaff, app = nu
   await Promise.all(promises);
 };
 
+// ── Notify relevant participants on new comment ───────────
+const notifyComplaintComment = async (complaint, author, body, app = null) => {
+  const snippet = String(body || "").trim().slice(0, 110);
+  const recipients = new Set();
+
+  const studentId = complaint.student?._id || (complaint.studentId ? String(complaint.studentId) : null);
+  const staffId = complaint.assignedTo?._id || (complaint.assignedToId ? String(complaint.assignedToId) : null);
+  const authorId = String(author?._id || author?.id || "");
+
+  if (studentId && studentId !== authorId) {
+    recipients.add(studentId);
+  }
+  if (staffId && staffId !== authorId) {
+    recipients.add(staffId);
+  }
+
+  if (author?.role === "user" || !staffId) {
+    const admins = await findUsersByRole("admin");
+    for (const admin of admins) {
+      if (String(admin._id) !== authorId) {
+        recipients.add(String(admin._id));
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from(recipients).map((recipientId) =>
+      createNotification({
+        recipient: recipientId,
+        sender:    author?._id || null,
+        type:      "complaint_comment",
+        title:     `New Comment on ${complaint.complaintId || "Complaint"}`,
+        message:   `${author?.name || "Someone"}: "${snippet}"`,
+        complaint: complaint._id,
+        app,
+      })
+    )
+  );
+};
+
+// ── Notify staff & admins when student submits a rating ───
+const notifyComplaintRated = async (complaint, student, rating, app = null) => {
+  const recipients = new Set();
+  const staffId = complaint.assignedTo?._id || (complaint.assignedToId ? String(complaint.assignedToId) : null);
+  if (staffId) recipients.add(staffId);
+
+  const admins = await findUsersByRole("admin");
+  for (const admin of admins) {
+    recipients.add(String(admin._id));
+  }
+
+  await Promise.all(
+    Array.from(recipients).map((recipientId) =>
+      createNotification({
+        recipient: recipientId,
+        sender:    student?._id || null,
+        type:      "complaint_rated",
+        title:     `Feedback Received (${rating}/5 ★)`,
+        message:   `${student?.name || "Student"} rated "${complaint.title}" ${rating}/5 stars.`,
+        complaint: complaint._id,
+        app,
+      })
+    )
+  );
+};
+
+// ── Campus-Wide Broadcast: Found Item Posted ──────────────
+const notifyCampusFoundItemPosted = async (item, finder, app = null) => {
+  const finderId = Number(finder?.id || finder?._id || 0);
+  const recipientIds = await getAllActiveUserIds(finderId || undefined);
+  if (!recipientIds.length) return 0;
+
+  const title = `Found Item Posted: ${item.title}`;
+  const message = `${finder?.name || "A campus member"} found "${item.title}" near ${item.foundLocation} (${item.itemCode}). If it's yours, verify ownership in Lost & Found.`;
+
+  // Create notifications in bounded chunks so large campuses stay fast
+  const CHUNK_SIZE = 25;
+  for (let i = 0; i < recipientIds.length; i += CHUNK_SIZE) {
+    const chunk = recipientIds.slice(i, i + CHUNK_SIZE);
+    await Promise.all(
+      chunk.map((recipientId) =>
+        createNotification({
+          recipient: recipientId,
+          sender: finderId || null,
+          type: "lost_found_posted",
+          title,
+          message,
+          app,
+        })
+      )
+    );
+  }
+
+  return recipientIds.length;
+};
+
+// ── Notify Finder (+ Admins if Desk Custody) on Claim ─────
+const notifyLostFoundClaimSubmitted = async (item, claimant, app = null) => {
+  const recipients = new Set([String(item.finderId)]);
+  if (item.custodyType === "security_desk" || item.custodyType === "admin_office") {
+    const admins = await findUsersByRole("admin");
+    admins.forEach((a) => recipients.add(String(a._id)));
+  }
+
+  const claimantId = String(claimant?.id || claimant?._id || "");
+  recipients.delete(claimantId);
+
+  await Promise.all(
+    Array.from(recipients).map((recipientId) =>
+      createNotification({
+        recipient: recipientId,
+        sender: claimantId || null,
+        type: "lost_found_claim_submitted",
+        title: `New Claim Appeal (${item.itemCode})`,
+        message: `${claimant?.name || "A user"} submitted an ownership verification appeal for "${item.title}". Review their answer before approving.`,
+        app,
+      })
+    )
+  );
+};
+
+// ── Notify Claimant & Escalate Fraud Strikes to Admins ────
+const notifyLostFoundClaimDecision = async ({
+  decision,
+  item,
+  claim,
+  reviewer,
+  handoverCode,
+  claimantFraudStrikes = 0,
+  reviewNote = "",
+  app = null,
+}) => {
+  const reviewerId = reviewer?.id || reviewer?._id || null;
+
+  if (decision === "approve") {
+    await createNotification({
+      recipient: claim.claimantId,
+      sender: reviewerId,
+      type: "lost_found_claim_approved",
+      title: `Ownership Verified (${item.itemCode})`,
+      message: `Your claim for "${item.title}" was approved! Open Lost & Found to view your private Handover Pickup Code (${handoverCode}) and collect your item.`,
+      app,
+    });
+    return;
+  }
+
+  if (decision === "flag_fraud") {
+    const claimant = await findUserById(claim.claimantId);
+    const admins = await findUsersByRole("admin");
+
+    await Promise.all([
+      createNotification({
+        recipient: claim.claimantId,
+        sender: reviewerId,
+        type: "lost_found_fraud_alert",
+        title: `Claim Flagged as False Appeal (${item.itemCode})`,
+        message: `Your claim for "${item.title}" was flagged as fraudulent (Strike ${claimantFraudStrikes}/2). Reason: ${reviewNote || "Failed ownership verification."}`,
+        app,
+      }),
+      ...admins.map((admin) =>
+        createNotification({
+          recipient: admin._id,
+          sender: reviewerId,
+          type: "lost_found_fraud_alert",
+          title: `Fraudulent Claim Flagged (${item.itemCode})`,
+          message: `${claimant?.name || "A user"} (${claimant?.email || "N/A"}) was flagged for a false claim on "${item.title}" (Total Strikes: ${claimantFraudStrikes}). Note: ${reviewNote || "No note"}`,
+          app,
+        })
+      ),
+    ]);
+    return;
+  }
+
+  await createNotification({
+    recipient: claim.claimantId,
+    sender: reviewerId,
+    type: "lost_found_claim_rejected",
+    title: `Claim Not Approved (${item.itemCode})`,
+    message: `Your claim for "${item.title}" was not approved. Reason: ${reviewNote || "Verification details did not match."}`,
+    app,
+  });
+};
+
+// ── Notify Both Parties on Verified Physical Handover ─────
+const notifyLostFoundHandoverCompleted = async (item, approvedClaim, verifier, app = null) => {
+  const verifierId = verifier?.id || verifier?._id || null;
+  const tasks = [];
+
+  if (approvedClaim?.claimantId) {
+    tasks.push(
+      createNotification({
+        recipient: approvedClaim.claimantId,
+        sender: verifierId,
+        type: "lost_found_handover_completed",
+        title: `Item Returned (${item.itemCode})`,
+        message: `Physical handover of "${item.title}" was confirmed via pickup code. Thank you for using Campus Lost & Found!`,
+        app,
+      })
+    );
+  }
+
+  if (item.finderId && String(item.finderId) !== String(verifierId)) {
+    tasks.push(
+      createNotification({
+        recipient: item.finderId,
+        sender: verifierId,
+        type: "lost_found_handover_completed",
+        title: `Handover Confirmed (${item.itemCode})`,
+        message: `"${item.title}" has been verified and returned to its rightful owner.`,
+        app,
+      })
+    );
+  }
+
+  await Promise.all(tasks);
+};
+
 module.exports = {
   createNotification,
   notifyComplaintSubmitted,
@@ -300,4 +518,10 @@ module.exports = {
   notifyComplaintRejected,
   notifyComplaintInProgress,
   notifyComplaintReassigned,
+  notifyComplaintComment,
+  notifyComplaintRated,
+  notifyCampusFoundItemPosted,
+  notifyLostFoundClaimSubmitted,
+  notifyLostFoundClaimDecision,
+  notifyLostFoundHandoverCompleted,
 };
