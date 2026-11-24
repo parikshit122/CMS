@@ -34,7 +34,7 @@
 .sc-page {
   width: 100%;
   min-height: 100%;
-  background: var(--sc-bg);
+  background: transparent;
   color: var(--sc-text);
   transition:
     background var(--sc-transition),
@@ -1130,8 +1130,8 @@
    DARK MODE OVERRIDES
    ============================================================ */
 html[data-bs-theme="dark"] .sc-page {
-  --sc-primary-alpha: rgba(99, 102, 241, 0.15);
-  --sc-primary-glow: rgba(99, 102, 241, 0.28);
+  --sc-primary-alpha: rgba(249, 115, 22, 0.15);
+  --sc-primary-glow: rgba(249, 115, 22, 0.28);
   --sc-green-alpha: rgba(16, 185, 129, 0.14);
   --sc-yellow-alpha: rgba(245, 158, 11, 0.14);
   --sc-red-alpha: rgba(239, 68, 68, 0.14);

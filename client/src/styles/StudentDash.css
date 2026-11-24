@@ -1,32 +1,216 @@
-/* StudentDash.css - Modern Bento Grid & Neon Styling */
+/* StudentDash.css - Ember Forge Bento Grid & Responsive Styling */
 .student-container-bento {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 24px;
 }
 
 .student-header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.student-dash-loading {
+  color: var(--text-secondary);
+  padding: 48px 16px;
+  text-align: center;
+  font-size: 15px;
 }
 
 .submit-neon-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  background: var(--neon-green);
-  color: #0a0e1a;
-  padding: 12px 24px;
+  background: linear-gradient(135deg, var(--neon-orange, #f97316), #ea580c);
+  color: #ffffff;
+  padding: 12px 22px;
   border-radius: 14px;
+  font-size: 14px;
   font-weight: 700;
   text-decoration: none;
-  box-shadow: 0 0 20px rgba(0, 255, 136, 0.4);
-  transition: all 0.25s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-shadow: 0 10px 24px rgba(249, 115, 22, 0.32);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
 }
 
 .submit-neon-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 0 30px rgba(0, 255, 136, 0.6);
-  color: #0a0e1a;
+  box-shadow: 0 14px 28px rgba(249, 115, 22, 0.44);
+  filter: brightness(1.04);
+  color: #ffffff;
+}
+
+/* KPI 4-Column Grid */
+.student-container-bento .kpi-bento-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+}
+
+/* Charts 2-Column Grid */
+.student-container-bento .charts-bento-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+/* Recent Activity List */
+.student-activity-card {
+  padding: 24px;
+}
+
+.student-activity-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.student-activity-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.student-activity-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--neon-orange);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.student-activity-link:hover {
+  text-decoration: underline;
+}
+
+.student-activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.student-activity-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.student-activity-item:hover {
+  border-color: rgba(249, 115, 22, 0.45);
+  transform: translateY(-1px);
+}
+
+.student-activity-item__left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.student-activity-item__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(249, 115, 22, 0.12);
+  color: var(--neon-orange);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.student-activity-item__name {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.student-activity-item__meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.student-activity-item__status {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--neon-orange);
+  flex-shrink: 0;
+}
+
+.student-chart-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+}
+
+.student-chart-sub {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin: 0 0 20px;
+}
+
+.student-chart-empty {
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+  padding: 24px 16px;
+  color: var(--text-muted);
+  border: 1px dashed var(--border-color);
+  border-radius: 14px;
+}
+
+.student-chart-empty p {
+  margin: 0;
+  font-size: 13px;
+  max-width: 300px;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 1100px) {
+  .student-container-bento .kpi-bento-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .student-container-bento .charts-bento-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .student-container-bento .kpi-bento-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .submit-neon-btn {
+    width: 100%;
+  }
 }

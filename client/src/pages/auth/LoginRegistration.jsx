@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import Button from "../../components/common/Button";
 import { useAlert } from "../../components/common/Alert";
@@ -10,6 +10,12 @@ import AuthMotionBackground from "../../components/auth/AuthMotionBackground";
 import "../../styles/Login.css";
 import "boxicons/css/boxicons.min.css";
 import use3DTilt from "../../hooks/use3DTilt";
+import {
+  getRoleRedirect,
+  validateLoginInput,
+  validateRegisterInput,
+  getSocialAuthErrorMessage,
+} from "../../utils/authValidation";
 
 import { signInWithPopup, getRedirectResult } from "firebase/auth";
 
@@ -28,19 +34,6 @@ const devLog = (...args) => {
   if (isDev) console.log(...args);
 };
 
-const getRoleRedirect = (role) => {
-  const r = role?.toLowerCase();
-  if (r === "admin") return "/admin";
-  if (r === "staff") return "/staff";
-  return "/dashboard";
-};
-
-// ✅ Sanitize input before sending to API
-const sanitizeInput = (value) => {
-  if (typeof value !== "string") return value;
-  return value.trim().replace(/[<>]/g, "");
-};
-
 const SOCIAL_PROVIDERS = ["google", "github", "twitter", "facebook"];
 
 const PROVIDER_LABELS = {
@@ -53,7 +46,7 @@ const PROVIDER_LABELS = {
 const REDIRECT_PROVIDER_KEY = "auth_redirect_provider";
 const REDIRECT_PROCESSED_KEY = "auth_redirect_processed";
 
-function SocialButtons({ onSocialClick, loading }) {
+function SocialButtons({ onSocialClick, loading, disabledTab }) {
   return (
     <div
       className="social-icons"
@@ -67,6 +60,7 @@ function SocialButtons({ onSocialClick, loading }) {
           className="social-btn"
           onClick={() => onSocialClick(provider)}
           disabled={loading}
+          tabIndex={disabledTab ? -1 : 0}
           aria-label={PROVIDER_LABELS[provider]}
           title={PROVIDER_LABELS[provider]}
         >
@@ -86,6 +80,8 @@ function Login() {
     phone: "",
     password: "",
   });
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [suspensionData, setSuspensionData] = useState(null);
 
@@ -94,136 +90,22 @@ function Login() {
   const navigate = useNavigate();
   const location = useLocation();
   const alert = useAlert();
-  const { login } = useAuth();
+  const { user: currentUser, loading: authLoading, login } = useAuth();
   const tiltRef = use3DTilt({ max: 15, scale: 1.02 });
+
+  // Redirect already authenticated users away from /auth
+  useEffect(() => {
+    if (!authLoading && currentUser && !suspensionData) {
+      navigate(getRoleRedirect(currentUser.role), { replace: true });
+    }
+  }, [authLoading, currentUser, suspensionData, navigate]);
 
   useEffect(() => {
     const panel = location.state?.panel;
     setIsActive(panel === "register");
   }, [location.state]);
 
-  useEffect(() => {
-    let mounted = true;
-
-    const processSocialLogin = async (user, providerName) => {
-      try {
-        setLoading(true);
-
-        const firebaseEmail = user.email || user.providerData?.[0]?.email || "";
-        const firebaseName =
-          user.displayName || user.providerData?.[0]?.displayName || "";
-        const firebaseAvatar =
-          user.photoURL || user.providerData?.[0]?.photoURL || "";
-
-        if (!firebaseEmail) {
-          alert.error("Email not shared. Please try another method.");
-          await auth.signOut().catch(() => {});
-          return;
-        }
-
-        // ✅ Don't log the actual token
-        devLog("🔑 Getting ID token...");
-        const idToken = await user.getIdToken(true);
-        devLog("✅ Got token successfully");
-
-        const response = await API.post("/auth/social-login", {
-          idToken,
-          email: firebaseEmail,
-          name: firebaseName,
-          avatar: firebaseAvatar,
-          provider: providerName,
-        });
-
-        try {
-          await auth.signOut();
-        } catch (signOutErr) {
-          devLog("Sign out warning:", signOutErr);
-        }
-
-        if (response.data.success && mounted) {
-          const { accessToken, refreshToken, user: userData } = response.data;
-          login(userData, accessToken, refreshToken);
-          alert.success("Login successful");
-          navigate(getRoleRedirect(userData.role), { replace: true });
-        }
-      } catch (err) {
-        devLog("❌ Process error:", err);
-
-        try {
-          await auth.signOut();
-        } catch (e) {}
-
-        const status = err?.response?.status;
-        const message = err?.response?.data?.message;
-
-        if (status === 404) {
-          alert.error("Account not registered. Please register first.");
-        } else if (message) {
-          alert.error(message);
-        } else {
-          alert.error("Login failed. Please try again.");
-        }
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    const handleRedirectResult = async () => {
-      if (redirectHandledRef.current) return;
-
-      const alreadyProcessed = localStorage.getItem(REDIRECT_PROCESSED_KEY);
-      if (alreadyProcessed) {
-        localStorage.removeItem(REDIRECT_PROCESSED_KEY);
-        if (auth) await auth.signOut().catch(() => {});
-        return;
-      }
-
-      redirectHandledRef.current = true;
-
-      try {
-        await authReady;
-
-        if (!auth) return;
-
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-
-        const result = await getRedirectResult(auth);
-        const providerName =
-          localStorage.getItem(REDIRECT_PROVIDER_KEY) || "google";
-
-        if (result?.user && mounted) {
-          localStorage.setItem(REDIRECT_PROCESSED_KEY, "true");
-          localStorage.removeItem(REDIRECT_PROVIDER_KEY);
-          await processSocialLogin(result.user, providerName);
-        } else if (auth.currentUser && mounted) {
-          const hasFlag = localStorage.getItem(REDIRECT_PROVIDER_KEY);
-          if (hasFlag) {
-            localStorage.setItem(REDIRECT_PROCESSED_KEY, "true");
-            localStorage.removeItem(REDIRECT_PROVIDER_KEY);
-            await processSocialLogin(auth.currentUser, providerName);
-          }
-        }
-      } catch (err) {
-        devLog("❌ Redirect handler error:", err?.code);
-      }
-    };
-
-    handleRedirectResult();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const handleBack = () => navigate("/");
-
-  const handleLoginChange = (e) =>
-    setLoginData({ ...loginData, [e.target.name]: e.target.value });
-
-  const handleRegisterChange = (e) =>
-    setRegisterData({ ...registerData, [e.target.name]: e.target.value });
-
-  const checkSuspension = (errorResponse, attemptedEmail) => {
+  const checkSuspension = useCallback((errorResponse, attemptedEmail) => {
     if (errorResponse?.status === 403 && errorResponse?.data?.suspendedUntil) {
       setSuspensionData({
         email: attemptedEmail,
@@ -233,7 +115,114 @@ function Login() {
       return true;
     }
     return false;
-  };
+  }, []);
+
+  const exchangeFirebaseUser = useCallback(
+    async (firebaseUser, providerName) => {
+      const firebaseEmail =
+        firebaseUser.email || firebaseUser.providerData?.[0]?.email || "";
+      const firebaseName =
+        firebaseUser.displayName ||
+        firebaseUser.providerData?.[0]?.displayName ||
+        "";
+
+      if (!firebaseEmail) {
+        alert.error(
+          `${providerName} did not share your email address. Please ensure your email is verified or try another method.`,
+        );
+        await auth?.signOut().catch(() => {});
+        return;
+      }
+
+      try {
+        const idToken = await firebaseUser.getIdToken(true);
+        const response = await API.post("/auth/social-login", {
+          idToken,
+          name: firebaseName,
+        });
+
+        await auth?.signOut().catch(() => {});
+
+        if (response.data.success) {
+          const { accessToken, refreshToken, user, isNewUser } = response.data;
+          login(user, accessToken, refreshToken);
+          alert.success(
+            isNewUser ? "Account created and logged in!" : "Login successful!",
+          );
+          navigate(getRoleRedirect(user.role), { replace: true });
+        }
+      } catch (err) {
+        devLog("❌ Social token exchange error:", err?.code || err?.response?.status);
+        await auth?.signOut().catch(() => {});
+
+        if (checkSuspension(err?.response, firebaseEmail)) return;
+
+        const message = getSocialAuthErrorMessage(
+          err,
+          providerName,
+          firebaseEmail,
+        );
+        if (message) alert.error(message);
+      }
+    },
+    [alert, checkSuspension, login, navigate],
+  );
+
+  // Only inspect pending Firebase redirect results when a redirect flag exists
+  useEffect(() => {
+    let mounted = true;
+
+    const handleRedirectResult = async () => {
+      if (redirectHandledRef.current) return;
+      redirectHandledRef.current = true;
+
+      const alreadyProcessed = localStorage.getItem(REDIRECT_PROCESSED_KEY);
+      if (alreadyProcessed) {
+        localStorage.removeItem(REDIRECT_PROCESSED_KEY);
+        if (auth) await auth.signOut().catch(() => {});
+        return;
+      }
+
+      const pendingProvider = localStorage.getItem(REDIRECT_PROVIDER_KEY);
+      if (!pendingProvider) return;
+
+      try {
+        await authReady;
+        if (!auth || !mounted) return;
+
+        setLoading(true);
+        const result = await getRedirectResult(auth);
+        localStorage.removeItem(REDIRECT_PROVIDER_KEY);
+
+        const targetUser = result?.user || auth.currentUser;
+        if (targetUser && mounted) {
+          localStorage.setItem(REDIRECT_PROCESSED_KEY, "true");
+          await exchangeFirebaseUser(targetUser, pendingProvider);
+        }
+      } catch (err) {
+        devLog("❌ Redirect handler error:", err?.code);
+        localStorage.removeItem(REDIRECT_PROVIDER_KEY);
+        const msg = getSocialAuthErrorMessage(err, pendingProvider);
+        if (msg && mounted) alert.error(msg);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    handleRedirectResult();
+
+    return () => {
+      mounted = false;
+    };
+  }, [alert, exchangeFirebaseUser]);
+
+  const handleBack = () => navigate("/");
+
+  const handleLoginChange = (e) =>
+    setLoginData({ ...loginData, [e.target.name]: e.target.value });
+
+  const handleRegisterChange = (e) =>
+    setRegisterData({ ...registerData, [e.target.name]: e.target.value });
 
   const handleSocialLogin = async (providerName) => {
     devLog("🔴 handleSocialLogin called:", providerName);
@@ -255,86 +244,15 @@ function Login() {
     const provider = providers[providerName];
     if (!provider) return;
 
-    let firebaseEmail = "";
-
     try {
       setLoading(true);
-
-      let result;
-      try {
-        result = await signInWithPopup(auth, provider);
-      } catch (popupErr) {
-        if (
-          popupErr.code === "auth/popup-closed-by-user" ||
-          popupErr.code === "auth/cancelled-popup-request"
-        ) {
-          return;
-        }
-        if (popupErr.code === "auth/popup-blocked") {
-          alert.error("Popup blocked! Please allow popups for this site.");
-          return;
-        }
-        throw popupErr;
-      }
-
-      firebaseEmail =
-        result.user.email || result.user.providerData?.[0]?.email || "";
-      const firebaseName =
-        result.user.displayName || result.user.providerData?.[0]?.displayName ||
-        "";
-      const firebaseAvatar =
-        result.user.photoURL || result.user.providerData?.[0]?.photoURL || "";
-
-      if (!firebaseEmail) {
-        alert.error(
-          `${providerName} did not share your email. Please try another method.`,
-        );
-        await auth.signOut().catch(() => {});
-        return;
-      }
-
-      const idToken = await result.user.getIdToken(true);
-
-      const response = await API.post("/auth/social-login", {
-        idToken,
-        email: firebaseEmail,
-        name: firebaseName,
-        avatar: firebaseAvatar,
-        provider: providerName,
-      });
-
-      await auth.signOut().catch(() => {});
-
-      if (response.data.success) {
-        const { accessToken, refreshToken, user } = response.data;
-        login(user, accessToken, refreshToken);
-        alert.success("Login successful");
-        navigate(getRoleRedirect(user.role), { replace: true });
-      }
+      const result = await signInWithPopup(auth, provider);
+      await exchangeFirebaseUser(result.user, providerName);
     } catch (err) {
-      devLog("❌ Social login error:", err?.code);
-
+      devLog("❌ Social popup error:", err?.code);
       await auth.signOut().catch(() => {});
-
-      const status = err?.response?.status;
-      const message = err?.response?.data?.message;
-
-      const isSuspended = checkSuspension(err.response, firebaseEmail);
-      if (isSuspended) return;
-
-      if (status === 404) {
-        alert.error(
-          `${firebaseEmail} is not registered. Please register first.`,
-        );
-        return;
-      }
-
-      if (err.code === "ERR_NETWORK" || err.message === "Network Error") {
-        alert.error("Network error. Please check your internet connection.");
-        return;
-      }
-
-      alert.error(message || "Social login failed. Please try again.");
+      const message = getSocialAuthErrorMessage(err, providerName);
+      if (message) alert.error(message);
     } finally {
       setLoading(false);
     }
@@ -343,27 +261,13 @@ function Login() {
   const handleLogin = async (e) => {
     e.preventDefault();
 
-    const { email, password } = loginData;
-
-    if (!email) {
-      alert.error("Please enter your email address.");
+    const validation = validateLoginInput(loginData);
+    if (!validation.valid) {
+      alert.error(validation.error);
       return;
     }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      alert.error("Please enter a valid email address.");
-      return;
-    }
-
-    if (!password) {
-      alert.error("Please enter your password.");
-      return;
-    }
-
-    const sanitizedData = {
-      email: sanitizeInput(email),
-      password: password,
-    };
+    const sanitizedData = validation.sanitized;
 
     setLoading(true);
     try {
@@ -379,16 +283,17 @@ function Login() {
     } catch (err) {
       // ✅ Redirect to verify email if not verified
       if (err.response?.data?.requiresVerification) {
-        alert.error("Please verify your email first.");
+        alert.error(
+          err.response?.data?.message || "Please verify your email first.",
+        );
         navigate("/auth/verify-email", {
-          state: { email: loginData.email },
+          state: { email: err.response?.data?.email || sanitizedData.email },
         });
         return;
       }
 
       // ✅ Check suspension
-      const isSuspended = checkSuspension(err.response, loginData.email);
-      if (isSuspended) return;
+      if (checkSuspension(err.response, sanitizedData.email)) return;
 
       // ✅ Check network error
       if (err.code === "ERR_NETWORK" || err.message === "Network Error") {
@@ -409,60 +314,13 @@ function Login() {
   const handleRegister = async (e) => {
     e.preventDefault();
 
-    const { name, email, phone, password } = registerData;
-
-    if (!name || name.trim().length < 3) {
-      alert.error("Name must be at least 3 characters long.");
+    const validation = validateRegisterInput(registerData);
+    if (!validation.valid) {
+      alert.error(validation.error);
       return;
     }
 
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      alert.error("Please enter a valid email address.");
-      return;
-    }
-
-    if (!phone || !/^[0-9]{10}$/.test(phone)) {
-      alert.error("Phone number must be exactly 10 digits.");
-      return;
-    }
-
-    if (!password) {
-      alert.error("Password is required.");
-      return;
-    }
-
-    if (password.length < 8) {
-      alert.error("Password must be at least 8 characters long.");
-      return;
-    }
-
-    if (!/[A-Z]/.test(password)) {
-      alert.error("Password must contain at least one uppercase letter.");
-      return;
-    }
-
-    if (!/[a-z]/.test(password)) {
-      alert.error("Password must contain at least one lowercase letter.");
-      return;
-    }
-
-    if (!/\d/.test(password)) {
-      alert.error("Password must contain at least one number.");
-      return;
-    }
-
-    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
-      alert.error("Password must contain at least one special character.");
-      return;
-    }
-
-    // ✅ Sanitize before sending
-    const sanitizedData = {
-      name: sanitizeInput(name),
-      email: sanitizeInput(email),
-      phone: sanitizeInput(phone),
-      password: password, // don't sanitize passwords
-    };
+    const sanitizedData = validation.sanitized;
 
     setLoading(true);
     try {
@@ -471,7 +329,7 @@ function Login() {
         // ✅ Redirect to OTP verification page
         alert.success("Registration successful! Please verify your email.");
         navigate("/auth/verify-email", {
-          state: { email: sanitizedData.email },
+          state: { email: response.email || sanitizedData.email },
         });
       } else if (response.success) {
         const { accessToken, refreshToken, user } = response;
@@ -482,6 +340,23 @@ function Login() {
         alert.error(response.message || "Registration failed");
       }
     } catch (err) {
+      // ✅ Smoothly route unverified duplicate accounts to verification screen
+      if (err.response?.data?.requiresVerification) {
+        alert.info(
+          err.response?.data?.message ||
+            "This email is registered and waiting for verification.",
+        );
+        navigate("/auth/verify-email", {
+          state: { email: err.response?.data?.email || sanitizedData.email },
+        });
+        return;
+      }
+
+      if (err.code === "ERR_NETWORK" || err.message === "Network Error") {
+        alert.error("Cannot connect to server. Please check your connection.");
+        return;
+      }
+
       alert.error(
         err.response?.data?.message ||
           err.response?.data?.errors?.[0] ||
@@ -500,7 +375,8 @@ function Login() {
         onClick={handleBack}
         aria-label="Go back to home page"
       >
-        <i className="bx bx-arrow-back" aria-hidden="true" /> <span className="back-text">Back</span>
+        <i className="bx bx-arrow-back" aria-hidden="true" />{" "}
+        <span className="back-text">Back</span>
       </Button>
 
       <div
@@ -533,6 +409,7 @@ function Login() {
                 autoComplete="email"
                 aria-required="true"
                 maxLength={100}
+                tabIndex={isActive ? -1 : 0}
               />
               <i className="bx bxs-envelope" aria-hidden="true" />
             </div>
@@ -543,7 +420,7 @@ function Login() {
               </label>
               <input
                 id="login-password"
-                type="password"
+                type={showLoginPassword ? "text" : "password"}
                 name="password"
                 required
                 placeholder="Enter Password"
@@ -552,12 +429,29 @@ function Login() {
                 autoComplete="current-password"
                 aria-required="true"
                 maxLength={128}
+                tabIndex={isActive ? -1 : 0}
               />
-              <i className="bx bxs-lock-alt" aria-hidden="true" />
+              <button
+                type="button"
+                className="password-toggle-btn"
+                onClick={() => setShowLoginPassword((prev) => !prev)}
+                aria-label={showLoginPassword ? "Hide password" : "Show password"}
+                aria-pressed={showLoginPassword}
+                tabIndex={isActive ? -1 : 0}
+              >
+                <i
+                  className={`bx ${showLoginPassword ? "bx-hide" : "bx-show"}`}
+                  aria-hidden="true"
+                />
+              </button>
             </div>
 
             <div className="forgot-link">
-              <Link to="/auth/forgot-password" className="forgot-btn">
+              <Link
+                to="/auth/forgot-password"
+                className="forgot-btn"
+                tabIndex={isActive ? -1 : 0}
+              >
                 Forgot password?
               </Link>
             </div>
@@ -567,6 +461,7 @@ function Login() {
               className="login-btn"
               disabled={loading}
               aria-busy={loading}
+              tabIndex={isActive ? -1 : 0}
             >
               {loading ? "Logging in..." : "Login"}
             </Button>
@@ -575,6 +470,7 @@ function Login() {
             <SocialButtons
               onSocialClick={handleSocialLogin}
               loading={loading}
+              disabledTab={isActive}
             />
           </form>
         </div>
@@ -597,12 +493,13 @@ function Login() {
                 type="text"
                 name="name"
                 required
-                placeholder="Enter Username"
+                placeholder="Enter Full Name"
                 value={registerData.name}
                 onChange={handleRegisterChange}
                 autoComplete="name"
                 aria-required="true"
                 maxLength={50}
+                tabIndex={isActive ? 0 : -1}
               />
               <i className="bx bxs-user" aria-hidden="true" />
             </div>
@@ -622,6 +519,7 @@ function Login() {
                 autoComplete="email"
                 aria-required="true"
                 maxLength={100}
+                tabIndex={isActive ? 0 : -1}
               />
               <i className="bx bxs-envelope" aria-hidden="true" />
             </div>
@@ -636,7 +534,7 @@ function Login() {
                 name="phone"
                 required
                 pattern="[0-9]{10}"
-                maxLength="10"
+                maxLength={10}
                 placeholder="Enter 10-digit Mobile Number"
                 value={registerData.phone}
                 onChange={(e) => {
@@ -645,6 +543,7 @@ function Login() {
                 }}
                 autoComplete="tel"
                 aria-required="true"
+                tabIndex={isActive ? 0 : -1}
               />
               <i className="bx bxs-phone" aria-hidden="true" />
             </div>
@@ -655,17 +554,32 @@ function Login() {
               </label>
               <input
                 id="reg-password"
-                type="password"
+                type={showRegisterPassword ? "text" : "password"}
                 name="password"
                 required
-                placeholder="Enter Password"
+                placeholder="Create Password (8+ chars)"
                 value={registerData.password}
                 onChange={handleRegisterChange}
                 autoComplete="new-password"
                 aria-required="true"
                 maxLength={128}
+                tabIndex={isActive ? 0 : -1}
               />
-              <i className="bx bxs-lock-alt" aria-hidden="true" />
+              <button
+                type="button"
+                className="password-toggle-btn"
+                onClick={() => setShowRegisterPassword((prev) => !prev)}
+                aria-label={
+                  showRegisterPassword ? "Hide password" : "Show password"
+                }
+                aria-pressed={showRegisterPassword}
+                tabIndex={isActive ? 0 : -1}
+              >
+                <i
+                  className={`bx ${showRegisterPassword ? "bx-hide" : "bx-show"}`}
+                  aria-hidden="true"
+                />
+              </button>
             </div>
 
             <Button
@@ -673,6 +587,7 @@ function Login() {
               className="register-btn"
               disabled={loading}
               aria-busy={loading}
+              tabIndex={isActive ? 0 : -1}
             >
               {loading ? "Registering..." : "Register"}
             </Button>
@@ -681,6 +596,7 @@ function Login() {
             <SocialButtons
               onSocialClick={handleSocialLogin}
               loading={loading}
+              disabledTab={!isActive}
             />
           </form>
         </div>

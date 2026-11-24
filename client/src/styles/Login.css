@@ -135,6 +135,39 @@ form {
   transform: translateY(-50%);
   font-size: 25px;
   color: var(--text-secondary, #9ca3af);
+  pointer-events: none;
+}
+
+.input-box .password-toggle-btn {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  padding: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary, #9ca3af);
+  border-radius: 6px;
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.input-box .password-toggle-btn:hover,
+.input-box .password-toggle-btn:focus-visible {
+  color: var(--neon-orange, #f97316);
+  background: rgba(249, 115, 22, 0.12);
+  outline: none;
+}
+
+.input-box .password-toggle-btn i {
+  position: static;
+  transform: none;
+  font-size: 22px;
+  color: inherit;
+  pointer-events: none;
 }
 
 /* Forgot Link */

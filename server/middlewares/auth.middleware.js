@@ -5,6 +5,7 @@ const {
   findUserById,
   getOrCreateFirebaseUser,
 } = require("../../src/db/users.ts");
+const { normalizeSocialProvider } = require("../../src/lib/auth-helpers.ts");
 
 // ── Token blacklist ───────────────────────────────────────
 const tokenBlacklist = new Map();
@@ -77,13 +78,20 @@ const protect = async (req, res, next) => {
               email: decodedFirebase.email,
               name: decodedFirebase.name,
               avatar: decodedFirebase.picture,
-              provider:
-                decodedFirebase.firebase?.sign_in_provider?.replace(".com", "") ||
-                "google",
+              provider: normalizeSocialProvider(
+                decodedFirebase.firebase?.sign_in_provider
+              ),
+              emailVerified: Boolean(decodedFirebase.email_verified),
             });
             user = syncedUser;
           }
-        } catch {
+        } catch (firebaseErr) {
+          if (firebaseErr?.code === "UNVERIFIED_SOCIAL_EMAIL") {
+            return res.status(403).json({
+              success: false,
+              message: firebaseErr.message,
+            });
+          }
           return res.status(401).json({
             success: false,
             message: "Invalid token. Please login again.",
@@ -175,4 +183,15 @@ const invalidateToken = (token) => {
   }
 };
 
-module.exports = { protect, authorize, invalidateToken };
+const isTokenInvalidated = (token) => {
+  if (!token || typeof token !== "string") return false;
+  const expiresAt = tokenBlacklist.get(token);
+  if (!expiresAt) return false;
+  if (expiresAt < Date.now()) {
+    tokenBlacklist.delete(token);
+    return false;
+  }
+  return true;
+};
+
+module.exports = { protect, authorize, invalidateToken, isTokenInvalidated };

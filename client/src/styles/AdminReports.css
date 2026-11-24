@@ -1,7 +1,7 @@
 .reports-page {
-  padding: 28px;
-  background: var(--bg-primary, #f8fafc);
-  min-height: 100vh;
+  padding: 8px 0 28px;
+  background: transparent;
+  min-height: 100%;
 }
 
 .reports-header {
@@ -19,7 +19,7 @@
   gap: 6px;
   font-size: 13px;
   font-weight: 600;
-  color: #6366f1;
+  color: var(--primary-color);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 6px;

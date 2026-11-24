@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import React from "react";
+import { NavLink, useNavigate } from "react-router-dom";
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 import { useAuth } from "../../context/AuthContext";
 import "../../styles/SpatialDock.css";
@@ -36,11 +36,12 @@ const DockItem = ({ item, mouseX }) => {
 
 const SpatialDock = ({ menuItems = [] }) => {
   const { logout } = useAuth();
+  const navigate = useNavigate();
   const mouseX = useMotionValue(Infinity);
 
-  const handleLogout = () => {
-    logout();
-    window.location.href = "/";
+  const handleLogout = async () => {
+    await logout();
+    navigate("/", { replace: true });
   };
 
   return (

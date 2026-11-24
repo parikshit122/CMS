@@ -61,7 +61,7 @@ const CategoryCard = ({ icon, label, value }) => (
         <i className={icon} />
       </div>
       <div>
-        <h3 style={{ fontSize: "22px", fontWeight: 700, color: "#ffffff" }}>{value}</h3>
+        <h3 style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)" }}>{value}</h3>
         <p style={{ color: "var(--text-secondary)", fontSize: "13px" }}>
           {label?.charAt(0).toUpperCase() + label?.slice(1)}
         </p>
@@ -206,9 +206,9 @@ const AdminDashboard = () => {
           <h1 className="bento-title">System Intelligence</h1>
           <p className="bento-subtitle">Real-time analytical control and complaint telemetry</p>
         </div>
-        <div className="live-status-pill neon-badge-pulse">
-          <i className="bx bx-broadcast neon-text-green" />
-          <span>Live Metrics • {formatLastUpdated(stats.lastUpdated)}</span>
+        <div className="live-status-pill">
+          <i className="bx bx-broadcast" style={{ color: "var(--success-color)" }} aria-hidden="true" />
+          <span>Updated • {formatLastUpdated(stats.lastUpdated)}</span>
         </div>
       </div>
 
@@ -306,8 +306,8 @@ const AdminDashboard = () => {
       <div className="charts-bento-grid">
         <SpatialCard className="chart-bento-card">
           <div className="chart-glow-container">
-            <h3 style={{ fontSize: "18px", fontWeight: 700, color: "#ffffff", marginBottom: "4px" }}>
-              Weekly Workload Telemetry
+            <h3 style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "4px" }}>
+              Weekly Workload Overview
             </h3>
             <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginBottom: "20px" }}>
               Submitted vs Resolved Activity
@@ -335,7 +335,7 @@ const AdminDashboard = () => {
 
         <SpatialCard className="chart-bento-card">
           <div className="chart-glow-container">
-            <h3 style={{ fontSize: "18px", fontWeight: 700, color: "#ffffff", marginBottom: "4px" }}>
+            <h3 style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "4px" }}>
               Volume Trajectory
             </h3>
             <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginBottom: "20px" }}>
@@ -370,7 +370,7 @@ const AdminDashboard = () => {
 
       {/* Category Breakdown Section */}
       <div className="category-bento-section">
-        <h3 style={{ fontSize: "18px", fontWeight: 700, color: "#ffffff", marginBottom: "16px" }}>
+        <h3 style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "16px" }}>
           Category Distribution
         </h3>
         <div className="category-bento-grid">

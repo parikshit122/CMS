@@ -62,11 +62,7 @@ router.post(
       .matches(/^[0-9]{10}$/).withMessage("Phone must be exactly 10 digits"),
     body("password")
       .notEmpty().withMessage("Password is required")
-      .isLength({ min: 8, max: 128 }).withMessage("Password must be 8-128 characters")
-      .matches(/[a-z]/).withMessage("Password must include a lowercase letter")
-      .matches(/[A-Z]/).withMessage("Password must include an uppercase letter")
-      .matches(/[0-9]/).withMessage("Password must include a number")
-      .matches(/[!@#$%^&*(),.?":{}|<>]/).withMessage("Password must include a special character"),
+      .isLength({ max: 128 }).withMessage("Password must not exceed 128 characters"),
   ],
   validate,
   register
@@ -95,15 +91,18 @@ router.post(
 router.post("/refresh-token", refreshToken);
 router.get("/me", protect, getMe);
 
-// ✅ Logout - Blacklist token
+// ✅ Logout - Blacklist access and optional refresh token
 router.post("/logout", protect, (req, res) => {
   try {
     invalidateToken(req.token);
+    if (typeof req.body?.refreshToken === "string" && req.body.refreshToken.trim()) {
+      invalidateToken(req.body.refreshToken.trim());
+    }
     res.json({
       success: true,
       message: "Logged out successfully.",
     });
-  } catch (err) {
+  } catch {
     res.status(500).json({
       success: false,
       message: "Logout failed.",
@@ -191,11 +190,7 @@ router.post(
       .toLowerCase(),
     body("newPassword")
       .notEmpty().withMessage("New password is required")
-      .isLength({ min: 8, max: 128 }).withMessage("Password must be 8-128 characters")
-      .matches(/[a-z]/).withMessage("Must include a lowercase letter")
-      .matches(/[A-Z]/).withMessage("Must include an uppercase letter")
-      .matches(/[0-9]/).withMessage("Must include a number")
-      .matches(/[!@#$%^&*(),.?":{}|<>]/).withMessage("Must include a special character"),
+      .isLength({ max: 128 }).withMessage("Password must not exceed 128 characters"),
     body("confirmPassword")
       .notEmpty().withMessage("Please confirm your password"),
   ],

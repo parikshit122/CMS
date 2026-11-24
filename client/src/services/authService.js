@@ -19,13 +19,9 @@ export const getMe = async () => {
 };
 
 // ✅ Logout
-export const logoutUser = async () => {
-  try {
-    const response = await API.post("/auth/logout");
-    return response.data;
-  } catch (err) {
-    throw err;
-  }
+export const logoutUser = async (refreshToken) => {
+  const response = await API.post("/auth/logout", { refreshToken });
+  return response.data;
 };
 
 // ══════════════════════════════════════════

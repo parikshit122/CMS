@@ -70,17 +70,15 @@ export default function DashboardLayout({
       <header className="dynamic-island-header">
         <div className="dynamic-island-content">
           
-          <div 
+          <button
+            type="button"
             className="island-brand island-theme-toggle-left"
             onClick={toggleTheme}
-            role="button"
-            tabIndex={0}
-            style={{ cursor: "pointer" }}
             title={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode (${mac ? "⌘⇧L" : "Ctrl+Shift+L"})`}
-            aria-label="Toggle Theme"
+            aria-label={`Switch to ${theme === "dark" ? "Light" : "Dark"} Mode`}
           >
-            <i className={`bx ${theme === "dark" ? "bx-sun" : "bx-moon"} neon-text-orange`} />
-          </div>
+            <i className={`bx ${theme === "dark" ? "bx-sun" : "bx-moon"} neon-text-orange`} aria-hidden="true" />
+          </button>
 
           <button
             type="button"
@@ -110,18 +108,19 @@ export default function DashboardLayout({
 
             <NotificationBell />
             
-            <div
+            <button
+              type="button"
               className="island-avatar"
               onClick={() => navigate("/profile")}
-              role="button"
-              tabIndex={0}
+              aria-label={`Open profile (${user?.name || "Account"})`}
+              title={`Profile — ${user?.name || "Account"}`}
             >
               {user?.avatar ? (
                 <img src={user.avatar} alt={user?.name || "User"} />
               ) : (
                 <span>{(user?.name || "U")[0].toUpperCase()}</span>
               )}
-            </div>
+            </button>
           </div>
         </div>
       </header>

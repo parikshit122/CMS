@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useAlert } from "../components/common/Alert";
 import { useAuth } from "../context/AuthContext";
 import API from "../services/api";
@@ -180,6 +181,14 @@ const Profile = () => {
     setIsDirty(hasFieldChanges || hasNewAvatar);
   }, [formData, originalData]);
 
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") setPopupClosed(true);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   if (!formData || !user) return null;
 
   // ── Missing fields popup ──────────────────────────────
@@ -341,38 +350,50 @@ const Profile = () => {
   // ── Render ────────────────────────────────────────────
   return (
     <div className="student-profile-page">
-      {/* ── Missing fields popup ── */}
-      {showMissingPopup && (
-        <div className="profile-missing-overlay">
-          <div className="profile-missing-modal">
-            <h3>Complete Your Profile</h3>
-            <p>The following information is missing:</p>
-            <ul>
-              {missingFields.map((field, idx) => (
-                <li key={idx}>{field}</li>
-              ))}
-            </ul>
-            <p>Please update your profile to continue.</p>
-            <div className="profile-missing-actions">
-              <button
-                className="btn-primary"
-                onClick={() => {
-                  setIsEditing(true);
-                  setPopupClosed(true);
-                }}
-              >
-                Edit Profile
-              </button>
-              <button
-                className="btn-cancel"
-                onClick={() => setPopupClosed(true)}
-              >
-                Close
-              </button>
+      {/* ── Missing fields popup (portaled to body to cover Dynamic Island & Dock cleanly) ── */}
+      {showMissingPopup &&
+        createPortal(
+          <div
+            className="profile-missing-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="profile-missing-title"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setPopupClosed(true);
+            }}
+          >
+            <div className="profile-missing-modal">
+              <h3 id="profile-missing-title">Complete Your Profile</h3>
+              <p>The following information is missing:</p>
+              <ul>
+                {missingFields.map((field, idx) => (
+                  <li key={idx}>{field}</li>
+                ))}
+              </ul>
+              <p>Please update your profile to continue.</p>
+              <div className="profile-missing-actions">
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => {
+                    setIsEditing(true);
+                    setPopupClosed(true);
+                  }}
+                >
+                  Edit Profile
+                </button>
+                <button
+                  type="button"
+                  className="btn-cancel"
+                  onClick={() => setPopupClosed(true)}
+                >
+                  Close
+                </button>
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
 
       {/* ── Header ── */}
       <div className="profile-header">
@@ -758,8 +779,8 @@ const Profile = () => {
           className="profile-card"
           style={{
             marginTop: "1.5rem",
-            background: "#f8fafc",
-            border: "1px solid #e2e8f0",
+            background: "var(--surface-card)",
+            border: "1px solid var(--border-color)",
           }}
         >
           <div
@@ -767,17 +788,17 @@ const Profile = () => {
           >
             <i
               className="bx bx-info-circle"
-              style={{ fontSize: "1.25rem", color: "#6366f1" }}
+              style={{ fontSize: "1.25rem", color: "var(--primary-color)" }}
             />
             <div>
-              <p style={{ margin: 0, fontSize: "0.875rem", fontWeight: 600 }}>
+              <p style={{ margin: 0, fontSize: "0.875rem", fontWeight: 600, color: "var(--text-primary)" }}>
                 Password managed by {user.provider}
               </p>
               <p
                 style={{
                   margin: "2px 0 0",
                   fontSize: "0.8rem",
-                  color: "#64748b",
+                  color: "var(--text-muted)",
                 }}
               >
                 Your account uses {user.provider} login. To change your

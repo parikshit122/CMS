@@ -87,6 +87,73 @@
   margin: 0 8px;
 }
 
+/* Responsive Mobile Dock (prevents horizontal clipping on 360px–768px screens) */
+@media (max-width: 768px) {
+  .spatial-dock-wrapper {
+    bottom: 12px;
+    padding: 0 8px;
+  }
+
+  .spatial-dock-container {
+    max-width: calc(100vw - 16px);
+    padding: 8px 10px;
+    border-radius: 22px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .spatial-dock-container::-webkit-scrollbar {
+    display: none;
+  }
+
+  .dock-list {
+    gap: 6px;
+  }
+
+  .dock-list-item {
+    transform: none !important;
+    flex-shrink: 0;
+  }
+
+  .dock-icon-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    font-size: 19px;
+  }
+
+  .dock-divider {
+    height: 24px;
+    margin: 0 2px;
+    flex-shrink: 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .spatial-dock-container {
+    padding: 6px 8px;
+    border-radius: 20px;
+  }
+
+  .dock-list {
+    gap: 5px;
+  }
+
+  .dock-icon-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+    font-size: 18px;
+  }
+}
+
+@media (hover: none) {
+  .dock-list-item {
+    transform: none !important;
+  }
+}
+
 /* Reduced Motion Support */
 @media (prefers-reduced-motion: reduce) {
   .dock-list-item {

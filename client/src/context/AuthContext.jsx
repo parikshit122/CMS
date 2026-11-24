@@ -35,10 +35,16 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const reloadUser = () => {
       try {
-        const stored = JSON.parse(localStorage.getItem("user"));
-        if (stored) setUser(stored);
+        const storedRaw = localStorage.getItem("user");
+        const token = localStorage.getItem("accessToken");
+        if (!storedRaw || storedRaw === "undefined" || storedRaw === "null" || !token) {
+          setUser(null);
+          return;
+        }
+        setUser(JSON.parse(storedRaw));
       } catch (err) {
         if (isDev) console.error("Failed to reload user:", err);
+        setUser(null);
       }
     };
 
@@ -69,11 +75,27 @@ export const AuthProvider = ({ children }) => {
     window.dispatchEvent(new Event("user-updated"));
   };
 
-  const logout = () => {
+  const logout = async () => {
+    const accessToken = localStorage.getItem("accessToken");
+    const refreshToken = localStorage.getItem("refreshToken");
+
+    if (accessToken) {
+      try {
+        await API.post(
+          "/auth/logout",
+          { refreshToken },
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+      } catch {
+        // Always proceed with local session cleanup even if network/token already expired
+      }
+    }
+
     localStorage.removeItem("user");
     localStorage.removeItem("accessToken");
     localStorage.removeItem("refreshToken");
     setUser(null);
+    window.dispatchEvent(new Event("user-updated"));
   };
 
   const refreshAccessToken = async () => {

@@ -44,18 +44,46 @@ export default function StudentDash() {
     fetchComplaints();
   }, []);
 
-  if (loading) return <div style={{ color: "#fff", padding: "40px" }}>Loading 3D Telemetry...</div>;
+  if (loading) return <div className="student-dash-loading">Loading your dashboard...</div>;
 
   const total = complaints.length;
   const pending = complaints.filter((c) => c.status === "pending").length;
   const inProgress = complaints.filter((c) => c.status === "in-progress").length;
   const resolved = complaints.filter((c) => c.status === "resolved").length;
 
+  const sharePct = (count) => (total > 0 ? Math.round((count / total) * 100) : undefined);
+
   const stats = [
-    { title: "My Total Submissions", value: total, trend: "up", trendValue: "100", context: "lifetime tickets", isFeatured: true },
-    { title: "Pending Review", value: pending, trend: "down", trendValue: "12", context: "in queue", isFeatured: false },
-    { title: "In Resolution", value: inProgress, trend: "up", trendValue: "45", context: "assigned to staff", isFeatured: false },
-    { title: "Resolved Issues", value: resolved, trend: "up", trendValue: "88", context: "closed tickets", isFeatured: true },
+    {
+      title: "My Total Submissions",
+      value: total,
+      context: total === 1 ? "1 lifetime ticket" : "lifetime tickets",
+      isFeatured: true,
+    },
+    {
+      title: "Pending Review",
+      value: pending,
+      trend: "down",
+      trendValue: sharePct(pending),
+      context: total > 0 ? "of total in queue" : "awaiting review",
+      isFeatured: false,
+    },
+    {
+      title: "In Resolution",
+      value: inProgress,
+      trend: "up",
+      trendValue: sharePct(inProgress),
+      context: total > 0 ? "assigned to staff" : "in progress",
+      isFeatured: false,
+    },
+    {
+      title: "Resolved Issues",
+      value: resolved,
+      trend: "up",
+      trendValue: sharePct(resolved),
+      context: total > 0 ? "resolution rate" : "closed tickets",
+      isFeatured: true,
+    },
   ];
 
   const trendMap = {};
@@ -64,33 +92,20 @@ export default function StudentDash() {
     trendMap[month] = (trendMap[month] || 0) + 1;
   });
 
-  const trendData = Object.keys(trendMap).length
-    ? Object.keys(trendMap).map((month) => ({ month, value: trendMap[month] }))
-    : [
-        { month: "Jan", value: 2 },
-        { month: "Feb", value: 5 },
-        { month: "Mar", value: 3 },
-        { month: "Apr", value: 7 },
-      ];
+  const trendData = Object.keys(trendMap).map((month) => ({ month, value: trendMap[month] }));
 
   const categoryMap = {};
   complaints.forEach((c) => {
     categoryMap[c.category] = (categoryMap[c.category] || 0) + 1;
   });
 
-  const colors = ["#f59e0b", "#e11d48", "#fcd34d", "#fbbf24", "#d97706"];
+  const colors = ["#f97316", "#e11d48", "#fbbf24", "#10b981", "#3b82f6"];
 
-  const categoryData = Object.keys(categoryMap).length
-    ? Object.keys(categoryMap).map((key, index) => ({
-        name: key,
-        value: categoryMap[key],
-        color: colors[index % colors.length],
-      }))
-    : [
-        { name: "IT", value: 4, color: "#f59e0b" },
-        { name: "Hostel", value: 3, color: "#e11d48" },
-        { name: "Academic", value: 2, color: "#fcd34d" },
-      ];
+  const categoryData = Object.keys(categoryMap).map((key, index) => ({
+    name: key,
+    value: categoryMap[key],
+    color: colors[index % colors.length],
+  }));
 
   return (
     <motion.div
@@ -106,7 +121,7 @@ export default function StudentDash() {
         </div>
 
         <Link to="/submit" className="submit-neon-btn">
-          <Plus size={18} /> Submit New Complaint
+          <Plus size={18} aria-hidden="true" /> Submit New Complaint
         </Link>
       </div>
 
@@ -114,126 +129,122 @@ export default function StudentDash() {
         {stats.map((item, index) => (
           <StatCard key={index} {...item} />
         ))}
-        <SpatialCard className="col-span-12">
-          <div style={{ padding: "24px" }}>
-            <h3 style={{ fontSize: "18px", fontWeight: 600, color: "#fff", marginBottom: "20px" }}>
-              Recent Activity
-            </h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              {complaints.length === 0 ? (
-                <p style={{ color: "var(--text-secondary)", fontSize: "14px", margin: 0 }}>
-                  No complaints submitted yet. Click &ldquo;Submit New Complaint&rdquo; to file your first request.
-                </p>
-              ) : (
-                complaints.slice(0, 3).map((c) => (
-                  <Link
-                    key={c._id}
-                    to="/my-complaints"
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "16px",
-                      padding: "16px",
-                      background: "rgba(255,255,255,0.02)",
-                      borderRadius: "12px",
-                      border: "1px solid rgba(255,255,255,0.05)",
-                      textDecoration: "none",
-                      color: "inherit",
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: "14px", minWidth: 0 }}>
-                      <div style={{ width: "40px", height: "40px", borderRadius: "10px", background: "rgba(249, 115, 22, 0.1)", color: "var(--neon-orange)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <FileText size={20} />
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, color: "#fff", fontSize: "14px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {c.title}
-                        </div>
-                        <div style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "2px" }}>
-                          {c.complaintId || `#${c._id?.slice(-6)}`} · {c.category} ·{" "}
-                          {c.createdAt ? new Date(c.createdAt).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : ""}
-                        </div>
+      </div>
+
+      <SpatialCard>
+        <div className="student-activity-card">
+          <div className="student-activity-head">
+            <h3 className="student-activity-title">Recent Activity</h3>
+            {complaints.length > 0 && (
+              <Link to="/complaints" className="student-activity-link">
+                View all ({complaints.length})
+              </Link>
+            )}
+          </div>
+          <div className="student-activity-list">
+            {complaints.length === 0 ? (
+              <p style={{ color: "var(--text-secondary)", fontSize: "14px", margin: 0 }}>
+                No complaints submitted yet. Click &ldquo;Submit New Complaint&rdquo; to file your first request.
+              </p>
+            ) : (
+              complaints.slice(0, 3).map((c) => (
+                <Link key={c._id} to="/complaints" className="student-activity-item">
+                  <div className="student-activity-item__left">
+                    <div className="student-activity-item__icon">
+                      <FileText size={20} aria-hidden="true" />
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="student-activity-item__name">{c.title}</div>
+                      <div className="student-activity-item__meta">
+                        {c.complaintId || `#${c._id?.slice(-6)}`} · {c.category} ·{" "}
+                        {c.createdAt
+                          ? new Date(c.createdAt).toLocaleDateString("en-IN", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                            })
+                          : ""}
                       </div>
                     </div>
-                    <span style={{ fontSize: "12px", fontWeight: 600, textTransform: "capitalize", color: "var(--neon-orange)", flexShrink: 0 }}>
-                      {c.status}
-                    </span>
-                  </Link>
-                ))
-              )}
-            </div>
+                  </div>
+                  <span className="student-activity-item__status">{c.status}</span>
+                </Link>
+              ))
+            )}
           </div>
-        </SpatialCard>
-      </div>
+        </div>
+      </SpatialCard>
 
       <div className="charts-bento-grid">
         <SpatialCard className="chart-bento-card">
           <div className="chart-glow-container">
-            <h3 style={{ fontSize: "18px", fontWeight: 700, color: "#ffffff", marginBottom: "4px" }}>
-              Complaint Activity History
-            </h3>
-            <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginBottom: "20px" }}>
-              Monthly submission breakdown
-            </p>
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={trendData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                <XAxis dataKey="month" stroke="var(--text-muted)" tickLine={false} />
-                <YAxis stroke="var(--text-muted)" tickLine={false} allowDecimals={false} />
-                <Tooltip
-                  contentStyle={{
-                    background: "rgba(10, 14, 26, 0.9)",
-                    border: "1px solid rgba(245, 158, 11, 0.3)",
-                    borderRadius: "12px",
-                    color: "#fff",
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#f59e0b"
-                  strokeWidth={3}
-                  dot={{ r: 4, fill: "#f59e0b" }}
-                  activeDot={{ r: 7 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            <h3 className="student-chart-title">Complaint Activity History</h3>
+            <p className="student-chart-sub">Monthly submission breakdown</p>
+            {trendData.length === 0 ? (
+              <div className="student-chart-empty">
+                <p>Monthly trends will appear here once you submit your first complaint.</p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={250}>
+                <LineChart data={trendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
+                  <XAxis dataKey="month" stroke="var(--text-muted)" tickLine={false} />
+                  <YAxis stroke="var(--text-muted)" tickLine={false} allowDecimals={false} />
+                  <Tooltip
+                    contentStyle={{
+                      background: "var(--surface-card)",
+                      border: "1px solid var(--border-color)",
+                      borderRadius: "12px",
+                      color: "var(--text-primary)",
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="value"
+                    stroke="#f97316"
+                    strokeWidth={3}
+                    dot={{ r: 4, fill: "#f97316" }}
+                    activeDot={{ r: 7 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </SpatialCard>
 
         <SpatialCard className="chart-bento-card">
           <div className="chart-glow-container">
-            <h3 style={{ fontSize: "18px", fontWeight: 700, color: "#ffffff", marginBottom: "4px" }}>
-              Issues by Category
-            </h3>
-            <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginBottom: "20px" }}>
-              Category breakdown ratio
-            </p>
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie
-                  data={categoryData}
-                  dataKey="value"
-                  innerRadius={60}
-                  outerRadius={90}
-                  stroke="none"
-                >
-                  {categoryData.map((item, index) => (
-                    <Cell key={index} fill={item.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    background: "rgba(20, 20, 28, 0.9)",
-                    border: "1px solid rgba(249, 115, 22, 0.3)",
-                    borderRadius: "12px",
-                    color: "#fff",
-                    boxShadow: "0 0 15px rgba(249, 115, 22, 0.2)",
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+            <h3 className="student-chart-title">Issues by Category</h3>
+            <p className="student-chart-sub">Category breakdown ratio</p>
+            {categoryData.length === 0 ? (
+              <div className="student-chart-empty">
+                <p>Category breakdown will update automatically as your tickets are logged.</p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie
+                    data={categoryData}
+                    dataKey="value"
+                    innerRadius={60}
+                    outerRadius={90}
+                    stroke="none"
+                  >
+                    {categoryData.map((item, index) => (
+                      <Cell key={index} fill={item.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      background: "var(--surface-card)",
+                      border: "1px solid var(--border-color)",
+                      borderRadius: "12px",
+                      color: "var(--text-primary)",
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </SpatialCard>
       </div>

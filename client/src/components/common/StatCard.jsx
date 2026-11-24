@@ -14,37 +14,39 @@ const StatCard = ({ title, value, trend, trendValue, context, isFeatured = false
           {title}
         </p>
 
-        <h2 style={{ fontSize: "36px", fontWeight: 700, margin: "10px 0", color: "#ffffff" }}>
+        <h2 style={{ fontSize: "34px", fontWeight: 700, margin: "8px 0 10px", color: "var(--text-primary)" }}>
           {!isNaN(numericVal) ? <CountUp end={numericVal} /> : value}
         </h2>
 
-        {trendValue !== undefined && (
-          <div className="stat-footer" style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px" }}>
-            <span
-              className={`stat-trend ${isUp ? "up" : "down"}`}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "2px",
-                padding: "2px 8px",
-                borderRadius: "20px",
-                fontWeight: 600,
-                background: isUp ? "rgba(249, 115, 22, 0.15)" : "rgba(225, 29, 72, 0.15)",
-                color: isUp ? "var(--neon-orange)" : "var(--neon-rose)",
-                boxShadow: isUp ? "0 0 10px rgba(249, 115, 22, 0.2)" : "none",
-              }}
-            >
-              {isUp ? (
-                <ArrowUpRight size={15} strokeWidth={2.5} />
-              ) : (
-                <ArrowDownRight size={15} strokeWidth={2.5} />
-              )}
-              {isUp ? "+" : ""}
-              {trendValue}%
-            </span>
-            <span className="stat-context" style={{ color: "var(--text-muted)" }}>
-              {context}
-            </span>
+        {(trendValue !== undefined || context) && (
+          <div className="stat-footer" style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "8px", fontSize: "13px" }}>
+            {trendValue !== undefined && (
+              <span
+                className={`stat-trend ${isUp ? "up" : "down"}`}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "2px",
+                  padding: "2px 8px",
+                  borderRadius: "20px",
+                  fontWeight: 600,
+                  background: isUp ? "rgba(249, 115, 22, 0.15)" : "rgba(225, 29, 72, 0.15)",
+                  color: isUp ? "var(--neon-orange)" : "var(--neon-rose)",
+                }}
+              >
+                {isUp ? (
+                  <ArrowUpRight size={15} strokeWidth={2.5} aria-hidden="true" />
+                ) : (
+                  <ArrowDownRight size={15} strokeWidth={2.5} aria-hidden="true" />
+                )}
+                {trendValue}%
+              </span>
+            )}
+            {context && (
+              <span className="stat-context" style={{ color: "var(--text-muted)" }}>
+                {context}
+              </span>
+            )}
           </div>
         )}
       </div>

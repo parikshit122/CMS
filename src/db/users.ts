@@ -2,6 +2,11 @@ import bcrypt from "bcryptjs";
 import { and, count, desc, eq, ne, sql } from "drizzle-orm";
 import { db } from "./index.ts";
 import { complaints, users } from "./schema.ts";
+import {
+  canLinkSocialAccount,
+  normalizeSocialProvider,
+  sanitizeAvatarUrl,
+} from "../lib/auth-helpers.ts";
 
 export type UserRow = typeof users.$inferSelect;
 export type NewUserRow = typeof users.$inferInsert;
@@ -189,14 +194,63 @@ export async function getOrCreateFirebaseUser(params: {
   name?: string;
   avatar?: string;
   provider?: string;
+  emailVerified?: boolean;
 }) {
   try {
     const normalizedEmail = params.email.toLowerCase().trim();
     const displayName = (params.name || normalizedEmail.split("@")[0] || "User").trim();
-    const provider = params.provider || "google";
-    const isInitialAdmin = normalizedEmail === INITIAL_ADMIN_EMAIL;
+    const provider = normalizeSocialProvider(params.provider);
+    const safeAvatar = sanitizeAvatarUrl(params.avatar);
+    const emailVerified = Boolean(params.emailVerified);
+    const isInitialAdmin = normalizedEmail === INITIAL_ADMIN_EMAIL && emailVerified;
 
-    // First check if an existing account with this email exists (e.g. pre-created admin/staff/local)
+    // 1. Check by Firebase UID first so returning users never report created=true
+    if (params.uid) {
+      const existingByUid = await db
+        .select()
+        .from(users)
+        .where(eq(users.uid, params.uid))
+        .limit(1);
+
+      if (existingByUid[0]) {
+        const existing = existingByUid[0];
+        let nextEmail = existing.email;
+
+        if (normalizedEmail && normalizedEmail !== existing.email && emailVerified) {
+          const emailOwner = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(and(eq(users.email, normalizedEmail), ne(users.id, existing.id)))
+            .limit(1);
+          if (!emailOwner[0]) {
+            nextEmail = normalizedEmail;
+          }
+        }
+
+        const nextRole =
+          nextEmail === INITIAL_ADMIN_EMAIL && emailVerified ? "admin" : existing.role;
+
+        const updated = await db
+          .update(users)
+          .set({
+            email: nextEmail,
+            role: nextRole,
+            isEmailVerified: existing.isEmailVerified || emailVerified,
+            avatar: existing.avatar || safeAvatar,
+            lastLoginAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, existing.id))
+          .returning();
+
+        return {
+          user: serializeUser(updated[0], { includeSensitive: true }),
+          created: false,
+        };
+      }
+    }
+
+    // 2. Check if an existing account with this email exists (e.g. pre-created admin/staff/local)
     const existingByEmail = await db
       .select()
       .from(users)
@@ -205,6 +259,18 @@ export async function getOrCreateFirebaseUser(params: {
 
     if (existingByEmail[0]) {
       const existing = existingByEmail[0];
+      const linkDecision = canLinkSocialAccount({
+        existingUid: existing.uid,
+        incomingUid: params.uid,
+        emailVerified,
+      });
+
+      if (!linkDecision.allowed) {
+        const linkError = new Error(linkDecision.reason) as Error & { code?: string };
+        linkError.code = "UNVERIFIED_SOCIAL_EMAIL";
+        throw linkError;
+      }
+
       const nextRole = isInitialAdmin ? "admin" : existing.role;
       const updated = await db
         .update(users)
@@ -212,16 +278,20 @@ export async function getOrCreateFirebaseUser(params: {
           uid: existing.uid || params.uid,
           role: nextRole,
           isEmailVerified: true,
-          avatar: existing.avatar || params.avatar || "",
+          avatar: existing.avatar || safeAvatar,
           lastLoginAt: new Date(),
           updatedAt: new Date(),
         })
         .where(eq(users.id, existing.id))
         .returning();
-      return { user: serializeUser(updated[0], { includeSensitive: true }), created: false };
+
+      return {
+        user: serializeUser(updated[0], { includeSensitive: true }),
+        created: false,
+      };
     }
 
-    // Concurrency-safe upsert keyed on Firebase Auth UID
+    // 3. Concurrency-safe insert keyed on Firebase Auth UID
     const rows = await db
       .insert(users)
       .values({
@@ -230,23 +300,32 @@ export async function getOrCreateFirebaseUser(params: {
         email: normalizedEmail,
         role: isInitialAdmin ? "admin" : "user",
         provider,
-        avatar: params.avatar || "",
-        isEmailVerified: true,
+        avatar: safeAvatar,
+        isEmailVerified: emailVerified,
         isActive: true,
         lastLoginAt: new Date(),
       })
       .onConflictDoUpdate({
         target: users.uid,
         set: {
-          email: normalizedEmail,
           lastLoginAt: new Date(),
           updatedAt: new Date(),
         },
       })
       .returning();
 
-    return { user: serializeUser(rows[0], { includeSensitive: true }), created: true };
+    const row = rows[0];
+    const wasJustCreated =
+      row && Math.abs(row.createdAt.getTime() - row.updatedAt.getTime()) < 2000;
+
+    return {
+      user: serializeUser(row, { includeSensitive: true }),
+      created: Boolean(wasJustCreated),
+    };
   } catch (error) {
+    if ((error as { code?: string })?.code === "UNVERIFIED_SOCIAL_EMAIL") {
+      throw error;
+    }
     throw wrapDbError("getOrCreateFirebaseUser", error);
   }
 }

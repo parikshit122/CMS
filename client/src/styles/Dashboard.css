@@ -40,6 +40,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
 }
 
 .island-search {
@@ -107,10 +111,14 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
+  border: none;
   padding: 2px;
   background: linear-gradient(135deg, var(--neon-orange), var(--neon-rose));
   cursor: pointer;
   box-shadow: 0 0 10px var(--neon-orange-glow);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .island-avatar img, .island-avatar span {

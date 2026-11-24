@@ -19,6 +19,7 @@
   --neon-rose-glow: rgba(225, 29, 72, 0.35);
   --neon-gold: #fbbf24;
   --neon-gold-glow: rgba(251, 191, 36, 0.35);
+  --neon-green: #10b981;
 
   /* Functional Status Colors */
   --primary-color: #f97316;
@@ -28,6 +29,11 @@
   --warning-color: #f59e0b;
   --danger-color: #ef4444;
   
+  /* Legacy token aliases used across Profile, Notifications, Submit & Reports */
+  --surface-color: var(--surface-card);
+  --bg-color: var(--bg-primary);
+  --active-bg: rgba(249, 115, 22, 0.12);
+
   /* Crisper Text Colors for High Contrast Spatial UI */
   --text-primary: #ffffff;
   --text-secondary: #d1d5db;
@@ -62,6 +68,9 @@ html[data-theme="light"] {
   --surface-glass: rgba(255, 255, 255, 0.88);
   --surface-glass-border: rgba(0, 0, 0, 0.1);
   --surface-glass-top-border: rgba(0, 0, 0, 0.15);
+  --surface-color: #ffffff;
+  --bg-color: #f8fafc;
+  --active-bg: rgba(249, 115, 22, 0.08);
   
   --text-primary: #0f172a;
   --text-secondary: #334155;
@@ -167,15 +176,75 @@ html[data-theme="light"] i:not([class*="neon-"]):not(.stat-icon):not(.ready-icon
   color: var(--text-secondary);
 }
 
+/* Preserve inherited icon colors inside primary/status buttons, active dock items, and badges */
+html[data-bs-theme="light"] :is(
+  .lf-btn-primary,
+  .lf-btn-danger,
+  .lf-btn-success,
+  .btn-primary,
+  .btn-save,
+  .btn-cancel,
+  .submit-neon-btn,
+  .reports-btn--primary,
+  .sc-btn--primary,
+  .sc-btn--submit,
+  .dock-icon-btn.active,
+  .dock-icon-btn.logout,
+  .avatar-upload-btn,
+  .cs-sla,
+  .cs-rating-score,
+  .lf-code-pill
+) i,
+html[data-theme="light"] :is(
+  .lf-btn-primary,
+  .lf-btn-danger,
+  .lf-btn-success,
+  .btn-primary,
+  .btn-save,
+  .btn-cancel,
+  .submit-neon-btn,
+  .reports-btn--primary,
+  .sc-btn--primary,
+  .sc-btn--submit,
+  .dock-icon-btn.active,
+  .dock-icon-btn.logout,
+  .avatar-upload-btn,
+  .cs-sla,
+  .cs-rating-score,
+  .lf-code-pill
+) i {
+  color: inherit !important;
+}
+
 html[data-bs-theme="light"] input,
 html[data-bs-theme="light"] select,
 html[data-bs-theme="light"] textarea,
 html[data-theme="light"] input,
 html[data-theme="light"] select,
 html[data-theme="light"] textarea {
-  background-color: #ffffff !important;
-  color: #0f172a !important;
-  border-color: rgba(0, 0, 0, 0.15) !important;
+  background-color: #ffffff;
+  color: #0f172a;
+  border-color: rgba(0, 0, 0, 0.15);
+}
+
+/* Keep borderless nested search inputs clean without double-box borders in Light Mode */
+html[data-bs-theme="light"] :is(
+  .notif-page-search,
+  .reports-filters__search,
+  .lf-search-box,
+  .sc-location__search,
+  .cs-cmd-input-row
+) input,
+html[data-theme="light"] :is(
+  .notif-page-search,
+  .reports-filters__search,
+  .lf-search-box,
+  .sc-location__search,
+  .cs-cmd-input-row
+) input {
+  background-color: transparent;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 /* Force Home / Landing page to ALWAYS remain in dark Ember Forge theme */

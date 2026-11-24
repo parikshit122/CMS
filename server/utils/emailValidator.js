@@ -38,18 +38,13 @@ const DISPOSABLE_DOMAINS = [
 ];
 
 const SUSPICIOUS_PATTERNS = [
-  /^test/i,
-  /^demo/i,
-  /^fake/i,
-  /^sample/i,
-  /^example/i,
+  /^(test|demo|fake|sample|example|dummy)([._-]?(user|account|mail|email|admin))?\d*$/i,
   /^admin@admin\./i,
   /^user@user\./i,
-  /^dummy/i,
-  /^abc123/i,
-  /^xxx/i,
-  /^qwerty/i,
-  /^asdf/i,
+  /^abc123\d*$/i,
+  /^xxx\d*$/i,
+  /^qwerty\d*$/i,
+  /^asdf\d*$/i,
 ];
 
 const SUSPICIOUS_DOMAINS = [
