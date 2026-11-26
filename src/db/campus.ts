@@ -16,10 +16,97 @@ import {
 import { getSettingsSingleton, updateSettingsSingleton } from "./settings.ts";
 import { toNumericId } from "./users.ts";
 import {
+  applyCampusAccessPolicies,
   computeEuclideanMeters,
   maskInstitutionText,
+  normalizeAccessTier,
   resolveInstitutionBranding,
+  resolveViewerAccessTier,
 } from "../lib/campus-navigation.ts";
+
+// ── Default Physical Campus QR Spots (Auto-seeded on fresh DB) ─
+
+export const DEFAULT_CAMPUS_QR_SPOTS = [
+  {
+    spotCode: "CAMPUS-CSLAB-02",
+    label: "Computer Lab 2 — Projection & LAN Desk",
+    building: "Engineering Block B",
+    floor: "2nd Floor",
+    locationId: "lab-cs",
+    defaultCategory: "it",
+    scanCount: 42,
+    complaintCount: 5,
+  },
+  {
+    spotCode: "CAMPUS-HOSTELA-WC",
+    label: "Hostel Block A — RO Water Cooler",
+    building: "Boys Hostel Block A",
+    floor: "1st Floor",
+    locationId: "hostel-a",
+    defaultCategory: "plumbing",
+    scanCount: 31,
+    complaintCount: 4,
+  },
+  {
+    spotCode: "CAMPUS-LIB-HALL",
+    label: "Central Library — Reading Hall AC & Wi-Fi",
+    building: "Central Academic Block",
+    floor: "1st Floor",
+    locationId: "library",
+    defaultCategory: "electrical",
+    scanCount: 27,
+    complaintCount: 3,
+  },
+  {
+    spotCode: "CAMPUS-CANTEEN-01",
+    label: "Campus Canteen — Hygiene & Seating Area",
+    building: "Student Amenities Center",
+    floor: "Ground Floor",
+    locationId: "canteen",
+    defaultCategory: "cleanliness",
+    scanCount: 19,
+    complaintCount: 2,
+  },
+  {
+    spotCode: "CAMPUS-PARKING-GATE",
+    label: "Main Gate & Two-Wheeler Parking Lights",
+    building: "Campus Entrance",
+    floor: "Outdoor",
+    locationId: "parking",
+    defaultCategory: "safety",
+    scanCount: 15,
+    complaintCount: 2,
+  },
+];
+
+let defaultQrSeedPromise: Promise<void> | null = null;
+
+export async function ensureDefaultQrSpotsSeeded() {
+  const existing = await db
+    .select({ id: campusQrSpots.id })
+    .from(campusQrSpots)
+    .limit(1);
+  if (existing.length > 0) return;
+
+  if (!defaultQrSeedPromise) {
+    defaultQrSeedPromise = (async () => {
+      for (const spot of DEFAULT_CAMPUS_QR_SPOTS) {
+        await db
+          .insert(campusQrSpots)
+          .values({
+            ...spot,
+            isActive: true,
+            isDemoRecord: true,
+          })
+          .onConflictDoNothing({ target: campusQrSpots.spotCode });
+      }
+    })().finally(() => {
+      defaultQrSeedPromise = null;
+    });
+  }
+
+  await defaultQrSeedPromise;
+}
 
 // ── Institution Branding & Avishkar Blind-Evaluation Mode ──
 
@@ -582,9 +669,145 @@ export async function seedOrResetCampusNavigationAndAcademics(
   return { seeded: true };
 }
 
-// ── Public Campus Navigation Bundle (Graph + Live Overlays) ─
+let sensitiveSeedPromise: Promise<void> | null = null;
 
-export async function getCampusNavigationBundle() {
+/**
+ * Ensures realistic institution-neutral sample sensitive places exist once on starter demo maps
+ * so visitors and admins immediately experience locked restricted zones across all 4 tiers.
+ */
+async function ensureSampleSensitiveZonesSeeded() {
+  const existingSensitive = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(campusMapNodes)
+    .where(eq(campusMapNodes.isSensitive, true));
+
+  if (Number(existingSensitive[0]?.c || 0) > 0) return;
+
+  if (!sensitiveSeedPromise) {
+    sensitiveSeedPromise = (async () => {
+      const allNodes = await db.select().from(campusMapNodes);
+      const byCode = new Map(allNodes.map((n) => [n.code, n]));
+
+      const dean = byCode.get("BG-DEAN");
+      if (dean) {
+        await db
+          .update(campusMapNodes)
+          .set({
+            accessLevel: "staff",
+            isSensitive: true,
+            restrictedNotice:
+              "Authorized Staff & Faculty Only — Institutional Governance & Records Office.",
+            updatedAt: new Date(),
+          })
+          .where(eq(campusMapNodes.id, dean.id));
+      }
+
+      const rd = byCode.get("B2-RD");
+      if (rd) {
+        await db
+          .update(campusMapNodes)
+          .set({
+            accessLevel: "student",
+            isSensitive: true,
+            restrictedNotice:
+              "Verified Student ID Required — Research & Prototyping Laboratory.",
+            updatedAt: new Date(),
+          })
+          .where(eq(campusMapNodes.id, rd.id));
+      }
+
+      const groundCorr = byCode.get("BG-CORR-E");
+      if (groundCorr && !byCode.has("BG-EXAM")) {
+        const [examNode] = await db
+          .insert(campusMapNodes)
+          .values({
+            floorId: groundCorr.floorId,
+            buildingId: groundCorr.buildingId,
+            code: "BG-EXAM",
+            label: "Examination Control Vault (G-105)",
+            nodeType: "room",
+            x: 82,
+            y: 48,
+            isAccessible: true,
+            description: "Confidential examination paper vault and assessment control cell.",
+            accessLevel: "staff",
+            isSensitive: true,
+            restrictedNotice:
+              "Restricted Examination Cell — Authorized Staff Clearance Required.",
+            isDemoRecord: true,
+          })
+          .returning();
+
+        if (examNode) {
+          await db.insert(campusMapEdges).values({
+            fromNodeId: groundCorr.id,
+            toNodeId: examNode.id,
+            distanceMeters: 10,
+            edgeType: "corridor",
+            isAccessible: true,
+            accessLevel: "staff",
+            isSensitive: true,
+            isDemoRecord: true,
+          });
+        }
+      }
+
+      const floor2Corr = byCode.get("B2-CORR-E");
+      if (floor2Corr && !byCode.has("B2-SERVER")) {
+        const [serverNode] = await db
+          .insert(campusMapNodes)
+          .values({
+            floorId: floor2Corr.floorId,
+            buildingId: floor2Corr.buildingId,
+            code: "B2-SERVER",
+            label: "Core Network & Server Vault (207)",
+            nodeType: "lab",
+            x: 84,
+            y: 50,
+            isAccessible: true,
+            description: "Campus backbone fiber switching, identity servers, and CCTV storage.",
+            accessLevel: "admin",
+            isSensitive: true,
+            restrictedNotice:
+              "High-Security Infrastructure — Campus Admin Clearance Required.",
+            isDemoRecord: true,
+          })
+          .returning();
+
+        if (serverNode) {
+          await db.insert(campusMapEdges).values({
+            fromNodeId: floor2Corr.id,
+            toNodeId: serverNode.id,
+            distanceMeters: 11,
+            edgeType: "corridor",
+            isAccessible: true,
+            accessLevel: "admin",
+            isSensitive: true,
+            isDemoRecord: true,
+          });
+        }
+      }
+    })().finally(() => {
+      sensitiveSeedPromise = null;
+    });
+  }
+
+  await sensitiveSeedPromise;
+}
+
+// ── Public & Role-Aware Campus Navigation Bundle ──────────
+
+export async function getCampusNavigationBundle(
+  options: {
+    viewerUser?: {
+      role?: string | null;
+      isVerified?: boolean | null;
+      emailVerified?: boolean | null;
+      isActive?: boolean | null;
+    } | null;
+    includeUnredacted?: boolean;
+  } = {}
+) {
   // Ensure starter maps & courses exist so public/judge views are never bare
   const [existingBuildings, existingDepts] = await Promise.all([
     db.select({ c: sql<number>`count(*)::int` }).from(campusBuildings),
@@ -596,6 +819,7 @@ export async function getCampusNavigationBundle() {
   ) {
     await seedOrResetCampusNavigationAndAcademics(undefined, false);
   }
+  await Promise.all([ensureDefaultQrSpotsSeeded(), ensureSampleSensitiveZonesSeeded()]);
 
   const [branding, buildings, floors, nodes, edges, departments, courses, openComplaints, qrSpots, lfItems] =
     await Promise.all([
@@ -705,7 +929,7 @@ export async function getCampusNavigationBundle() {
     courses: courses.filter((c) => c.departmentId === d.id),
   }));
 
-  return {
+  const rawBundle = {
     branding,
     buildings,
     floors,
@@ -721,6 +945,13 @@ export async function getCampusNavigationBundle() {
       lostFound: mappedLostFound,
     },
   };
+
+  if (options.includeUnredacted) {
+    return applyCampusAccessPolicies(rawBundle, "admin");
+  }
+
+  const viewerTier = resolveViewerAccessTier(options.viewerUser);
+  return applyCampusAccessPolicies(rawBundle, viewerTier);
 }
 
 export async function getAcademicStructure() {
@@ -806,9 +1037,15 @@ export async function createCampusFloor(input: {
   widthMeters?: number;
   heightMeters?: number;
   isOutdoor?: boolean;
+  accessLevel?: string;
+  isSensitive?: boolean;
+  restrictedNotice?: string;
 }) {
   if (!input.floorLabel?.trim()) throw new Error("Floor label is required.");
-  if (!input.mapImageUrl?.trim()) throw new Error("Map image URL or upload is required.");
+  if (!input.mapImageUrl?.trim()) throw new Error("Blueprint image upload is required.");
+
+  const accessLevel = normalizeAccessTier(input.accessLevel);
+  const isSensitive = Boolean(input.isSensitive || accessLevel !== "public");
 
   const [row] = await db
     .insert(campusFloors)
@@ -820,6 +1057,10 @@ export async function createCampusFloor(input: {
       widthMeters: Math.max(10, Number(input.widthMeters ?? 60)),
       heightMeters: Math.max(10, Number(input.heightMeters ?? 42)),
       isOutdoor: Boolean(input.isOutdoor),
+      accessLevel,
+      isSensitive,
+      restrictedNotice: String(input.restrictedNotice || "").trim().slice(0, 260),
+      blueprintUpdatedAt: new Date(),
       isDemoRecord: false,
     })
     .returning();
@@ -831,8 +1072,12 @@ export async function updateCampusFloor(
   updates: {
     floorLabel?: string;
     mapImageUrl?: string;
+    clearMapImage?: boolean;
     widthMeters?: number;
     heightMeters?: number;
+    accessLevel?: string;
+    isSensitive?: boolean;
+    restrictedNotice?: string;
   }
 ) {
   const numId = toNumericId(id);
@@ -841,14 +1086,31 @@ export async function updateCampusFloor(
   if (typeof updates.floorLabel === "string" && updates.floorLabel.trim()) {
     patch.floorLabel = updates.floorLabel.trim();
   }
-  if (typeof updates.mapImageUrl === "string" && updates.mapImageUrl.trim()) {
+  if (updates.clearMapImage) {
+    patch.mapImageUrl = "";
+    patch.blueprintUpdatedAt = new Date();
+  } else if (typeof updates.mapImageUrl === "string" && updates.mapImageUrl.trim()) {
     patch.mapImageUrl = updates.mapImageUrl.trim();
+    patch.blueprintUpdatedAt = new Date();
   }
-  if (updates.widthMeters !== undefined) {
+  if (updates.widthMeters !== undefined && Number.isFinite(Number(updates.widthMeters))) {
     patch.widthMeters = Math.max(10, Number(updates.widthMeters));
   }
-  if (updates.heightMeters !== undefined) {
+  if (updates.heightMeters !== undefined && Number.isFinite(Number(updates.heightMeters))) {
     patch.heightMeters = Math.max(10, Number(updates.heightMeters));
+  }
+  if (updates.accessLevel !== undefined) {
+    const normalized = normalizeAccessTier(updates.accessLevel);
+    patch.accessLevel = normalized;
+    patch.isSensitive =
+      updates.isSensitive !== undefined
+        ? Boolean(updates.isSensitive || normalized !== "public")
+        : normalized !== "public";
+  } else if (typeof updates.isSensitive === "boolean") {
+    patch.isSensitive = updates.isSensitive;
+  }
+  if (typeof updates.restrictedNotice === "string") {
+    patch.restrictedNotice = updates.restrictedNotice.trim().slice(0, 260);
   }
   const [updated] = await db
     .update(campusFloors)
@@ -879,6 +1141,9 @@ export async function createCampusNode(input: {
   isAccessible?: boolean;
   qrSpotCode?: string | null;
   description?: string;
+  accessLevel?: string;
+  isSensitive?: boolean;
+  restrictedNotice?: string;
 }) {
   const floorId = toNumericId(input.floorId);
   if (!floorId) throw new Error("Valid floorId is required.");
@@ -896,6 +1161,9 @@ export async function createCampusNode(input: {
       .slice(0, 20) ||
     `N-${floorId}-${Math.floor(100 + Math.random() * 899)}`;
 
+  const accessLevel = normalizeAccessTier(input.accessLevel);
+  const isSensitive = Boolean(input.isSensitive || accessLevel !== "public");
+
   const [row] = await db
     .insert(campusMapNodes)
     .values({
@@ -909,6 +1177,9 @@ export async function createCampusNode(input: {
       isAccessible: nodeType === "stairs" ? false : input.isAccessible !== false,
       qrSpotCode: input.qrSpotCode ? String(input.qrSpotCode).trim().toUpperCase() : null,
       description: (input.description || "").trim(),
+      accessLevel,
+      isSensitive,
+      restrictedNotice: String(input.restrictedNotice || "").trim().slice(0, 260),
       isDemoRecord: false,
     })
     .returning();
@@ -921,6 +1192,62 @@ export async function createCampusNode(input: {
   }
 
   return row;
+}
+
+export async function updateCampusNode(
+  id: unknown,
+  updates: {
+    label?: string;
+    nodeType?: string;
+    isAccessible?: boolean;
+    qrSpotCode?: string | null;
+    description?: string;
+    accessLevel?: string;
+    isSensitive?: boolean;
+    restrictedNotice?: string;
+  }
+) {
+  const numId = toNumericId(id);
+  if (!numId) return null;
+
+  const patch: Record<string, unknown> = { updatedAt: new Date() };
+  if (typeof updates.label === "string" && updates.label.trim()) {
+    patch.label = updates.label.trim().slice(0, 120);
+  }
+  if (typeof updates.nodeType === "string" && updates.nodeType.trim()) {
+    patch.nodeType = updates.nodeType.toLowerCase().trim();
+  }
+  if (typeof updates.isAccessible === "boolean") {
+    patch.isAccessible = updates.isAccessible;
+  }
+  if (updates.qrSpotCode !== undefined) {
+    patch.qrSpotCode = updates.qrSpotCode
+      ? String(updates.qrSpotCode).trim().toUpperCase()
+      : null;
+  }
+  if (typeof updates.description === "string") {
+    patch.description = updates.description.trim().slice(0, 400);
+  }
+  if (updates.accessLevel !== undefined) {
+    const normalized = normalizeAccessTier(updates.accessLevel);
+    patch.accessLevel = normalized;
+    patch.isSensitive =
+      updates.isSensitive !== undefined
+        ? Boolean(updates.isSensitive || normalized !== "public")
+        : normalized !== "public";
+  } else if (typeof updates.isSensitive === "boolean") {
+    patch.isSensitive = updates.isSensitive;
+  }
+  if (typeof updates.restrictedNotice === "string") {
+    patch.restrictedNotice = updates.restrictedNotice.trim().slice(0, 260);
+  }
+
+  const [updated] = await db
+    .update(campusMapNodes)
+    .set(patch)
+    .where(eq(campusMapNodes.id, numId))
+    .returning();
+  return updated || null;
 }
 
 export async function deleteCampusNode(id: unknown) {
@@ -939,6 +1266,8 @@ export async function createCampusEdge(input: {
   edgeType?: string;
   isAccessible?: boolean;
   distanceMeters?: number;
+  accessLevel?: string;
+  isSensitive?: boolean;
 }) {
   const fromId = toNumericId(input.fromNodeId);
   const toId = toNumericId(input.toNodeId);
@@ -974,6 +1303,8 @@ export async function createCampusEdge(input: {
 
   const edgeType = String(input.edgeType || (nodeA.floorId !== nodeB.floorId ? "elevator" : "corridor")).toLowerCase();
   const isAccessible = edgeType === "stairs" ? false : input.isAccessible !== false;
+  const accessLevel = normalizeAccessTier(input.accessLevel);
+  const isSensitive = Boolean(input.isSensitive || accessLevel !== "public");
 
   const [row] = await db
     .insert(campusMapEdges)
@@ -983,10 +1314,56 @@ export async function createCampusEdge(input: {
       distanceMeters: Math.max(1, Math.round(distance * 10) / 10),
       edgeType,
       isAccessible,
+      accessLevel,
+      isSensitive,
       isDemoRecord: false,
     })
     .returning();
   return row;
+}
+
+export async function updateCampusEdge(
+  id: unknown,
+  updates: {
+    edgeType?: string;
+    isAccessible?: boolean;
+    distanceMeters?: number;
+    accessLevel?: string;
+    isSensitive?: boolean;
+  }
+) {
+  const numId = toNumericId(id);
+  if (!numId) return null;
+
+  const patch: Record<string, unknown> = {};
+  if (typeof updates.edgeType === "string" && updates.edgeType.trim()) {
+    patch.edgeType = updates.edgeType.toLowerCase().trim();
+  }
+  if (typeof updates.isAccessible === "boolean") {
+    patch.isAccessible = updates.isAccessible;
+  }
+  if (updates.distanceMeters !== undefined && Number(updates.distanceMeters) > 0) {
+    patch.distanceMeters = Math.max(1, Math.round(Number(updates.distanceMeters) * 10) / 10);
+  }
+  if (updates.accessLevel !== undefined) {
+    const normalized = normalizeAccessTier(updates.accessLevel);
+    patch.accessLevel = normalized;
+    patch.isSensitive =
+      updates.isSensitive !== undefined
+        ? Boolean(updates.isSensitive || normalized !== "public")
+        : normalized !== "public";
+  } else if (typeof updates.isSensitive === "boolean") {
+    patch.isSensitive = updates.isSensitive;
+  }
+
+  if (Object.keys(patch).length === 0) return null;
+
+  const [updated] = await db
+    .update(campusMapEdges)
+    .set(patch)
+    .where(eq(campusMapEdges.id, numId))
+    .returning();
+  return updated || null;
 }
 
 export async function deleteCampusEdge(id: unknown) {

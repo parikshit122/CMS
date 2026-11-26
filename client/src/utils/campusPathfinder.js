@@ -1,7 +1,139 @@
 /**
- * Pure Multi-Floor Weighted Dijkstra Campus Pathfinding Engine (Client).
- * Matches src/lib/campus-navigation.ts for instant zero-latency interactive routing.
+ * Pure Multi-Floor Weighted Dijkstra Campus Pathfinding & Access Policy Engine (Client).
+ * Matches src/lib/campus-navigation.ts for instant zero-latency interactive routing and Studio preview.
  */
+
+export const CAMPUS_ACCESS_TIERS = ["public", "student", "staff", "admin"];
+
+export const ACCESS_TIER_RANK = {
+  public: 0,
+  student: 1,
+  staff: 2,
+  admin: 3,
+};
+
+export const ACCESS_TIER_META = {
+  public: {
+    label: "Public",
+    shortLabel: "Public",
+    description: "Open to all campus visitors, guests, students, and staff.",
+  },
+  student: {
+    label: "Verified Student",
+    shortLabel: "Student+",
+    description: "Requires a verified student, staff, or admin campus account.",
+  },
+  staff: {
+    label: "Staff",
+    shortLabel: "Staff Only",
+    description: "Restricted to authorized campus staff, faculty, and administrators.",
+  },
+  admin: {
+    label: "Admin",
+    shortLabel: "Admin Only",
+    description: "High-sensitivity facility restricted strictly to campus administrators.",
+  },
+};
+
+export function normalizeAccessTier(raw) {
+  const val = String(raw || "public").toLowerCase().trim();
+  if (val === "admin") return "admin";
+  if (val === "staff") return "staff";
+  if (val === "student" || val === "verified_student") return "student";
+  return "public";
+}
+
+export function resolveViewerAccessTier(user) {
+  if (!user || user.isActive === false) return "public";
+  const role = String(user.role || "").toLowerCase().trim();
+  if (role === "admin") return "admin";
+  if (role === "staff") return "staff";
+  if (role === "student" || role === "user") {
+    const verified =
+      user.isVerified !== false &&
+      user.emailVerified !== false &&
+      user.isEmailVerified !== false;
+    return verified ? "student" : "public";
+  }
+  return "public";
+}
+
+export function getEffectiveAccessLevel(itemLevel, parentFloorLevel) {
+  const a = normalizeAccessTier(itemLevel);
+  const b = normalizeAccessTier(parentFloorLevel);
+  return ACCESS_TIER_RANK[a] >= ACCESS_TIER_RANK[b] ? a : b;
+}
+
+export function canAccessTier(viewerTier, requiredTier) {
+  return (
+    ACCESS_TIER_RANK[normalizeAccessTier(viewerTier)] >=
+    ACCESS_TIER_RANK[normalizeAccessTier(requiredTier)]
+  );
+}
+
+export function applyCampusAccessPreview(bundle, viewerTierInput = "public") {
+  if (!bundle) return null;
+  const viewerTier = normalizeAccessTier(viewerTierInput);
+  const floorTierMap = new Map();
+  const lockedNodeIds = new Set();
+
+  const floors = (bundle.floors || []).map((fl) => {
+    const ownTier = normalizeAccessTier(fl.accessLevel);
+    floorTierMap.set(Number(fl.id), ownTier);
+    const isLocked = !canAccessTier(viewerTier, ownTier);
+    return {
+      ...fl,
+      accessLevel: ownTier,
+      effectiveAccessLevel: ownTier,
+      isLocked,
+    };
+  });
+
+  const nodes = (bundle.nodes || []).map((n) => {
+    const floorTier = floorTierMap.get(Number(n.floorId)) || "public";
+    const ownTier = normalizeAccessTier(n.accessLevel);
+    const effectiveTier = getEffectiveAccessLevel(ownTier, floorTier);
+    const isLocked = !canAccessTier(viewerTier, effectiveTier);
+    if (isLocked) lockedNodeIds.add(Number(n.id));
+    return {
+      ...n,
+      accessLevel: ownTier,
+      effectiveAccessLevel: effectiveTier,
+      isLocked,
+    };
+  });
+
+  const nodeTierMap = new Map(
+    nodes.map((n) => [Number(n.id), n.effectiveAccessLevel || "public"])
+  );
+
+  const edges = (bundle.edges || []).map((e) => {
+    const ownTier = normalizeAccessTier(e.accessLevel);
+    const inherited = getEffectiveAccessLevel(
+      nodeTierMap.get(Number(e.fromNodeId)) || "public",
+      nodeTierMap.get(Number(e.toNodeId)) || "public"
+    );
+    const effectiveTier = getEffectiveAccessLevel(ownTier, inherited);
+    const isLocked =
+      !canAccessTier(viewerTier, effectiveTier) ||
+      lockedNodeIds.has(Number(e.fromNodeId)) ||
+      lockedNodeIds.has(Number(e.toNodeId));
+    return {
+      ...e,
+      accessLevel: ownTier,
+      effectiveAccessLevel: effectiveTier,
+      isLocked,
+    };
+  });
+
+  return {
+    ...bundle,
+    floors,
+    nodes,
+    edges,
+    viewerAccessTier: viewerTier,
+  };
+}
 
 const EDGE_EFFORT_PENALTY = {
   stairs: 10,
@@ -17,6 +149,28 @@ export function computeEuclideanMeters(a, b, widthMeters = 60, heightMeters = 42
   return Math.max(1, Math.round(Math.hypot(dx, dy) * 10) / 10);
 }
 
+function isNodeLockedForViewer(node, floor, viewerTier, enforceAccessPolicy) {
+  const floorTier = normalizeAccessTier(floor?.effectiveAccessLevel || floor?.accessLevel);
+  const nodeTier = getEffectiveAccessLevel(
+    node.effectiveAccessLevel || node.accessLevel,
+    floorTier
+  );
+  if (!enforceAccessPolicy) {
+    return { locked: false, requiredTier: nodeTier };
+  }
+  const locked =
+    Boolean(node.isLocked) ||
+    Boolean(floor?.isLocked) ||
+    !canAccessTier(viewerTier, nodeTier);
+  return { locked, requiredTier: nodeTier };
+}
+
+function isEdgeLockedForViewer(edge, viewerTier, enforceAccessPolicy) {
+  if (!enforceAccessPolicy) return false;
+  const edgeTier = normalizeAccessTier(edge.effectiveAccessLevel || edge.accessLevel);
+  return Boolean(edge.isLocked) || !canAccessTier(viewerTier, edgeTier);
+}
+
 export function findShortestCampusRoute(
   nodes = [],
   edges = [],
@@ -28,6 +182,8 @@ export function findShortestCampusRoute(
 ) {
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
   const accessibleOnly = Boolean(options.accessibleOnly);
+  const viewerTier = normalizeAccessTier(options.viewerAccessTier || "public");
+  const enforceAccessPolicy = !options.ignoreAccessPolicy;
 
   const nodeMap = new Map(nodes.map((n) => [Number(n.id), n]));
   const floorMap = new Map(floors.map((f) => [Number(f.id), f]));
@@ -35,12 +191,16 @@ export function findShortestCampusRoute(
 
   const startId = Number(startNodeId);
   const endId = Number(endNodeId);
+  let restrictedNodesSkipped = 0;
 
-  const buildEmpty = (reason, visitedCount = 0) => {
+  const buildEmpty = (reason, visitedCount = 0, extra = {}) => {
     const t1 = typeof performance !== "undefined" ? performance.now() : Date.now();
     return {
       found: false,
       reason,
+      blockedByPolicy: Boolean(extra.blockedByPolicy),
+      requiredTier: extra.requiredTier,
+      detouredAroundRestricted: false,
       nodeIds: [],
       nodes: [],
       edges: [],
@@ -58,6 +218,8 @@ export function findShortestCampusRoute(
         executionMs: Math.max(0.01, Math.round((t1 - t0) * 100) / 100),
         floorTransitions: 0,
         accessibleConstraintApplied: accessibleOnly,
+        viewerAccessTier: viewerTier,
+        restrictedNodesSkipped,
       },
     };
   };
@@ -66,13 +228,49 @@ export function findShortestCampusRoute(
     return buildEmpty("Select both a starting point and destination on the campus map.");
   }
 
+  const startNode = nodeMap.get(startId);
+  const endNode = nodeMap.get(endId);
+
+  const startLock = isNodeLockedForViewer(
+    startNode,
+    floorMap.get(startNode.floorId),
+    viewerTier,
+    enforceAccessPolicy
+  );
+  const endLock = isNodeLockedForViewer(
+    endNode,
+    floorMap.get(endNode.floorId),
+    viewerTier,
+    enforceAccessPolicy
+  );
+
+  if (endLock.locked) {
+    const reqMeta = ACCESS_TIER_META[endLock.requiredTier];
+    return buildEmpty(
+      `Entry blocked: this destination is a protected zone requiring ${reqMeta.label} clearance.`,
+      0,
+      { blockedByPolicy: true, requiredTier: endLock.requiredTier }
+    );
+  }
+
+  if (startLock.locked) {
+    const reqMeta = ACCESS_TIER_META[startLock.requiredTier];
+    return buildEmpty(
+      `Starting location is inside a protected zone requiring ${reqMeta.label} clearance.`,
+      0,
+      { blockedByPolicy: true, requiredTier: startLock.requiredTier }
+    );
+  }
+
   if (startId === endId) {
-    const single = nodeMap.get(startId);
+    const single = startNode;
     const floor = floorMap.get(single.floorId);
     const bldg = single.buildingId ? buildingMap.get(single.buildingId) : null;
     const t1 = typeof performance !== "undefined" ? performance.now() : Date.now();
     return {
       found: true,
+      blockedByPolicy: false,
+      detouredAroundRestricted: false,
       nodeIds: [startId],
       nodes: [single],
       edges: [],
@@ -103,12 +301,25 @@ export function findShortestCampusRoute(
         executionMs: Math.max(0.01, Math.round((t1 - t0) * 100) / 100),
         floorTransitions: 0,
         accessibleConstraintApplied: accessibleOnly,
+        viewerAccessTier: viewerTier,
+        restrictedNodesSkipped: 0,
       },
     };
   }
 
+  const lockedNodeSet = new Set();
+  if (enforceAccessPolicy) {
+    for (const n of nodes) {
+      const check = isNodeLockedForViewer(n, floorMap.get(n.floorId), viewerTier, true);
+      if (check.locked) lockedNodeSet.add(Number(n.id));
+    }
+    restrictedNodesSkipped = lockedNodeSet.size;
+  }
+
   const adj = new Map();
   for (const n of nodes) adj.set(Number(n.id), []);
+
+  let skippedPolicyEdgeCount = 0;
 
   for (const edge of edges) {
     const u = Number(edge.fromNodeId);
@@ -116,6 +327,16 @@ export function findShortestCampusRoute(
     const nodeU = nodeMap.get(u);
     const nodeV = nodeMap.get(v);
     if (!nodeU || !nodeV) continue;
+
+    if (
+      enforceAccessPolicy &&
+      (lockedNodeSet.has(u) ||
+        lockedNodeSet.has(v) ||
+        isEdgeLockedForViewer(edge, viewerTier, true))
+    ) {
+      skippedPolicyEdgeCount += 1;
+      continue;
+    }
 
     if (accessibleOnly) {
       if (!edge.isAccessible || edge.edgeType === "stairs") continue;
@@ -164,6 +385,24 @@ export function findShortestCampusRoute(
   }
 
   if (!prevNode.has(endId)) {
+    if (enforceAccessPolicy && skippedPolicyEdgeCount > 0) {
+      const unrestricted = findShortestCampusRoute(
+        nodes,
+        edges,
+        floors,
+        buildings,
+        startId,
+        endId,
+        { accessibleOnly, ignoreAccessPolicy: true }
+      );
+      if (unrestricted.found) {
+        return buildEmpty(
+          "No authorized detour exists — all connecting paths pass through a restricted security zone.",
+          visited.size,
+          { blockedByPolicy: true }
+        );
+      }
+    }
     return buildEmpty(
       accessibleOnly
         ? "No stair-free (Divyangjan accessible) route currently links these points. Ask an admin to connect an elevator or ramp in Campus Studio."
@@ -242,6 +481,22 @@ export function findShortestCampusRoute(
     });
   }
 
+  let detouredAroundRestricted = false;
+  if (enforceAccessPolicy && skippedPolicyEdgeCount > 0) {
+    const unrestricted = findShortestCampusRoute(
+      nodes,
+      edges,
+      floors,
+      buildings,
+      startId,
+      endId,
+      { accessibleOnly, ignoreAccessPolicy: true }
+    );
+    if (unrestricted.found && unrestricted.totalMeters < Math.round(totalMeters)) {
+      detouredAroundRestricted = true;
+    }
+  }
+
   const walkSpeedMps = accessibleOnly ? 0.95 : 1.25;
   const estimatedSeconds = Math.max(
     10,
@@ -251,6 +506,8 @@ export function findShortestCampusRoute(
 
   return {
     found: true,
+    blockedByPolicy: false,
+    detouredAroundRestricted,
     nodeIds: orderedIds,
     nodes: orderedNodes,
     edges: orderedEdges,
@@ -268,6 +525,8 @@ export function findShortestCampusRoute(
       executionMs: Math.max(0.01, Math.round((t1 - t0) * 100) / 100),
       floorTransitions,
       accessibleConstraintApplied: accessibleOnly,
+      viewerAccessTier: viewerTier,
+      restrictedNodesSkipped,
     },
   };
 }

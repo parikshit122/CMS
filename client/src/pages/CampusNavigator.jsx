@@ -3,8 +3,10 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import API from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import {
+  ACCESS_TIER_META,
   findShortestCampusRoute,
   formatWalkingEta,
+  resolveViewerAccessTier,
 } from "../utils/campusPathfinder";
 import { buildWalkthroughState } from "../utils/qrNavigation";
 import QrAnchorScannerModal from "../components/campus/QrAnchorScannerModal";
@@ -73,9 +75,10 @@ export default function CampusNavigator() {
           const paramFrom = Number(searchParams.get("from") || 0);
           const paramQr = String(searchParams.get("qr") || "").trim().toUpperCase();
 
-          const outdoorFloor = floors.find((f) => f.isOutdoor) || floors[0];
-          const gateNode = nodes.find((n) => n.code === "OUT-GATE") || nodes[0];
-          const lab2Node = nodes.find((n) => n.code === "B2-LAB2") || nodes[nodes.length - 1];
+          const outdoorFloor = floors.find((f) => f.isOutdoor && !f.isLocked) || floors.find((f) => !f.isLocked) || floors[0];
+          const openNodes = nodes.filter((n) => !n.isLocked);
+          const gateNode = openNodes.find((n) => n.code === "OUT-GATE") || openNodes[0] || nodes[0];
+          const lab2Node = openNodes.find((n) => n.code === "B2-LAB2") || openNodes[openNodes.length - 1] || nodes[nodes.length - 1];
 
           let initialFloor = outdoorFloor?.id ?? null;
           let initialStart = gateNode?.id ? String(gateNode.id) : "";
@@ -84,9 +87,10 @@ export default function CampusNavigator() {
           if (paramQr) {
             const qrNode = nodes.find(
               (n) =>
-                String(n.qrSpotCode || "").toUpperCase() === paramQr ||
-                String(n.displayQrSpotCode || "").toUpperCase() === paramQr ||
-                String(n.code || "").toUpperCase() === paramQr
+                !n.isLocked &&
+                (String(n.qrSpotCode || "").toUpperCase() === paramQr ||
+                  String(n.displayQrSpotCode || "").toUpperCase() === paramQr ||
+                  String(n.code || "").toUpperCase() === paramQr)
             );
             if (qrNode) {
               initialStart = String(qrNode.id);
@@ -99,7 +103,7 @@ export default function CampusNavigator() {
               });
             }
           } else if (paramFrom) {
-            const fromNode = nodes.find((n) => Number(n.id) === paramFrom);
+            const fromNode = nodes.find((n) => Number(n.id) === paramFrom && !n.isLocked);
             if (fromNode) {
               initialStart = String(fromNode.id);
               initialFloor = fromNode.floorId;
@@ -115,26 +119,26 @@ export default function CampusNavigator() {
           if (paramNode) {
             const target = nodes.find((n) => Number(n.id) === paramNode);
             if (target) {
-              initialEnd = String(target.id);
+              if (!target.isLocked) initialEnd = String(target.id);
               initialFloor = target.floorId;
               setSelectedNodeId(target.id);
             }
           } else if (paramTo) {
             const target = nodes.find((n) => Number(n.id) === paramTo);
             if (target) {
-              initialEnd = String(target.id);
+              if (!target.isLocked) initialEnd = String(target.id);
               initialFloor = target.floorId;
             }
           }
 
           if (initialStart && initialStart === initialEnd && !paramNode && !paramTo) {
             const altDest =
-              nodes.find(
+              openNodes.find(
                 (n) =>
                   String(n.id) !== initialStart &&
                   (n.code === "OUT-GATE" || n.code === "B2-LAB2")
               ) ||
-              nodes.find(
+              openNodes.find(
                 (n) => String(n.id) !== initialStart && n.nodeType !== "corridor"
               );
             if (altDest) initialEnd = String(altDest.id);
@@ -156,7 +160,7 @@ export default function CampusNavigator() {
     return () => {
       active = false;
     };
-  }, [searchParams]);
+  }, [searchParams, user?.id, user?.role]);
 
   const floors = useMemo(() => bundle?.floors || [], [bundle]);
   const buildings = useMemo(() => bundle?.buildings || [], [bundle]);
@@ -168,12 +172,22 @@ export default function CampusNavigator() {
     [bundle]
   );
 
+  const viewerTier = useMemo(
+    () => bundle?.viewerAccessTier || resolveViewerAccessTier(user),
+    [bundle, user]
+  );
+
+  const lockedZoneCount = useMemo(
+    () => nodes.filter((n) => n.isLocked).length + floors.filter((f) => f.isLocked).length,
+    [nodes, floors]
+  );
+
   const activeFloor = useMemo(
     () => floors.find((f) => Number(f.id) === Number(activeFloorId)) || floors[0] || null,
     [floors, activeFloorId]
   );
 
-  // Compute live shortest path using weighted multi-floor Dijkstra
+  // Compute live shortest path using weighted multi-floor Dijkstra with security policy blocking
   const routeResult = useMemo(() => {
     if (!startNodeId || !endNodeId || nodes.length === 0) return null;
     return findShortestCampusRoute(
@@ -183,9 +197,9 @@ export default function CampusNavigator() {
       buildings,
       Number(startNodeId),
       Number(endNodeId),
-      { accessibleOnly }
+      { accessibleOnly, viewerAccessTier: viewerTier }
     );
-  }, [nodes, edges, floors, buildings, startNodeId, endNodeId, accessibleOnly]);
+  }, [nodes, edges, floors, buildings, startNodeId, endNodeId, accessibleOnly, viewerTier]);
 
   // Also compute alternate (standard vs accessible) route so judges can see real meters delta
   const alternateRoute = useMemo(() => {
@@ -197,9 +211,9 @@ export default function CampusNavigator() {
       buildings,
       Number(startNodeId),
       Number(endNodeId),
-      { accessibleOnly: !accessibleOnly }
+      { accessibleOnly: !accessibleOnly, viewerAccessTier: viewerTier }
     );
-  }, [nodes, edges, floors, buildings, startNodeId, endNodeId, accessibleOnly]);
+  }, [nodes, edges, floors, buildings, startNodeId, endNodeId, accessibleOnly, viewerTier]);
 
   const floorNodes = useMemo(
     () => nodes.filter((n) => Number(n.floorId) === Number(activeFloor?.id)),
@@ -247,7 +261,7 @@ export default function CampusNavigator() {
   }, [livePins.lostFound]);
 
   const qrAnchors = useMemo(
-    () => nodes.filter((n) => Boolean(n.qrSpotCode) || n.nodeType === "entrance"),
+    () => nodes.filter((n) => !n.isLocked && (Boolean(n.qrSpotCode) || n.nodeType === "entrance")),
     [nodes]
   );
 
@@ -328,18 +342,19 @@ export default function CampusNavigator() {
   };
 
   const handleQrAnchorLock = (node, meta = null) => {
-    if (!node) return;
+    if (!node || node.isLocked) return;
     const nextStartId = String(node.id);
     setStartNodeId(nextStartId);
     if (String(endNodeId) === nextStartId) {
       const altDest =
         nodes.find(
           (n) =>
+            !n.isLocked &&
             String(n.id) !== nextStartId &&
             (n.code === "OUT-GATE" || n.code === "B2-LAB2")
         ) ||
         nodes.find(
-          (n) => String(n.id) !== nextStartId && n.nodeType !== "corridor"
+          (n) => !n.isLocked && String(n.id) !== nextStartId && n.nodeType !== "corridor"
         );
       if (altDest) setEndNodeId(String(altDest.id));
     }
@@ -407,7 +422,17 @@ export default function CampusNavigator() {
           </p>
         </div>
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px" }}>
+          <span
+            className={`cn-tier-badge cn-tier-badge--${viewerTier}`}
+            title={`Your active campus map clearance: ${ACCESS_TIER_META[viewerTier]?.label}`}
+          >
+            <i
+              className={`bx ${viewerTier === "public" ? "bx-user" : "bx-shield-quarter"}`}
+              aria-hidden="true"
+            />
+            Clearance: {ACCESS_TIER_META[viewerTier]?.label}
+          </span>
           <button
             type="button"
             className="av-btn av-btn--primary av-btn--compact"
@@ -421,7 +446,10 @@ export default function CampusNavigator() {
             className="av-btn av-btn--secondary av-btn--compact"
             onClick={() => {
               const target =
-                selectedNode || nodeById.get(Number(startNodeId)) || qrAnchors[0] || nodes[0];
+                (selectedNode && !selectedNode.isLocked ? selectedNode : null) ||
+                nodeById.get(Number(startNodeId)) ||
+                qrAnchors[0] ||
+                nodes.find((n) => !n.isLocked);
               if (target) setPosterNode(target);
             }}
           >
@@ -431,7 +459,7 @@ export default function CampusNavigator() {
           {user?.role === "admin" && (
             <Link to="/admin/campus-studio" className="av-btn av-btn--ghost av-btn--compact">
               <i className="bx bx-edit-alt" aria-hidden="true" />
-              Map Studio
+              Blueprint Studio
             </Link>
           )}
           <Link to="/lost-found" className="av-btn av-btn--ghost av-btn--compact">
@@ -510,16 +538,22 @@ export default function CampusNavigator() {
                 className="cn-select"
                 value={startNodeId}
                 onChange={(e) => {
-                  setStartNodeId(e.target.value);
                   const n = nodeById.get(Number(e.target.value));
+                  if (n?.isLocked) return;
+                  setStartNodeId(e.target.value);
                   if (n) setActiveFloorId(n.floorId);
                 }}
               >
                 {groupedSelectableNodes.map(({ floor, items }) => (
-                  <optgroup key={floor.id} label={floor.floorLabel}>
+                  <optgroup
+                    key={floor.id}
+                    label={`${floor.floorLabel}${floor.isLocked ? " [Restricted Floor]" : ""}`}
+                  >
                     {items.map((n) => (
-                      <option key={n.id} value={n.id}>
-                        {n.label} {n.displayQrSpotCode ? `[QR: ${n.displayQrSpotCode}]` : ""}
+                      <option key={n.id} value={n.id} disabled={Boolean(n.isLocked)}>
+                        {n.isLocked
+                          ? `[Locked · ${ACCESS_TIER_META[n.effectiveAccessLevel || "staff"]?.shortLabel}] ${n.code}`
+                          : `${n.label}${n.displayQrSpotCode ? ` [QR: ${n.displayQrSpotCode}]` : ""}`}
                       </option>
                     ))}
                   </optgroup>
@@ -533,13 +567,22 @@ export default function CampusNavigator() {
                 id="cn-end-select"
                 className="cn-select"
                 value={endNodeId}
-                onChange={(e) => setEndNodeId(e.target.value)}
+                onChange={(e) => {
+                  const n = nodeById.get(Number(e.target.value));
+                  if (n?.isLocked) return;
+                  setEndNodeId(e.target.value);
+                }}
               >
                 {groupedSelectableNodes.map(({ floor, items }) => (
-                  <optgroup key={floor.id} label={floor.floorLabel}>
+                  <optgroup
+                    key={floor.id}
+                    label={`${floor.floorLabel}${floor.isLocked ? " [Restricted Floor]" : ""}`}
+                  >
                     {items.map((n) => (
-                      <option key={n.id} value={n.id}>
-                        {n.label}
+                      <option key={n.id} value={n.id} disabled={Boolean(n.isLocked)}>
+                        {n.isLocked
+                          ? `[Locked · ${ACCESS_TIER_META[n.effectiveAccessLevel || "staff"]?.shortLabel}] ${n.code}`
+                          : n.label}
                       </option>
                     ))}
                   </optgroup>
@@ -631,6 +674,15 @@ export default function CampusNavigator() {
             {/* Live Route Output */}
             {routeResult?.found ? (
               <>
+                {routeResult.detouredAroundRestricted && (
+                  <div className="cn-detour-banner" role="status">
+                    <i className="bx bx-shield-alt-2" aria-hidden="true" />
+                    <span>
+                      Detour applied: route automatically avoids restricted security zones outside your clearance tier.
+                    </span>
+                  </div>
+                )}
+
                 <div className="cn-route-metrics">
                   <div>
                     <div className="cn-route-metric__val">
@@ -889,7 +941,13 @@ export default function CampusNavigator() {
                     }}
                   >
                     <i
-                      className={`bx ${fl.isOutdoor ? "bx-map-alt" : "bx-layer"}`}
+                      className={`bx ${
+                        fl.isLocked
+                          ? "bx-lock-alt"
+                          : fl.isOutdoor
+                            ? "bx-map-alt"
+                            : "bx-layer"
+                      }`}
                       aria-hidden="true"
                     />
                     {fl.isOutdoor ? "Outdoor Campus" : fl.floorLabel.replace(/^Block B — /, "")}
@@ -965,248 +1023,378 @@ export default function CampusNavigator() {
                 height: "100%",
               }}
             >
-              {activeFloor?.mapImageUrl ? (
-                <img
-                  src={activeFloor.mapImageUrl}
-                  alt={activeFloor.floorLabel}
-                  className="cn-map-img"
-                />
-              ) : (
-                <div style={{ padding: "48px", textAlign: "center", color: "#94a3b8" }}>
-                  No blueprint uploaded for this floor yet.
-                </div>
-              )}
-
-              {/* SVG Walkable Corridor Graph + Animated Shortest-Path Polyline */}
-              <svg
-                className="cn-svg-overlay"
-                viewBox="0 0 1000 700"
-                preserveAspectRatio="none"
-                aria-hidden="true"
-              >
-                {/* Base walkable corridor edges */}
-                {floorEdges.map((edge) => {
-                  const a = nodeById.get(Number(edge.fromNodeId));
-                  const b = nodeById.get(Number(edge.toNodeId));
-                  if (!a || !b) return null;
-                  return (
-                    <line
-                      key={edge.id}
-                      x1={a.x * 10}
-                      y1={a.y * 7}
-                      x2={b.x * 10}
-                      y2={b.y * 7}
-                      stroke={edge.isAccessible ? "rgba(148,163,184,0.34)" : "rgba(245,158,11,0.4)"}
-                      strokeWidth={3}
-                      strokeDasharray="6 6"
-                    />
-                  );
-                })}
-
-                {/* Computed Shortest-Path Highlight */}
-                {activeRouteSegments.map((seg, idx) => (
-                  <g key={`route-${idx}`}>
-                    <line
-                      x1={seg.from.x * 10}
-                      y1={seg.from.y * 7}
-                      x2={seg.to.x * 10}
-                      y2={seg.to.y * 7}
-                      stroke={accessibleOnly ? "rgba(22, 163, 74, 0.35)" : "rgba(234, 88, 12, 0.35)"}
-                      strokeWidth={14}
-                      strokeLinecap="round"
-                    />
-                    <line
-                      className="cn-route-line"
-                      x1={seg.from.x * 10}
-                      y1={seg.from.y * 7}
-                      x2={seg.to.x * 10}
-                      y2={seg.to.y * 7}
-                      stroke={accessibleOnly ? "#22c55e" : "#fb923c"}
-                      strokeWidth={6}
-                      strokeDasharray="12 6"
-                      strokeLinecap="round"
-                    />
-                  </g>
-                ))}
-              </svg>
-
-              {/* Clickable Map Pins */}
-              {floorNodes.map((node) => {
-                const isStart = Number(startNodeId) === Number(node.id);
-                const isEnd = Number(endNodeId) === Number(node.id);
-                const isSelected = Number(selectedNodeId) === Number(node.id);
-                const isLiveCheckpoint =
-                  walkthrough?.active && Number(walkthrough.currentNodeId) === Number(node.id);
-                const onRoute = routeNodeSet.has(Number(node.id));
-                const nodeIssues = showComplaints ? complaintsByNode.get(node.id) || [] : [];
-                const nodeLf = showLostFound ? lostFoundByNode.get(node.id) || [] : [];
-                const hasQr = showQrSpots && Boolean(node.qrSpotCode);
-
-                let pinClass = "cn-pin";
-                if (isLiveCheckpoint) {
-                  pinClass += " cn-pin--live-you";
-                } else if (node.nodeType === "corridor" && !isStart && !isEnd) {
-                  pinClass += " cn-pin--corridor";
-                } else if (isStart) {
-                  pinClass += " cn-pin--start";
-                } else if (isEnd) {
-                  pinClass += " cn-pin--end";
-                } else if (nodeIssues.length > 0) {
-                  pinClass += " cn-pin--complaint";
-                } else if (nodeLf.length > 0) {
-                  pinClass += " cn-pin--lostfound";
-                } else if (hasQr) {
-                  pinClass += " cn-pin--qr";
-                } else if (node.nodeType === "stairs") {
-                  pinClass += " cn-pin--stairs";
-                } else if (node.nodeType === "elevator" || node.nodeType === "ramp") {
-                  pinClass += " cn-pin--elevator";
-                }
-
-                if (isSelected) pinClass += " is-selected";
-
-                const showTag =
-                  isLiveCheckpoint ||
-                  isStart ||
-                  isEnd ||
-                  isSelected ||
-                  nodeIssues.length > 0 ||
-                  nodeLf.length > 0 ||
-                  (onRoute && node.nodeType !== "corridor");
-
-                return (
-                  <button
-                    key={node.id}
-                    type="button"
-                    className={pinClass}
-                    style={{ left: `${node.x}%`, top: `${node.y}%` }}
-                    onClick={() => setSelectedNodeId(node.id)}
-                    aria-label={`${node.label} (${node.nodeType})${isLiveCheckpoint ? " — You are here" : ""}`}
-                    title={node.label}
+              {activeFloor?.isLocked ? (
+                <div className="cn-restricted-shield" role="region" aria-label="Restricted Floor">
+                  <div className="cn-restricted-shield__icon">
+                    <i className="bx bx-lock-alt" aria-hidden="true" />
+                  </div>
+                  <span
+                    className={`cn-tier-badge cn-tier-badge--${activeFloor.effectiveAccessLevel || "staff"}`}
                   >
-                    {(node.nodeType !== "corridor" || isLiveCheckpoint) && (
-                      <i
-                        className={
-                          isLiveCheckpoint
-                            ? "bx bx-walk"
-                            : isStart
-                              ? "bx bx-navigation"
-                              : isEnd
-                                ? "bx bx-flag"
-                                : nodeIssues.length > 0
-                                  ? "bx bx-error-circle"
-                                  : nodeLf.length > 0
-                                    ? "bx bx-package"
-                                    : NODE_ICON[node.nodeType] || "bx bx-map-pin"
-                        }
-                        aria-hidden="true"
-                      />
-                    )}
-                    {showTag && (
-                      <span className="cn-pin-label">
-                        {isLiveCheckpoint
-                          ? "YOU ARE HERE · "
-                          : isStart
-                            ? "START · "
-                            : isEnd
-                              ? "DEST · "
-                              : ""}
-                        {node.code}
-                        {nodeIssues.length > 0 ? ` (${nodeIssues.length} issue)` : ""}
-                        {nodeLf.length > 0 ? ` (${nodeLf.length} found)` : ""}
+                    <i className="bx bx-shield-alt-2" aria-hidden="true" />
+                    {ACCESS_TIER_META[activeFloor.effectiveAccessLevel || "staff"]?.label} Clearance Required
+                  </span>
+                  <h3>{activeFloor.floorLabel} — Entry Blocked</h3>
+                  <p>
+                    {activeFloor.restrictedNotice ||
+                      "This floor blueprint is protected by campus security policy. Entry and navigation are restricted to authorized accounts."}
+                  </p>
+                  {!user && (
+                    <Link to="/auth" className="av-btn av-btn--primary av-btn--compact">
+                      <i className="bx bx-log-in" aria-hidden="true" />
+                      Sign In with Authorized Account
+                    </Link>
+                  )}
+                </div>
+              ) : (
+                <>
+                  {activeFloor?.mapImageUrl ? (
+                    <img
+                      src={activeFloor.mapImageUrl}
+                      alt={activeFloor.floorLabel}
+                      className="cn-map-img"
+                    />
+                  ) : (
+                    <div className="cn-default-grid">
+                      <span className="cn-default-grid__tag">
+                        Architectural Grid · {activeFloor?.widthMeters || 60}m × {activeFloor?.heightMeters || 42}m
                       </span>
-                    )}
-                  </button>
-                );
-              })}
+                    </div>
+                  )}
+
+                  {/* SVG Walkable Corridor Graph + Animated Shortest-Path Polyline */}
+                  <svg
+                    className="cn-svg-overlay"
+                    viewBox="0 0 1000 700"
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                  >
+                    {/* Base walkable corridor edges */}
+                    {floorEdges.map((edge) => {
+                      const a = nodeById.get(Number(edge.fromNodeId));
+                      const b = nodeById.get(Number(edge.toNodeId));
+                      if (!a || !b) return null;
+                      return (
+                        <line
+                          key={edge.id}
+                          x1={a.x * 10}
+                          y1={a.y * 7}
+                          x2={b.x * 10}
+                          y2={b.y * 7}
+                          stroke={
+                            edge.isLocked
+                              ? "rgba(220, 38, 38, 0.72)"
+                              : edge.isAccessible
+                                ? "rgba(148,163,184,0.34)"
+                                : "rgba(245,158,11,0.4)"
+                          }
+                          strokeWidth={edge.isLocked ? 3.5 : 3}
+                          strokeDasharray={edge.isLocked ? "4 5" : "6 6"}
+                        />
+                      );
+                    })}
+
+                    {/* Computed Shortest-Path Highlight */}
+                    {activeRouteSegments.map((seg, idx) => (
+                      <g key={`route-${idx}`}>
+                        <line
+                          x1={seg.from.x * 10}
+                          y1={seg.from.y * 7}
+                          x2={seg.to.x * 10}
+                          y2={seg.to.y * 7}
+                          stroke={accessibleOnly ? "rgba(22, 163, 74, 0.35)" : "rgba(234, 88, 12, 0.35)"}
+                          strokeWidth={14}
+                          strokeLinecap="round"
+                        />
+                        <line
+                          className="cn-route-line"
+                          x1={seg.from.x * 10}
+                          y1={seg.from.y * 7}
+                          x2={seg.to.x * 10}
+                          y2={seg.to.y * 7}
+                          stroke={accessibleOnly ? "#22c55e" : "#fb923c"}
+                          strokeWidth={6}
+                          strokeDasharray="12 6"
+                          strokeLinecap="round"
+                        />
+                      </g>
+                    ))}
+                  </svg>
+
+                  {/* Clickable Map Pins */}
+                  {floorNodes.map((node) => {
+                    const isLocked = Boolean(node.isLocked);
+                    const isProtectedUnlocked =
+                      !isLocked &&
+                      node.effectiveAccessLevel &&
+                      node.effectiveAccessLevel !== "public";
+                    const isStart = !isLocked && Number(startNodeId) === Number(node.id);
+                    const isEnd = !isLocked && Number(endNodeId) === Number(node.id);
+                    const isSelected = Number(selectedNodeId) === Number(node.id);
+                    const isLiveCheckpoint =
+                      !isLocked &&
+                      walkthrough?.active &&
+                      Number(walkthrough.currentNodeId) === Number(node.id);
+                    const onRoute = routeNodeSet.has(Number(node.id));
+                    const nodeIssues =
+                      !isLocked && showComplaints ? complaintsByNode.get(node.id) || [] : [];
+                    const nodeLf =
+                      !isLocked && showLostFound ? lostFoundByNode.get(node.id) || [] : [];
+                    const hasQr = !isLocked && showQrSpots && Boolean(node.qrSpotCode);
+
+                    let pinClass = "cn-pin";
+                    if (isLocked) {
+                      pinClass += " cn-pin--locked";
+                    } else if (isLiveCheckpoint) {
+                      pinClass += " cn-pin--live-you";
+                    } else if (node.nodeType === "corridor" && !isStart && !isEnd) {
+                      pinClass += " cn-pin--corridor";
+                    } else if (isStart) {
+                      pinClass += " cn-pin--start";
+                    } else if (isEnd) {
+                      pinClass += " cn-pin--end";
+                    } else if (nodeIssues.length > 0) {
+                      pinClass += " cn-pin--complaint";
+                    } else if (nodeLf.length > 0) {
+                      pinClass += " cn-pin--lostfound";
+                    } else if (hasQr) {
+                      pinClass += " cn-pin--qr";
+                    } else if (node.nodeType === "stairs") {
+                      pinClass += " cn-pin--stairs";
+                    } else if (node.nodeType === "elevator" || node.nodeType === "ramp") {
+                      pinClass += " cn-pin--elevator";
+                    }
+
+                    if (isProtectedUnlocked) pinClass += " cn-pin--protected-unlocked";
+                    if (isSelected) pinClass += " is-selected";
+
+                    const showTag =
+                      isLocked ||
+                      isLiveCheckpoint ||
+                      isStart ||
+                      isEnd ||
+                      isSelected ||
+                      nodeIssues.length > 0 ||
+                      nodeLf.length > 0 ||
+                      (onRoute && node.nodeType !== "corridor");
+
+                    return (
+                      <button
+                        key={node.id}
+                        type="button"
+                        className={pinClass}
+                        style={{ left: `${node.x}%`, top: `${node.y}%` }}
+                        onClick={() => setSelectedNodeId(node.id)}
+                        aria-label={
+                          isLocked
+                            ? `Locked Restricted Area ${node.code} — ${ACCESS_TIER_META[node.effectiveAccessLevel || "staff"]?.label} clearance required`
+                            : `${node.label} (${node.nodeType})${isLiveCheckpoint ? " — You are here" : ""}`
+                        }
+                        title={
+                          isLocked
+                            ? `Restricted (${ACCESS_TIER_META[node.effectiveAccessLevel || "staff"]?.label} Only)`
+                            : node.label
+                        }
+                      >
+                        {isLocked ? (
+                          <i className="bx bx-lock-alt" aria-hidden="true" />
+                        ) : (
+                          (node.nodeType !== "corridor" || isLiveCheckpoint) && (
+                            <i
+                              className={
+                                isLiveCheckpoint
+                                  ? "bx bx-walk"
+                                  : isStart
+                                    ? "bx bx-navigation"
+                                    : isEnd
+                                      ? "bx bx-flag"
+                                      : nodeIssues.length > 0
+                                        ? "bx bx-error-circle"
+                                        : nodeLf.length > 0
+                                          ? "bx bx-package"
+                                          : NODE_ICON[node.nodeType] || "bx bx-map-pin"
+                              }
+                              aria-hidden="true"
+                            />
+                          )
+                        )}
+                        {showTag && (
+                          <span
+                            className={`cn-pin-label ${isLocked ? "cn-pin-label--locked" : ""}`}
+                          >
+                            {isLocked ? (
+                              <>
+                                LOCKED · {ACCESS_TIER_META[node.effectiveAccessLevel || "staff"]?.shortLabel}
+                              </>
+                            ) : (
+                              <>
+                                {isLiveCheckpoint
+                                  ? "YOU ARE HERE · "
+                                  : isStart
+                                    ? "START · "
+                                    : isEnd
+                                      ? "DEST · "
+                                      : ""}
+                                {node.code}
+                                {nodeIssues.length > 0 ? ` (${nodeIssues.length} issue)` : ""}
+                                {nodeLf.length > 0 ? ` (${nodeLf.length} found)` : ""}
+                              </>
+                            )}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </>
+              )}
             </div>
           </div>
 
-          {/* Selected Spot Inspector */}
-          <div className="cn-inspector">
+          {/* Selected Spot Inspector (or Restricted Access Card) */}
+          <div className={`cn-inspector ${selectedNode?.isLocked ? "cn-inspector--locked" : ""}`}>
             {selectedNode ? (
-              <>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: "0.95rem" }}>
-                    {selectedNode.label}
-                  </div>
-                  <div style={{ fontSize: "0.79rem", color: "var(--av-ink-muted)", marginTop: "2px" }}>
-                    {selectedNode.code} · {selectedNode.nodeType} ·{" "}
-                    {selectedNode.isAccessible ? "Wheelchair Accessible" : "Stairs Only"}
-                    {selectedNode.displayQrSpotCode
-                      ? ` · QR Spot: ${selectedNode.displayQrSpotCode}`
-                      : ""}
-                  </div>
-                  {selectedComplaints.length > 0 && (
-                    <div style={{ fontSize: "0.8rem", color: "#f87171", marginTop: "4px" }}>
-                      Active Issue: {selectedComplaints[0].complaintId} — {selectedComplaints[0].title}
+              selectedNode.isLocked ? (
+                <>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                      <strong style={{ fontSize: "0.95rem", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                        <i className="bx bx-lock-alt" aria-hidden="true" style={{ color: "#f87171" }} />
+                        Restricted Area — Entry Blocked
+                      </strong>
+                      <span
+                        className={`cn-tier-badge cn-tier-badge--${selectedNode.effectiveAccessLevel || "staff"}`}
+                      >
+                        {ACCESS_TIER_META[selectedNode.effectiveAccessLevel || "staff"]?.label} Clearance Required
+                      </span>
                     </div>
-                  )}
-                  {selectedLostFound.length > 0 && (
-                    <div style={{ fontSize: "0.8rem", color: "#fbbf24", marginTop: "4px" }}>
-                      Lost &amp; Found: {selectedLostFound[0].itemCode} — {selectedLostFound[0].title}
+                    <div style={{ fontSize: "0.8rem", color: "var(--av-ink-muted)", marginTop: "4px" }}>
+                      {selectedNode.restrictedNotice ||
+                        "Access to this sensitive campus zone is protected by institutional security policy. Routing into or through this zone is blocked."}
                     </div>
-                  )}
-                </div>
+                  </div>
 
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                  {selectedBuildingIndoorFloors.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                    <button
+                      type="button"
+                      disabled
+                      className="av-btn av-btn--secondary av-btn--compact"
+                      style={{ opacity: 0.45, cursor: "not-allowed" }}
+                    >
+                      <i className="bx bx-block" aria-hidden="true" />
+                      Set as Start
+                    </button>
+                    <button
+                      type="button"
+                      disabled
+                      className="av-btn av-btn--primary av-btn--compact"
+                      style={{ opacity: 0.45, cursor: "not-allowed" }}
+                    >
+                      <i className="bx bx-lock-alt" aria-hidden="true" />
+                      Entry Blocked
+                    </button>
+                    {!user && (
+                      <Link to="/auth" className="av-btn av-btn--primary av-btn--compact">
+                        <i className="bx bx-log-in" aria-hidden="true" />
+                        Sign In with Authorized Account
+                      </Link>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                      <span style={{ fontWeight: 700, fontSize: "0.95rem" }}>
+                        {selectedNode.label}
+                      </span>
+                      {selectedNode.effectiveAccessLevel &&
+                        selectedNode.effectiveAccessLevel !== "public" && (
+                          <span
+                            className={`cn-tier-badge cn-tier-badge--${selectedNode.effectiveAccessLevel}`}
+                          >
+                            <i className="bx bx-shield-alt-2" aria-hidden="true" />
+                            {ACCESS_TIER_META[selectedNode.effectiveAccessLevel]?.shortLabel} (Authorized)
+                          </span>
+                        )}
+                    </div>
+                    <div style={{ fontSize: "0.79rem", color: "var(--av-ink-muted)", marginTop: "2px" }}>
+                      {selectedNode.code} · {selectedNode.nodeType} ·{" "}
+                      {selectedNode.isAccessible ? "Wheelchair Accessible" : "Stairs Only"}
+                      {selectedNode.displayQrSpotCode
+                        ? ` · QR Spot: ${selectedNode.displayQrSpotCode}`
+                        : ""}
+                    </div>
+                    {selectedComplaints.length > 0 && (
+                      <div style={{ fontSize: "0.8rem", color: "#f87171", marginTop: "4px" }}>
+                        Active Issue: {selectedComplaints[0].complaintId} — {selectedComplaints[0].title}
+                      </div>
+                    )}
+                    {selectedLostFound.length > 0 && (
+                      <div style={{ fontSize: "0.8rem", color: "#fbbf24", marginTop: "4px" }}>
+                        Lost &amp; Found: {selectedLostFound[0].itemCode} — {selectedLostFound[0].title}
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                    {selectedBuildingIndoorFloors.length > 0 && (
+                      <button
+                        type="button"
+                        className="av-btn av-btn--primary av-btn--compact"
+                        onClick={() => {
+                          setActiveFloorId(selectedBuildingIndoorFloors[0].id);
+                          setZoom(1);
+                        }}
+                      >
+                        <i className="bx bx-layer" aria-hidden="true" />
+                        Open Indoor Floor Plan ({selectedBuildingIndoorFloors.length}) →
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="av-btn av-btn--secondary av-btn--compact"
+                      onClick={() => handleQrAnchorLock(selectedNode, { source: "Map Pin Lock" })}
+                    >
+                      Set as Start
+                    </button>
                     <button
                       type="button"
                       className="av-btn av-btn--primary av-btn--compact"
-                      onClick={() => {
-                        setActiveFloorId(selectedBuildingIndoorFloors[0].id);
-                        setZoom(1);
-                      }}
+                      onClick={() => setEndNodeId(String(selectedNode.id))}
                     >
-                      <i className="bx bx-layer" aria-hidden="true" />
-                      Open Indoor Floor Plan ({selectedBuildingIndoorFloors.length}) →
+                      Navigate Here
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    className="av-btn av-btn--secondary av-btn--compact"
-                    onClick={() => handleQrAnchorLock(selectedNode, { source: "Map Pin Lock" })}
-                  >
-                    Set as Start
-                  </button>
-                  <button
-                    type="button"
-                    className="av-btn av-btn--primary av-btn--compact"
-                    onClick={() => setEndNodeId(String(selectedNode.id))}
-                  >
-                    Navigate Here
-                  </button>
-                  <button
-                    type="button"
-                    className="av-btn av-btn--ghost av-btn--compact"
-                    onClick={() => setPosterNode(selectedNode)}
-                  >
-                    <i className="bx bx-qr" aria-hidden="true" />
-                    Show QR Poster
-                  </button>
-                  {selectedNode.qrSpotCode && (
-                    <Link
-                      to={`/report?spot=${encodeURIComponent(selectedNode.qrSpotCode)}`}
-                      className="av-btn av-btn--ghost av-btn--compact"
-                    >
-                      Report via QR
-                    </Link>
-                  )}
-                  {selectedLostFound.length > 0 && (
                     <button
                       type="button"
                       className="av-btn av-btn--ghost av-btn--compact"
-                      onClick={() => navigate("/lost-found")}
+                      onClick={() => setPosterNode(selectedNode)}
                     >
-                      Claim Found Item
+                      <i className="bx bx-qr" aria-hidden="true" />
+                      Show QR Poster
                     </button>
-                  )}
-                </div>
-              </>
+                    {selectedNode.qrSpotCode && (
+                      <Link
+                        to={`/report?spot=${encodeURIComponent(selectedNode.qrSpotCode)}`}
+                        className="av-btn av-btn--ghost av-btn--compact"
+                      >
+                        Report via QR
+                      </Link>
+                    )}
+                    {selectedLostFound.length > 0 && (
+                      <button
+                        type="button"
+                        className="av-btn av-btn--ghost av-btn--compact"
+                        onClick={() => navigate("/lost-found")}
+                      >
+                        Claim Found Item
+                      </button>
+                    )}
+                  </div>
+                </>
+              )
             ) : (
               <div style={{ fontSize: "0.83rem", color: "var(--av-ink-muted)" }}>
-                Click any room, lab, staircase, elevator, complaint, or Lost &amp; Found pin on the floor plan to inspect or route directly to it.
+                Click any room, lab, staircase, elevator, or locked zone pin on the floor plan to inspect details or verify access requirements.
               </div>
             )}
           </div>
@@ -1218,6 +1406,9 @@ export default function CampusNavigator() {
             </span>
             <span className="cn-legend__item">
               <span className="cn-swatch" style={{ background: "#ea580c" }} /> Destination / Route
+            </span>
+            <span className="cn-legend__item">
+              <span className="cn-swatch" style={{ background: "#991b1b" }} /> Locked Restricted Zone ({lockedZoneCount})
             </span>
             <span className="cn-legend__item">
               <span className="cn-swatch" style={{ background: "#dc2626" }} /> Active Complaint
@@ -1248,7 +1439,10 @@ export default function CampusNavigator() {
         <div className="cn-dept-grid">
           {departments.map((dept) => {
             const deptNode = nodes.find(
-              (n) => Number(n.buildingId) === Number(dept.buildingId) && n.nodeType !== "corridor"
+              (n) =>
+                Number(n.buildingId) === Number(dept.buildingId) &&
+                n.nodeType !== "corridor" &&
+                !n.isLocked
             );
             return (
               <article key={dept.id} className="cn-dept-card">

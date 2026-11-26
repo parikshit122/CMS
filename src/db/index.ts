@@ -52,6 +52,20 @@ export function buildPoolConfig(
     keepAliveInitialDelayMillis: 10000,
   };
 
+  const sqlHost = env.SQL_HOST?.trim();
+  if (sqlHost) {
+    const port = env.SQL_PORT ? Number(env.SQL_PORT) : undefined;
+    return {
+      ...base,
+      host: sqlHost,
+      ...(port && Number.isFinite(port) ? { port } : {}),
+      user: env.SQL_USER,
+      password: env.SQL_PASSWORD,
+      database: env.SQL_DB_NAME,
+      ...(env.SQL_SSL === "true" ? { ssl: { rejectUnauthorized: false } } : {}),
+    };
+  }
+
   const databaseUrl = env.DATABASE_URL?.trim();
   if (databaseUrl) {
     let isLocalOrInternal = false;
@@ -59,10 +73,13 @@ export function buildPoolConfig(
     try {
       const parsed = new URL(databaseUrl);
       const host = parsed.hostname.toLowerCase();
+      const socketHost = parsed.searchParams.get("host") || "";
       isLocalOrInternal =
+        !host ||
         host === "localhost" ||
         host === "127.0.0.1" ||
-        !host.includes(".");
+        !host.includes(".") ||
+        socketHost.startsWith("/");
       sslMode = (parsed.searchParams.get("sslmode") || "").toLowerCase();
     } catch {
       // Keep safe defaults for non-standard connection strings
@@ -87,16 +104,7 @@ export function buildPoolConfig(
     };
   }
 
-  const port = env.SQL_PORT ? Number(env.SQL_PORT) : undefined;
-  return {
-    ...base,
-    host: env.SQL_HOST,
-    ...(port && Number.isFinite(port) ? { port } : {}),
-    user: env.SQL_USER,
-    password: env.SQL_PASSWORD,
-    database: env.SQL_DB_NAME,
-    ...(env.SQL_SSL === "true" ? { ssl: { rejectUnauthorized: false } } : {}),
-  };
+  return base;
 }
 
 export const createPool = () => {

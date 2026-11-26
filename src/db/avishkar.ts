@@ -20,6 +20,8 @@ import {
 } from "../lib/avishkar-logic.ts";
 import { maskInstitutionText } from "../lib/campus-navigation.ts";
 import {
+  DEFAULT_CAMPUS_QR_SPOTS,
+  ensureDefaultQrSpotsSeeded,
   getInstitutionBranding,
   seedOrResetCampusNavigationAndAcademics,
 } from "./campus.ts";
@@ -27,6 +29,7 @@ import {
 // ── QR Campus Spots CRUD ──────────────────────────────────
 
 export async function listQrSpots() {
+  await ensureDefaultQrSpotsSeeded();
   return db
     .select()
     .from(campusQrSpots)
@@ -36,6 +39,8 @@ export async function listQrSpots() {
 export async function findQrSpotByCode(rawCode: string, incrementScan = false) {
   const spotCode = normalizeSpotCode(rawCode);
   if (!spotCode) return null;
+
+  await ensureDefaultQrSpotsSeeded();
 
   const rows = await db
     .select()
@@ -584,58 +589,7 @@ export async function seedOrResetDemoCampusData(forceReset = false) {
   const hoursAgo = (h: number) => new Date(now.getTime() - h * 3600 * 1000);
 
   // 1. Seed 5 physical Smart Campus QR Spots
-  const qrSeedSpecs = [
-    {
-      spotCode: "CAMPUS-CSLAB-02",
-      label: "Computer Lab 2 — Projection & LAN Desk",
-      building: "Engineering Block B",
-      floor: "2nd Floor",
-      locationId: "lab-cs",
-      defaultCategory: "it",
-      scanCount: 42,
-      complaintCount: 5,
-    },
-    {
-      spotCode: "CAMPUS-HOSTELA-WC",
-      label: "Hostel Block A — RO Water Cooler",
-      building: "Boys Hostel Block A",
-      floor: "1st Floor",
-      locationId: "hostel-a",
-      defaultCategory: "plumbing",
-      scanCount: 31,
-      complaintCount: 4,
-    },
-    {
-      spotCode: "CAMPUS-LIB-HALL",
-      label: "Central Library — Reading Hall AC & Wi-Fi",
-      building: "Central Academic Block",
-      floor: "1st Floor",
-      locationId: "library",
-      defaultCategory: "electrical",
-      scanCount: 27,
-      complaintCount: 3,
-    },
-    {
-      spotCode: "CAMPUS-CANTEEN-01",
-      label: "Campus Canteen — Hygiene & Seating Area",
-      building: "Student Amenities Center",
-      floor: "Ground Floor",
-      locationId: "canteen",
-      defaultCategory: "cleanliness",
-      scanCount: 19,
-      complaintCount: 2,
-    },
-    {
-      spotCode: "CAMPUS-PARKING-GATE",
-      label: "Main Gate & Two-Wheeler Parking Lights",
-      building: "Campus Entrance",
-      floor: "Outdoor",
-      locationId: "parking",
-      defaultCategory: "safety",
-      scanCount: 15,
-      complaintCount: 2,
-    },
-  ];
+  const qrSeedSpecs = DEFAULT_CAMPUS_QR_SPOTS;
 
   for (const spot of qrSeedSpecs) {
     await db

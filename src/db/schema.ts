@@ -499,6 +499,10 @@ export const campusFloors = pgTable(
     widthMeters: real("width_meters").notNull().default(60),
     heightMeters: real("height_meters").notNull().default(40),
     isOutdoor: boolean("is_outdoor").notNull().default(false),
+    accessLevel: text("access_level").notNull().default("public"), // public | student | staff | admin
+    isSensitive: boolean("is_sensitive").notNull().default(false),
+    restrictedNotice: text("restricted_notice").default(""),
+    blueprintUpdatedAt: timestamp("blueprint_updated_at"),
     isDemoRecord: boolean("is_demo_record").notNull().default(false),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -525,6 +529,9 @@ export const campusMapNodes = pgTable(
     qrSpotCode: text("qr_spot_code"),
     departmentId: integer("department_id"),
     description: text("description").default(""),
+    accessLevel: text("access_level").notNull().default("public"), // public | student | staff | admin
+    isSensitive: boolean("is_sensitive").notNull().default(false),
+    restrictedNotice: text("restricted_notice").default(""),
     isDemoRecord: boolean("is_demo_record").notNull().default(false),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -548,6 +555,8 @@ export const campusMapEdges = pgTable(
     distanceMeters: real("distance_meters").notNull().default(10),
     edgeType: text("edge_type").notNull().default("corridor"), // corridor | walkway | stairs | elevator | ramp
     isAccessible: boolean("is_accessible").notNull().default(true),
+    accessLevel: text("access_level").notNull().default("public"), // public | student | staff | admin
+    isSensitive: boolean("is_sensitive").notNull().default(false),
     isDemoRecord: boolean("is_demo_record").notNull().default(false),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },

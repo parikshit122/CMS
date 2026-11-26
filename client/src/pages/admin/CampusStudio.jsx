@@ -3,6 +3,13 @@ import { Link } from "react-router-dom";
 import API from "../../services/api";
 import { useToast } from "../../components/common/Alert";
 import { broadcastBrandingUpdate } from "../../hooks/useInstitutionBranding";
+import BlueprintManagerPanel from "../../components/campus/BlueprintManagerPanel";
+import ProtectedZonesTable from "../../components/campus/ProtectedZonesTable";
+import {
+  ACCESS_TIER_META,
+  CAMPUS_ACCESS_TIERS,
+  applyCampusAccessPreview,
+} from "../../utils/campusPathfinder";
 import "../../styles/CampusNavigation.css";
 
 const NODE_TYPES = [
@@ -42,12 +49,18 @@ export default function CampusStudio() {
   });
   const [savingBrand, setSavingBrand] = useState(false);
 
-  // Map Editor state
+  // Map Editor & Policy State
   const [activeFloorId, setActiveFloorId] = useState(null);
   const [tool, setTool] = useState("select"); // "select" | "add-node" | "connect-edge"
   const [selectedNodeId, setSelectedNodeId] = useState(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState(null);
   const [edgeStartId, setEdgeStartId] = useState(null);
   const [edgeType, setEdgeType] = useState("corridor");
+  const [edgeAccessLevel, setEdgeAccessLevel] = useState("public");
+  const [previewTier, setPreviewTier] = useState("admin"); // admin | staff | student | public
+  const [blueprintPreviewUrl, setBlueprintPreviewUrl] = useState("");
+  const [savingPolicy, setSavingPolicy] = useState(false);
+  const [busyPolicyKey, setBusyPolicyKey] = useState("");
 
   // Pending new node settings
   const [newNodeForm, setNewNodeForm] = useState({
@@ -55,6 +68,16 @@ export default function CampusStudio() {
     code: "",
     nodeType: "room",
     qrSpotCode: "",
+    accessLevel: "public",
+    restrictedNotice: "",
+  });
+
+  // Active selected node policy edit form
+  const [nodePolicyForm, setNodePolicyForm] = useState({
+    label: "",
+    accessLevel: "public",
+    isSensitive: false,
+    restrictedNotice: "",
   });
 
   // Cross-floor vertical connector form
@@ -62,23 +85,13 @@ export default function CampusStudio() {
   const [crossToId, setCrossToId] = useState("");
   const [crossEdgeType, setCrossEdgeType] = useState("elevator");
 
-  // Upload Floor Plan / New Building forms
+  // New Building form
   const [buildingForm, setBuildingForm] = useState({
     code: "",
     name: "",
     shortLabel: "",
     category: "academic",
   });
-  const [floorForm, setFloorForm] = useState({
-    buildingId: "",
-    floorNumber: "1",
-    floorLabel: "",
-    widthMeters: "60",
-    heightMeters: "42",
-    isOutdoor: false,
-  });
-  const [floorImageFile, setFloorImageFile] = useState(null);
-  const [uploadingFloor, setUploadingFloor] = useState(false);
 
   // Academic Department & Course forms
   const [deptForm, setDeptForm] = useState({
@@ -98,17 +111,17 @@ export default function CampusStudio() {
     intakeCapacity: "60",
   });
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (preferredFloorId = null) => {
     try {
       setLoading(true);
       const [navRes, settingsRes] = await Promise.all([
-        API.get("/public/campus-navigation"),
+        API.get("/campus/studio-bundle").catch(() => API.get("/public/campus-navigation")),
         API.get("/settings").catch(() => null),
       ]);
       if (navRes.data?.success && navRes.data?.data) {
         const data = navRes.data.data;
         setBundle(data);
-        setActiveFloorId((prev) => prev || data.floors?.[0]?.id || null);
+        setActiveFloorId((prev) => preferredFloorId || prev || data.floors?.[0]?.id || null);
         if (data.departments?.length > 0) {
           setCourseForm((prev) => ({
             ...prev,
@@ -116,10 +129,6 @@ export default function CampusStudio() {
           }));
         }
         if (data.buildings?.length > 0) {
-          setFloorForm((prev) => ({
-            ...prev,
-            buildingId: prev.buildingId || String(data.buildings[0].id),
-          }));
           setDeptForm((prev) => ({
             ...prev,
             buildingId: prev.buildingId || String(data.buildings[0].id),
@@ -147,15 +156,37 @@ export default function CampusStudio() {
     loadData();
   }, [loadData]);
 
-  const floors = useMemo(() => bundle?.floors || [], [bundle]);
+  const rawFloors = useMemo(() => bundle?.floors || [], [bundle]);
   const buildings = useMemo(() => bundle?.buildings || [], [bundle]);
-  const nodes = useMemo(() => bundle?.nodes || [], [bundle]);
-  const edges = useMemo(() => bundle?.edges || [], [bundle]);
+  const rawNodes = useMemo(() => bundle?.nodes || [], [bundle]);
+  const rawEdges = useMemo(() => bundle?.edges || [], [bundle]);
   const departments = useMemo(() => bundle?.departments || [], [bundle]);
+
+  // Apply selected preview tier so admin can visually verify locked zones in real time
+  const previewBundle = useMemo(
+    () => (bundle ? applyCampusAccessPreview(bundle, previewTier) : null),
+    [bundle, previewTier]
+  );
+
+  const floors = useMemo(() => previewBundle?.floors || rawFloors, [previewBundle, rawFloors]);
+  const nodes = useMemo(() => previewBundle?.nodes || rawNodes, [previewBundle, rawNodes]);
+  const edges = useMemo(() => previewBundle?.edges || rawEdges, [previewBundle, rawEdges]);
+
+  const protectedZonesCount = useMemo(() => {
+    const pf = rawFloors.filter((f) => (f.accessLevel && f.accessLevel !== "public") || f.isSensitive).length;
+    const pn = rawNodes.filter((n) => (n.accessLevel && n.accessLevel !== "public") || n.isSensitive).length;
+    const pe = rawEdges.filter((e) => (e.accessLevel && e.accessLevel !== "public") || e.isSensitive).length;
+    return pf + pn + pe;
+  }, [rawFloors, rawNodes, rawEdges]);
 
   const activeFloor = useMemo(
     () => floors.find((f) => Number(f.id) === Number(activeFloorId)) || floors[0] || null,
     [floors, activeFloorId]
+  );
+
+  const rawActiveFloor = useMemo(
+    () => rawFloors.find((f) => Number(f.id) === Number(activeFloor?.id)) || null,
+    [rawFloors, activeFloor]
   );
 
   const floorNodes = useMemo(
@@ -183,7 +214,27 @@ export default function CampusStudio() {
     [nodes]
   );
 
-  const selectedNode = selectedNodeId ? nodeById.get(Number(selectedNodeId)) : null;
+  const rawNodeById = useMemo(
+    () => new Map(rawNodes.map((n) => [Number(n.id), n])),
+    [rawNodes]
+  );
+
+  const selectedNode = selectedNodeId ? rawNodeById.get(Number(selectedNodeId)) : null;
+  const selectedEdge = selectedEdgeId
+    ? rawEdges.find((e) => Number(e.id) === Number(selectedEdgeId)) || null
+    : null;
+
+  useEffect(() => {
+    if (!selectedNode) return;
+    setNodePolicyForm({
+      label: selectedNode.label || "",
+      accessLevel: selectedNode.accessLevel || "public",
+      isSensitive: Boolean(
+        selectedNode.isSensitive || (selectedNode.accessLevel && selectedNode.accessLevel !== "public")
+      ),
+      restrictedNotice: selectedNode.restrictedNotice || "",
+    });
+  }, [selectedNode]);
 
   // ── Handlers ────────────────────────────────────────────
 
@@ -234,10 +285,19 @@ export default function CampusStudio() {
         y,
         isAccessible: newNodeForm.nodeType !== "stairs",
         qrSpotCode: newNodeForm.qrSpotCode.trim() || null,
+        accessLevel: newNodeForm.accessLevel,
+        isSensitive: newNodeForm.accessLevel !== "public",
+        restrictedNotice: newNodeForm.restrictedNotice.trim(),
       });
       if (res.data?.success) {
         toast.success(res.data.message);
-        setNewNodeForm((prev) => ({ ...prev, label: "", code: "", qrSpotCode: "" }));
+        setNewNodeForm((prev) => ({
+          ...prev,
+          label: "",
+          code: "",
+          qrSpotCode: "",
+          restrictedNotice: "",
+        }));
         await loadData();
       }
     } catch (err) {
@@ -263,6 +323,8 @@ export default function CampusStudio() {
           toNodeId: node.id,
           edgeType,
           isAccessible: edgeType !== "stairs",
+          accessLevel: edgeAccessLevel,
+          isSensitive: edgeAccessLevel !== "public",
         });
         if (res.data?.success) {
           toast.success(res.data.message);
@@ -275,7 +337,85 @@ export default function CampusStudio() {
       return;
     }
 
+    setSelectedEdgeId(null);
     setSelectedNodeId(node.id);
+  };
+
+  const handleSaveNodePolicy = async (e) => {
+    e.preventDefault();
+    if (!selectedNode) return;
+    try {
+      setSavingPolicy(true);
+      const res = await API.patch(`/campus/nodes/${selectedNode.id}`, {
+        label: nodePolicyForm.label.trim() || selectedNode.label,
+        accessLevel: nodePolicyForm.accessLevel,
+        isSensitive: nodePolicyForm.isSensitive || nodePolicyForm.accessLevel !== "public",
+        restrictedNotice: nodePolicyForm.restrictedNotice.trim(),
+      });
+      if (res.data?.success) {
+        toast.success(res.data.message);
+        await loadData();
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to save node access policy.");
+    } finally {
+      setSavingPolicy(false);
+    }
+  };
+
+  const handleUpdateEdgePolicy = async (edgeId, nextTier) => {
+    try {
+      setSavingPolicy(true);
+      const res = await API.patch(`/campus/edges/${edgeId}`, {
+        accessLevel: nextTier,
+        isSensitive: nextTier !== "public",
+      });
+      if (res.data?.success) {
+        toast.success(res.data.message);
+        await loadData();
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to update walkway policy.");
+    } finally {
+      setSavingPolicy(false);
+    }
+  };
+
+  const handleDeleteEdge = async (edgeId) => {
+    try {
+      const res = await API.delete(`/campus/edges/${edgeId}`);
+      if (res.data?.success) {
+        toast.success(res.data.message);
+        setSelectedEdgeId(null);
+        await loadData();
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to delete walkway.");
+    }
+  };
+
+  const handleQuickPolicyTierChange = async (kind, id, nextTier, rowKey) => {
+    try {
+      setBusyPolicyKey(rowKey);
+      const endpoint =
+        kind === "floor"
+          ? `/campus/floors/${id}`
+          : kind === "edge"
+            ? `/campus/edges/${id}`
+            : `/campus/nodes/${id}`;
+      const res = await API.patch(endpoint, {
+        accessLevel: nextTier,
+        isSensitive: nextTier !== "public",
+      });
+      if (res.data?.success) {
+        toast.success(res.data.message);
+        await loadData();
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to update clearance tier.");
+    } finally {
+      setBusyPolicyKey("");
+    }
   };
 
   const handleDeleteNode = async (id) => {
@@ -327,44 +467,6 @@ export default function CampusStudio() {
       }
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to add building.");
-    }
-  };
-
-  const handleUploadFloor = async (e) => {
-    e.preventDefault();
-    if (!floorForm.floorLabel.trim()) {
-      toast.error("Enter a floor or campus map label.");
-      return;
-    }
-    if (!floorImageFile) {
-      toast.error("Select a PNG, JPG, WebP, or SVG floor plan file to upload.");
-      return;
-    }
-    try {
-      setUploadingFloor(true);
-      const fd = new FormData();
-      fd.append("floorLabel", floorForm.floorLabel.trim());
-      fd.append("floorNumber", String(floorForm.floorNumber));
-      fd.append("widthMeters", String(floorForm.widthMeters || 60));
-      fd.append("heightMeters", String(floorForm.heightMeters || 42));
-      fd.append("isOutdoor", String(floorForm.isOutdoor));
-      if (!floorForm.isOutdoor && floorForm.buildingId) {
-        fd.append("buildingId", String(floorForm.buildingId));
-      }
-      fd.append("mapImage", floorImageFile);
-
-      const res = await API.post("/campus/floors", fd);
-      if (res.data?.success) {
-        toast.success(res.data.message);
-        setFloorForm((prev) => ({ ...prev, floorLabel: "" }));
-        setFloorImageFile(null);
-        await loadData();
-        if (res.data.data?.id) setActiveFloorId(res.data.data.id);
-      }
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Floor plan upload failed.");
-    } finally {
-      setUploadingFloor(false);
     }
   };
 
@@ -506,7 +608,17 @@ export default function CampusStudio() {
           onClick={() => setActiveTab("maps")}
         >
           <i className="bx bx-map-alt" aria-hidden="true" />
-          Map &amp; Floor-Plan Editor ({floors.length})
+          Blueprints &amp; Map Editor ({floors.length})
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "policies"}
+          className={`cn-seg__btn ${activeTab === "policies" ? "is-active" : ""}`}
+          onClick={() => setActiveTab("policies")}
+        >
+          <i className="bx bx-shield-quarter" aria-hidden="true" />
+          Protected Zones ({protectedZonesCount})
         </button>
         <button
           type="button"
@@ -530,14 +642,23 @@ export default function CampusStudio() {
         </button>
       </div>
 
-      {/* ═══════════════ TAB 1: MAP & FLOOR-PLAN EDITOR ═══════════════ */}
+      {/* ═══════════════ TAB 1: BLUEPRINTS & MAP EDITOR ═══════════════ */}
       {activeTab === "maps" && (
         <div className="cn-workspace">
           {/* Left Editing Controls */}
           <div>
+            {/* 1. Blueprint Upload / Replacement & Floor Policy */}
+            <BlueprintManagerPanel
+              activeFloor={rawActiveFloor}
+              buildings={buildings}
+              onPreviewUrlChange={setBlueprintPreviewUrl}
+              onSaved={(nextId) => loadData(nextId)}
+            />
+
+            {/* 2. Interactive Graph & Node/Edge Security Tools */}
             <div className="cn-panel">
               <div className="cn-panel__title">
-                <span>1. Interactive Graph Tools</span>
+                <span>Interactive Pins &amp; Zone Policies</span>
               </div>
 
               <div className="cn-seg" style={{ width: "100%", marginBottom: "14px" }}>
@@ -550,7 +671,7 @@ export default function CampusStudio() {
                     setEdgeStartId(null);
                   }}
                 >
-                  Select
+                  Inspect / Policy
                 </button>
                 <button
                   type="button"
@@ -583,7 +704,7 @@ export default function CampusStudio() {
                     <input
                       id="st-node-label"
                       className="cn-input"
-                      placeholder="e.g., Smart Lab 208 or Ramp North"
+                      placeholder="e.g., Server Room 208 or Exam Vault"
                       value={newNodeForm.label}
                       onChange={(e) => setNewNodeForm((p) => ({ ...p, label: e.target.value }))}
                     />
@@ -603,6 +724,37 @@ export default function CampusStudio() {
                       ))}
                     </select>
                   </div>
+                  <div className="cn-field">
+                    <label htmlFor="st-node-tier">Access Clearance Tier</label>
+                    <select
+                      id="st-node-tier"
+                      className="cn-select"
+                      value={newNodeForm.accessLevel}
+                      onChange={(e) =>
+                        setNewNodeForm((p) => ({ ...p, accessLevel: e.target.value }))
+                      }
+                    >
+                      {CAMPUS_ACCESS_TIERS.map((tier) => (
+                        <option key={tier} value={tier}>
+                          {ACCESS_TIER_META[tier].label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {newNodeForm.accessLevel !== "public" && (
+                    <div className="cn-field">
+                      <label htmlFor="st-node-notice">Restriction Notice</label>
+                      <input
+                        id="st-node-notice"
+                        className="cn-input"
+                        placeholder="e.g., IT Admin Clearance Required"
+                        value={newNodeForm.restrictedNotice}
+                        onChange={(e) =>
+                          setNewNodeForm((p) => ({ ...p, restrictedNotice: e.target.value }))
+                        }
+                      />
+                    </div>
+                  )}
                   <div className="cn-field">
                     <label htmlFor="st-node-qr">Optional QR Spot Code</label>
                     <input
@@ -636,37 +788,188 @@ export default function CampusStudio() {
                       ))}
                     </select>
                   </div>
+                  <div className="cn-field">
+                    <label htmlFor="st-edge-tier">Walkway Clearance Tier</label>
+                    <select
+                      id="st-edge-tier"
+                      className="cn-select"
+                      value={edgeAccessLevel}
+                      onChange={(e) => setEdgeAccessLevel(e.target.value)}
+                    >
+                      {CAMPUS_ACCESS_TIERS.map((tier) => (
+                        <option key={tier} value={tier}>
+                          {ACCESS_TIER_META[tier].label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <p style={{ fontSize: "0.79rem", color: "var(--av-ink-muted)", margin: 0 }}>
                     {edgeStartId
-                      ? `Start pin selected (#${edgeStartId}). Now click the second pin on this floor to connect.`
+                      ? `Start pin selected (#${edgeStartId}). Click the second pin on this floor to connect.`
                       : "Click Node A, then click Node B on the map to create a walkable edge."}
                   </p>
                 </div>
               )}
 
               {tool === "select" && selectedNode && (
-                <div style={{ paddingTop: "6px" }}>
-                  <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>{selectedNode.label}</div>
-                  <div style={{ fontSize: "0.77rem", color: "var(--av-ink-muted)", margin: "3px 0 10px" }}>
-                    {selectedNode.code} · {selectedNode.nodeType} · ({selectedNode.x}%, {selectedNode.y}%)
-                  </div>
-                  <button
-                    type="button"
-                    className="av-btn av-btn--ghost av-btn--compact"
-                    style={{ color: "#f87171" }}
-                    onClick={() => handleDeleteNode(selectedNode.id)}
+                <form onSubmit={handleSaveNodePolicy} style={{ paddingTop: "4px" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "8px",
+                      marginBottom: "8px",
+                    }}
                   >
-                    <i className="bx bx-trash" aria-hidden="true" />
-                    Delete Pin
-                  </button>
+                    <span className="av-mono" style={{ fontSize: "0.75rem", color: "var(--av-ink-muted)" }}>
+                      {selectedNode.code} · ({selectedNode.x}%, {selectedNode.y}%)
+                    </span>
+                    <span className={`cn-tier-badge cn-tier-badge--${nodePolicyForm.accessLevel}`}>
+                      <i
+                        className={`bx ${nodePolicyForm.accessLevel === "public" ? "bx-check-circle" : "bx-lock-alt"}`}
+                        aria-hidden="true"
+                      />
+                      {ACCESS_TIER_META[nodePolicyForm.accessLevel]?.shortLabel}
+                    </span>
+                  </div>
+
+                  <div className="cn-field">
+                    <label htmlFor="st-sel-label">Room / Zone Name</label>
+                    <input
+                      id="st-sel-label"
+                      className="cn-input"
+                      value={nodePolicyForm.label}
+                      onChange={(e) => setNodePolicyForm((p) => ({ ...p, label: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="cn-field">
+                    <label htmlFor="st-sel-tier">Minimum Access Tier</label>
+                    <select
+                      id="st-sel-tier"
+                      className="cn-select"
+                      value={nodePolicyForm.accessLevel}
+                      onChange={(e) => {
+                        const tier = e.target.value;
+                        setNodePolicyForm((p) => ({
+                          ...p,
+                          accessLevel: tier,
+                          isSensitive: tier !== "public",
+                        }));
+                      }}
+                    >
+                      {CAMPUS_ACCESS_TIERS.map((tier) => (
+                        <option key={tier} value={tier}>
+                          {tier === "public"
+                            ? "Public — Open Access"
+                            : `${ACCESS_TIER_META[tier].label} (${ACCESS_TIER_META[tier].shortLabel})`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="cn-field">
+                    <label htmlFor="st-sel-notice">Restricted Area Notice (shown to unauthorized viewers)</label>
+                    <input
+                      id="st-sel-notice"
+                      className="cn-input"
+                      placeholder="e.g., Authorized Staff Only — Exam Control Vault"
+                      value={nodePolicyForm.restrictedNotice}
+                      onChange={(e) =>
+                        setNodePolicyForm((p) => ({ ...p, restrictedNotice: e.target.value }))
+                      }
+                    />
+                  </div>
+
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <button
+                      type="submit"
+                      disabled={savingPolicy}
+                      className="av-btn av-btn--primary av-btn--compact"
+                      style={{ flex: 1, justifyContent: "center" }}
+                    >
+                      <i className="bx bx-shield-alt-2" aria-hidden="true" />
+                      {savingPolicy ? "Saving..." : "Save Policy"}
+                    </button>
+                    <button
+                      type="button"
+                      className="av-btn av-btn--ghost av-btn--compact"
+                      style={{ color: "#f87171" }}
+                      onClick={() => handleDeleteNode(selectedNode.id)}
+                    >
+                      <i className="bx bx-trash" aria-hidden="true" />
+                      Delete
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {tool === "select" && !selectedNode && (
+                <div style={{ fontSize: "0.79rem", color: "var(--av-ink-muted)" }}>
+                  Click any pin on the blueprint to configure its access tier and restriction notice, or select a walkway below to protect a corridor.
+                </div>
+              )}
+
+              {floorEdges.length > 0 && tool === "select" && (
+                <div style={{ marginTop: "14px", paddingTop: "12px", borderTop: "1px solid var(--av-border)" }}>
+                  <div className="cn-field" style={{ marginBottom: "8px" }}>
+                    <label htmlFor="st-corridor-select">Restrict a Corridor / Walkway on this Floor</label>
+                    <select
+                      id="st-corridor-select"
+                      className="cn-select"
+                      value={selectedEdgeId || ""}
+                      onChange={(e) => setSelectedEdgeId(e.target.value ? Number(e.target.value) : null)}
+                    >
+                      <option value="">Select corridor to configure policy...</option>
+                      {floorEdges.map((edge) => {
+                        const a = rawNodeById.get(Number(edge.fromNodeId));
+                        const b = rawNodeById.get(Number(edge.toNodeId));
+                        return (
+                          <option key={edge.id} value={edge.id}>
+                            {a?.code || edge.fromNodeId} ↔ {b?.code || edge.toNodeId} ({edge.distanceMeters}m ·{" "}
+                            {ACCESS_TIER_META[edge.accessLevel || "public"]?.shortLabel})
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+
+                  {selectedEdge && (
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <select
+                        aria-label="Selected corridor access tier"
+                        className="cn-select"
+                        style={{ minHeight: "36px", flex: 1 }}
+                        disabled={savingPolicy}
+                        value={selectedEdge.accessLevel || "public"}
+                        onChange={(e) => handleUpdateEdgePolicy(selectedEdge.id, e.target.value)}
+                      >
+                        {CAMPUS_ACCESS_TIERS.map((tier) => (
+                          <option key={tier} value={tier}>
+                            Corridor Tier: {ACCESS_TIER_META[tier].label}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="av-btn av-btn--ghost av-btn--compact"
+                        style={{ color: "#f87171" }}
+                        aria-label="Remove selected corridor"
+                        onClick={() => handleDeleteEdge(selectedEdge.id)}
+                      >
+                        <i className="bx bx-trash" aria-hidden="true" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
-            {/* Cross-Floor Vertical Connector */}
+            {/* 3. Cross-Floor Vertical Connector */}
             <form className="cn-panel" onSubmit={handleCreateCrossEdge}>
               <div className="cn-panel__title">
-                <span>2. Link Floors (Stairs / Elevator / Entry)</span>
+                <span>Link Floors (Stairs / Elevator / Entry)</span>
               </div>
               <div className="cn-field">
                 <label htmlFor="st-cross-a">Node on Floor A</label>
@@ -677,7 +980,7 @@ export default function CampusStudio() {
                   onChange={(e) => setCrossFromId(e.target.value)}
                 >
                   <option value="">Select Node A...</option>
-                  {nodes.map((n) => (
+                  {rawNodes.map((n) => (
                     <option key={n.id} value={n.id}>
                       [{n.code}] {n.label}
                     </option>
@@ -693,7 +996,7 @@ export default function CampusStudio() {
                   onChange={(e) => setCrossToId(e.target.value)}
                 >
                   <option value="">Select Node B...</option>
-                  {nodes.map((n) => (
+                  {rawNodes.map((n) => (
                     <option key={n.id} value={n.id}>
                       [{n.code}] {n.label}
                     </option>
@@ -717,81 +1020,6 @@ export default function CampusStudio() {
                 Connect Across Floors
               </button>
             </form>
-
-            {/* Upload Custom Floor Plan */}
-            <form className="cn-panel" onSubmit={handleUploadFloor}>
-              <div className="cn-panel__title">
-                <span>3. Upload College Map / Floor Plan</span>
-              </div>
-              <div className="cn-field">
-                <label htmlFor="st-fl-label">Floor / Map Title</label>
-                <input
-                  id="st-fl-label"
-                  className="cn-input"
-                  placeholder="e.g., Block B — 1st Floor"
-                  value={floorForm.floorLabel}
-                  onChange={(e) => setFloorForm((p) => ({ ...p, floorLabel: e.target.value }))}
-                  required
-                />
-              </div>
-              <div className="cn-field">
-                <label htmlFor="st-fl-bldg">Building</label>
-                <select
-                  id="st-fl-bldg"
-                  className="cn-select"
-                  value={floorForm.buildingId}
-                  onChange={(e) => setFloorForm((p) => ({ ...p, buildingId: e.target.value }))}
-                  disabled={floorForm.isOutdoor}
-                >
-                  {buildings.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                <div className="cn-field">
-                  <label htmlFor="st-fl-w">Width (m)</label>
-                  <input
-                    id="st-fl-w"
-                    type="number"
-                    className="cn-input"
-                    value={floorForm.widthMeters}
-                    onChange={(e) => setFloorForm((p) => ({ ...p, widthMeters: e.target.value }))}
-                  />
-                </div>
-                <div className="cn-field">
-                  <label htmlFor="st-fl-h">Height (m)</label>
-                  <input
-                    id="st-fl-h"
-                    type="number"
-                    className="cn-input"
-                    value={floorForm.heightMeters}
-                    onChange={(e) => setFloorForm((p) => ({ ...p, heightMeters: e.target.value }))}
-                  />
-                </div>
-              </div>
-              <div className="cn-field">
-                <label htmlFor="st-fl-img">Blueprint Image (PNG / JPG / SVG)</label>
-                <input
-                  id="st-fl-img"
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                  className="cn-input"
-                  onChange={(e) => setFloorImageFile(e.target.files?.[0] || null)}
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={uploadingFloor}
-                className="av-btn av-btn--primary av-btn--compact"
-                style={{ width: "100%", justifyContent: "center" }}
-              >
-                <i className="bx bx-upload" aria-hidden="true" />
-                {uploadingFloor ? "Uploading..." : "Upload Floor Plan"}
-              </button>
-            </form>
           </div>
 
           {/* Right Interactive Floor Blueprint Canvas */}
@@ -807,15 +1035,45 @@ export default function CampusStudio() {
                       setActiveFloorId(fl.id);
                       setEdgeStartId(null);
                       setSelectedNodeId(null);
+                      setSelectedEdgeId(null);
                     }}
                   >
+                    {fl.accessLevel && fl.accessLevel !== "public" && (
+                      <i className="bx bx-lock-alt" aria-hidden="true" />
+                    )}
                     {fl.isOutdoor ? "Outdoor Site" : fl.floorLabel}
                   </button>
                 ))}
               </div>
               <span className="av-mono" style={{ fontSize: "0.76rem", color: "var(--av-ink-muted)" }}>
-                {floorNodes.length} pins · {floorEdges.length} walkways
+                {floorNodes.length} pins · {floorEdges.length} walkways · {activeFloor?.widthMeters || 60}m×{activeFloor?.heightMeters || 42}m
               </span>
+            </div>
+
+            {/* Live "Preview Map As Tier" Simulator Bar */}
+            <div className="cn-preview-banner">
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                <i className="bx bx-show-alt" aria-hidden="true" style={{ fontSize: "1.1rem", color: "#60a5fa" }} />
+                <strong>Preview Map As Tier:</strong>
+                <span style={{ color: "var(--av-ink-muted)" }}>
+                  {previewTier === "admin"
+                    ? "Admin view (all zones unlocked)"
+                    : `Simulating ${ACCESS_TIER_META[previewTier].label} — unauthorized places render locked`}
+                </span>
+              </div>
+              <div className="cn-seg" role="group" aria-label="Preview map as clearance tier">
+                {["admin", "staff", "student", "public"].map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    className={`cn-seg__btn ${previewTier === t ? "is-active" : ""}`}
+                    style={{ minHeight: "30px", padding: "4px 9px", fontSize: "0.74rem" }}
+                    onClick={() => setPreviewTier(t)}
+                  >
+                    {t === "admin" ? "Admin (All)" : ACCESS_TIER_META[t].label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="cn-canvas-viewport">
@@ -823,68 +1081,123 @@ export default function CampusStudio() {
                 className={`cn-canvas-stage ${tool === "add-node" ? "is-crosshair" : ""}`}
                 onClick={handleCanvasClick}
               >
-                {activeFloor?.mapImageUrl && (
-                  <img
-                    src={activeFloor.mapImageUrl}
-                    alt={activeFloor.floorLabel}
-                    className="cn-map-img"
-                  />
-                )}
-
-                <svg
-                  className="cn-svg-overlay"
-                  viewBox="0 0 1000 700"
-                  preserveAspectRatio="none"
-                  aria-hidden="true"
-                >
-                  {floorEdges.map((edge) => {
-                    const a = nodeById.get(Number(edge.fromNodeId));
-                    const b = nodeById.get(Number(edge.toNodeId));
-                    if (!a || !b) return null;
-                    return (
-                      <line
-                        key={edge.id}
-                        x1={a.x * 10}
-                        y1={a.y * 7}
-                        x2={b.x * 10}
-                        y2={b.y * 7}
-                        stroke={edge.isAccessible ? "#22c55e" : "#f59e0b"}
-                        strokeWidth={3.5}
-                        strokeDasharray="6 4"
-                        opacity={0.75}
+                {activeFloor?.isLocked && previewTier !== "admin" ? (
+                  <div className="cn-restricted-shield">
+                    <div className="cn-restricted-shield__icon">
+                      <i className="bx bx-lock-alt" aria-hidden="true" />
+                    </div>
+                    <span className={`cn-tier-badge cn-tier-badge--${activeFloor.effectiveAccessLevel}`}>
+                      {ACCESS_TIER_META[activeFloor.effectiveAccessLevel]?.label} Clearance Required
+                    </span>
+                    <h3>{activeFloor.floorLabel} — Locked Floor Preview</h3>
+                    <p>
+                      {activeFloor.restrictedNotice ||
+                        "Unauthorized viewers cannot inspect this blueprint or route onto this floor."}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {blueprintPreviewUrl || activeFloor?.mapImageUrl ? (
+                      <img
+                        src={blueprintPreviewUrl || activeFloor.mapImageUrl}
+                        alt={activeFloor?.floorLabel || "Campus Blueprint"}
+                        className="cn-map-img"
                       />
-                    );
-                  })}
-                </svg>
+                    ) : (
+                      <div className="cn-default-grid">
+                        <span className="cn-default-grid__tag">
+                          Default Grid · {activeFloor?.widthMeters || 60}m × {activeFloor?.heightMeters || 42}m
+                        </span>
+                      </div>
+                    )}
 
-                {floorNodes.map((node) => {
-                  const isSelected =
-                    Number(selectedNodeId) === Number(node.id) ||
-                    Number(edgeStartId) === Number(node.id);
-                  return (
-                    <button
-                      key={node.id}
-                      type="button"
-                      className={`cn-pin ${
-                        node.nodeType === "corridor"
-                          ? "cn-pin--corridor"
-                          : node.nodeType === "stairs"
-                            ? "cn-pin--stairs"
-                            : node.nodeType === "elevator" || node.nodeType === "ramp"
-                              ? "cn-pin--elevator"
-                              : node.qrSpotCode
-                                ? "cn-pin--qr"
-                                : ""
-                      } ${isSelected ? "is-selected" : ""}`}
-                      style={{ left: `${node.x}%`, top: `${node.y}%` }}
-                      onClick={(e) => handleNodeClick(e, node)}
-                      title={`${node.label} (${node.code})`}
+                    <svg
+                      className="cn-svg-overlay"
+                      viewBox="0 0 1000 700"
+                      preserveAspectRatio="none"
+                      aria-hidden="true"
                     >
-                      {node.nodeType !== "corridor" && <i className="bx bx-map-pin" aria-hidden="true" />}
-                      <span className="cn-pin-label">{node.code}</span>
-                    </button>
-                  );
-                })}
+                      {floorEdges.map((edge) => {
+                        const a = nodeById.get(Number(edge.fromNodeId));
+                        const b = nodeById.get(Number(edge.toNodeId));
+                        if (!a || !b) return null;
+                        const isRestrictedEdge =
+                          edge.isLocked || (edge.accessLevel && edge.accessLevel !== "public");
+                        return (
+                          <line
+                            key={edge.id}
+                            x1={a.x * 10}
+                            y1={a.y * 7}
+                            x2={b.x * 10}
+                            y2={b.y * 7}
+                            stroke={
+                              isRestrictedEdge
+                                ? "#ef4444"
+                                : edge.isAccessible
+                                  ? "#22c55e"
+                                  : "#f59e0b"
+                            }
+                            strokeWidth={Number(selectedEdgeId) === Number(edge.id) ? 6 : 3.5}
+                            strokeDasharray="6 4"
+                            opacity={0.85}
+                          />
+                        );
+                      })}
+                    </svg>
+
+                    {floorNodes.map((node) => {
+                      const isSelected =
+                        Number(selectedNodeId) === Number(node.id) ||
+                        Number(edgeStartId) === Number(node.id);
+                      const isProtected =
+                        node.effectiveAccessLevel && node.effectiveAccessLevel !== "public";
+                      const isLockedPreview = Boolean(node.isLocked);
+                      return (
+                        <button
+                          key={node.id}
+                          type="button"
+                          className={`cn-pin ${
+                            isLockedPreview
+                              ? "cn-pin--locked"
+                              : node.nodeType === "corridor"
+                                ? "cn-pin--corridor"
+                                : node.nodeType === "stairs"
+                                  ? "cn-pin--stairs"
+                                  : node.nodeType === "elevator" || node.nodeType === "ramp"
+                                    ? "cn-pin--elevator"
+                                    : node.qrSpotCode
+                                      ? "cn-pin--qr"
+                                      : ""
+                          } ${!isLockedPreview && isProtected ? "cn-pin--protected-unlocked" : ""} ${
+                            isSelected ? "is-selected" : ""
+                          }`}
+                          style={{ left: `${node.x}%`, top: `${node.y}%` }}
+                          onClick={(e) => handleNodeClick(e, node)}
+                          title={`${node.label} (${node.code}) · ${ACCESS_TIER_META[node.effectiveAccessLevel || "public"]?.label}`}
+                        >
+                          {isLockedPreview ? (
+                            <i className="bx bx-lock-alt" aria-hidden="true" />
+                          ) : isProtected ? (
+                            <i className="bx bx-shield-alt-2" aria-hidden="true" />
+                          ) : (
+                            node.nodeType !== "corridor" && (
+                              <i className="bx bx-map-pin" aria-hidden="true" />
+                            )
+                          )}
+                          <span
+                            className={`cn-pin-label ${isLockedPreview ? "cn-pin-label--locked" : ""}`}
+                          >
+                            {isLockedPreview
+                              ? `LOCKED · ${ACCESS_TIER_META[node.effectiveAccessLevel]?.shortLabel}`
+                              : isProtected
+                                ? `${node.code} · ${ACCESS_TIER_META[node.effectiveAccessLevel]?.shortLabel}`
+                                : node.code}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </>
+                )}
               </div>
             </div>
 
@@ -917,6 +1230,28 @@ export default function CampusStudio() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* ═══════════════ TAB 2: PROTECTED ZONES & SECURITY POLICIES ═══════════════ */}
+      {activeTab === "policies" && (
+        <ProtectedZonesTable
+          floors={rawFloors}
+          nodes={rawNodes}
+          edges={rawEdges}
+          busyKey={busyPolicyKey}
+          onQuickTierChange={handleQuickPolicyTierChange}
+          onSelectFloor={(floorId) => {
+            setActiveFloorId(floorId);
+            setSelectedNodeId(null);
+            setActiveTab("maps");
+          }}
+          onSelectNode={(nodeId, floorId) => {
+            if (floorId) setActiveFloorId(floorId);
+            setTool("select");
+            setSelectedNodeId(nodeId);
+            setActiveTab("maps");
+          }}
+        />
       )}
 
       {/* ═══════════════ TAB 2: DEPARTMENTS & COURSES ═══════════════ */}

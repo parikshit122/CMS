@@ -1087,3 +1087,392 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ==========================================================================
+   Blueprint Manager, Clearance Tiers & Locked Restricted Zone Overlays
+   ========================================================================== */
+
+.cn-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.cn-tier-badge--public {
+  background: rgba(22, 163, 74, 0.14);
+  border-color: rgba(22, 163, 74, 0.38);
+  color: #4ade80;
+}
+
+.cn-tier-badge--student {
+  background: rgba(37, 99, 235, 0.16);
+  border-color: rgba(59, 130, 246, 0.42);
+  color: #60a5fa;
+}
+
+.cn-tier-badge--staff {
+  background: rgba(217, 119, 6, 0.16);
+  border-color: rgba(245, 158, 11, 0.44);
+  color: #fbbf24;
+}
+
+.cn-tier-badge--admin {
+  background: rgba(220, 38, 38, 0.18);
+  border-color: rgba(248, 113, 113, 0.48);
+  color: #f87171;
+}
+
+[data-theme="light"] .cn-tier-badge--public {
+  color: #15803d;
+}
+
+[data-theme="light"] .cn-tier-badge--student {
+  color: #1d4ed8;
+}
+
+[data-theme="light"] .cn-tier-badge--staff {
+  color: #b45309;
+}
+
+[data-theme="light"] .cn-tier-badge--admin {
+  color: #b91c1c;
+}
+
+/* Locked Restricted Area Pin & Caution Hatch Halo */
+.cn-pin--locked {
+  background: #991b1b;
+  border-color: #fecaca;
+  width: 34px;
+  height: 34px;
+  z-index: 9;
+  box-shadow: 0 0 0 8px rgba(220, 38, 38, 0.22), 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.cn-pin--locked::before {
+  content: "";
+  position: absolute;
+  inset: -16px;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(248, 113, 113, 0.8);
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(220, 38, 38, 0.18),
+    rgba(220, 38, 38, 0.18) 5px,
+    rgba(15, 23, 42, 0.08) 5px,
+    rgba(15, 23, 42, 0.08) 10px
+  );
+  pointer-events: none;
+  z-index: -1;
+}
+
+.cn-pin--protected-unlocked {
+  box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.35), 0 3px 10px rgba(0, 0, 0, 0.45);
+}
+
+.cn-pin-label--locked {
+  background: rgba(127, 29, 29, 0.96);
+  border-color: rgba(254, 202, 202, 0.65);
+  color: #fef2f2;
+}
+
+/* Default Architectural Grid Backdrop when custom blueprint is cleared */
+.cn-default-grid {
+  position: absolute;
+  inset: 0;
+  background-color: #0b1322;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.12) 1px, transparent 1px);
+  background-size: 40px 40px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 14px;
+  pointer-events: none;
+}
+
+.cn-default-grid__tag {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.72rem;
+  color: rgba(148, 163, 184, 0.75);
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+/* Locked Floor Full-Viewport Shield */
+.cn-restricted-shield {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 12px;
+  padding: 32px 24px;
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      rgba(220, 38, 38, 0.08),
+      rgba(220, 38, 38, 0.08) 12px,
+      rgba(15, 23, 42, 0.94) 12px,
+      rgba(15, 23, 42, 0.94) 24px
+    );
+  color: #f8fafc;
+}
+
+.cn-restricted-shield__icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: rgba(220, 38, 38, 0.18);
+  border: 1px solid rgba(248, 113, 113, 0.5);
+  color: #f87171;
+  font-size: 1.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cn-restricted-shield h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.cn-restricted-shield p {
+  margin: 0;
+  max-width: 46ch;
+  font-size: 0.86rem;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+
+/* Inspector Restricted Card & Detour Banner */
+.cn-inspector--locked {
+  border-top: 2px solid rgba(220, 38, 38, 0.55);
+  background: rgba(127, 29, 29, 0.16);
+}
+
+.cn-detour-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border-radius: 9px;
+  background: rgba(217, 119, 6, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.42);
+  color: var(--av-ink, #f8fafc);
+  font-size: 0.79rem;
+  line-height: 1.4;
+}
+
+.cn-detour-banner i {
+  color: #f59e0b;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Blueprint Dropzone & Preview Pill */
+.cn-sr-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.cn-blueprint-dropzone {
+  position: relative;
+  border: 1.5px dashed rgba(148, 163, 184, 0.36);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: var(--av-surface-2, #111827);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.cn-blueprint-dropzone:hover,
+.cn-blueprint-dropzone.has-file {
+  border-color: var(--av-primary, #ea580c);
+  background: rgba(234, 88, 12, 0.08);
+}
+
+.cn-blueprint-dropzone__label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.cn-blueprint-dropzone__label i {
+  font-size: 1.65rem;
+  color: var(--av-primary, #ea580c);
+  flex-shrink: 0;
+}
+
+.cn-blueprint-dropzone__label strong {
+  display: block;
+  font-size: 0.84rem;
+  color: var(--av-ink, #f8fafc);
+  word-break: break-word;
+}
+
+.cn-blueprint-dropzone__label span {
+  display: block;
+  font-size: 0.74rem;
+  color: var(--av-ink-muted, #94a3b8);
+  margin-top: 2px;
+}
+
+.cn-inline-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  background: rgba(220, 38, 38, 0.12);
+  font-size: 0.78rem;
+}
+
+.cn-preview-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--av-border, rgba(148, 163, 184, 0.14));
+  background: rgba(37, 99, 235, 0.1);
+  font-size: 0.8rem;
+}
+
+/* Protected Zones High-Density SaaS Table */
+.cn-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.cn-policy-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.83rem;
+}
+
+.cn-policy-table th {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--av-ink-muted, #94a3b8);
+  border-bottom: 1px solid var(--av-border, rgba(148, 163, 184, 0.2));
+  white-space: nowrap;
+}
+
+.cn-policy-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--av-border, rgba(148, 163, 184, 0.12));
+  vertical-align: middle;
+}
+
+.cn-policy-table tbody tr:hover {
+  background: rgba(148, 163, 184, 0.06);
+}
+
+.cn-tier-select {
+  min-height: 32px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--av-border, rgba(148, 163, 184, 0.25));
+  background: var(--av-surface-2, #111827);
+  color: var(--av-ink, #f8fafc);
+  font-size: 0.76rem;
+  font-weight: 700;
+  font-family: inherit;
+}
+
+.cn-tier-select--student {
+  border-color: rgba(59, 130, 246, 0.55);
+  color: #60a5fa;
+}
+
+.cn-tier-select--staff {
+  border-color: rgba(245, 158, 11, 0.55);
+  color: #fbbf24;
+}
+
+.cn-tier-select--admin {
+  border-color: rgba(248, 113, 113, 0.6);
+  color: #f87171;
+}
+
+.cn-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 28px 16px;
+  border-radius: 10px;
+  border: 1px dashed var(--av-border, rgba(148, 163, 184, 0.22));
+  color: var(--av-ink-muted, #94a3b8);
+  font-size: 0.83rem;
+}
+
+.cn-empty-state i {
+  font-size: 1.8rem;
+  color: var(--av-primary, #ea580c);
+}
+
+.cn-empty-state strong {
+  color: var(--av-ink, #f8fafc);
+}
+
+[data-theme="light"] .cn-blueprint-dropzone,
+[data-theme="light"] .cn-tier-select {
+  background: #f8fafc;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+[data-theme="light"] .cn-tier-select--student {
+  color: #1d4ed8;
+}
+
+[data-theme="light"] .cn-tier-select--staff {
+  color: #b45309;
+}
+
+[data-theme="light"] .cn-tier-select--admin {
+  color: #b91c1c;
+}
+
+[data-theme="light"] .cn-inspector--locked {
+  background: rgba(254, 226, 226, 0.6);
+  color: #0f172a;
+}
+
+[data-theme="light"] .cn-detour-banner {
+  background: rgba(254, 243, 199, 0.8);
+  color: #78350f;
+}
+

@@ -50,15 +50,17 @@ test("buildPoolConfig uses DATABASE_URL with SSL for external Postgres and omits
   assert.equal(disabled.ssl, undefined);
 });
 
-test("buildPoolConfig preserves Cloud SQL SQL_HOST config and detects missing DB config", () => {
+test("buildPoolConfig prefers Cloud SQL SQL_HOST when both SQL_HOST and DATABASE_URL are set", () => {
   const cloudSql = buildPoolConfig({
-    SQL_HOST: "127.0.0.1",
+    SQL_HOST: "/app/cloudsql/project:region:instance",
     SQL_USER: "app",
     SQL_PASSWORD: "secret",
     SQL_DB_NAME: "cms",
+    DATABASE_URL: "postgresql://ignored@external.host/db",
   });
-  assert.equal(cloudSql.host, "127.0.0.1");
+  assert.equal(cloudSql.host, "/app/cloudsql/project:region:instance");
   assert.equal(cloudSql.database, "cms");
+  assert.equal(cloudSql.connectionString, undefined);
   assert.equal(cloudSql.ssl, undefined);
 
   assert.equal(hasDatabaseConfig({}), false);

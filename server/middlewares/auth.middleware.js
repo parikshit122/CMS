@@ -194,4 +194,83 @@ const isTokenInvalidated = (token) => {
   return true;
 };
 
-module.exports = { protect, authorize, invalidateToken, isTokenInvalidated };
+/**
+ * Optional authentication middleware for public endpoints that adapt to caller clearance
+ * (e.g. campus navigation per-zone access tiers). Never blocks unauthenticated requests;
+ * populates req.user only when a valid, active, non-blacklisted token is provided.
+ */
+const optionalProtect = async (req, res, next) => {
+  req.user = null;
+  try {
+    let token;
+    if (
+      req.headers.authorization &&
+      req.headers.authorization.startsWith("Bearer ")
+    ) {
+      token = req.headers.authorization.split(" ")[1];
+    }
+
+    if (!token || typeof token !== "string" || token.split(".").length !== 3) {
+      return next();
+    }
+
+    if (isTokenInvalidated(token)) {
+      return next();
+    }
+
+    let user = null;
+    try {
+      const decoded = jwt.verify(token, getJwtSecret());
+      if (decoded?.id) {
+        user = await findUserById(decoded.id, { includeSensitive: true });
+      }
+    } catch {
+      if (adminAuth) {
+        try {
+          const decodedFirebase = await adminAuth.verifyIdToken(token);
+          if (decodedFirebase?.uid && decodedFirebase?.email) {
+            const { user: syncedUser } = await getOrCreateFirebaseUser({
+              uid: decodedFirebase.uid,
+              email: decodedFirebase.email,
+              name: decodedFirebase.name,
+              avatar: decodedFirebase.picture,
+              provider: normalizeSocialProvider(
+                decodedFirebase.firebase?.sign_in_provider
+              ),
+              emailVerified: Boolean(decodedFirebase.email_verified),
+            });
+            user = syncedUser;
+          }
+        } catch {
+          user = null;
+        }
+      }
+    }
+
+    if (!user || user.isActive === false) return next();
+    if (user.lockUntil && new Date(user.lockUntil) > new Date()) return next();
+    if (user.suspendedUntil && new Date(user.suspendedUntil) > new Date()) return next();
+
+    const {
+      password: _p,
+      passwordResetOTP: _pro,
+      passwordResetToken: _prt,
+      emailVerificationOTP: _evo,
+      ...safeUser
+    } = user;
+
+    req.user = safeUser;
+    req.token = token;
+  } catch {
+    req.user = null;
+  }
+  return next();
+};
+
+module.exports = {
+  protect,
+  optionalProtect,
+  authorize,
+  invalidateToken,
+  isTokenInvalidated,
+};

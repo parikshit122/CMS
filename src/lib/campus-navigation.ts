@@ -1,5 +1,6 @@
 /**
- * Pure Multi-Floor Campus Wayfinding Engine & Avishkar Blind-Evaluation Logic.
+ * Pure Multi-Floor Campus Wayfinding Engine, Per-Zone Access Policy Enforcement,
+ * & Avishkar Blind-Evaluation Logic.
  * Shared across Server (Node/Express) and Client (React/Vite) — zero external dependencies.
  */
 
@@ -17,6 +18,97 @@ export type CampusNodeType =
   | "qr_anchor";
 
 export type CampusEdgeType = "corridor" | "walkway" | "stairs" | "elevator" | "ramp";
+
+export type CampusAccessTier = "public" | "student" | "staff" | "admin";
+
+export const CAMPUS_ACCESS_TIERS: CampusAccessTier[] = [
+  "public",
+  "student",
+  "staff",
+  "admin",
+];
+
+export const ACCESS_TIER_RANK: Record<CampusAccessTier, number> = {
+  public: 0,
+  student: 1,
+  staff: 2,
+  admin: 3,
+};
+
+export const ACCESS_TIER_META: Record<
+  CampusAccessTier,
+  { label: string; shortLabel: string; description: string }
+> = {
+  public: {
+    label: "Public",
+    shortLabel: "Public",
+    description: "Open to all campus visitors, guests, students, and staff.",
+  },
+  student: {
+    label: "Verified Student",
+    shortLabel: "Student+",
+    description: "Requires a verified student, staff, or admin campus account.",
+  },
+  staff: {
+    label: "Staff",
+    shortLabel: "Staff Only",
+    description: "Restricted to authorized campus staff, faculty, and administrators.",
+  },
+  admin: {
+    label: "Admin",
+    shortLabel: "Admin Only",
+    description: "High-sensitivity facility restricted strictly to campus administrators.",
+  },
+};
+
+export function normalizeAccessTier(raw: unknown): CampusAccessTier {
+  const val = String(raw || "public").toLowerCase().trim();
+  if (val === "admin") return "admin";
+  if (val === "staff") return "staff";
+  if (val === "student" || val === "verified_student") return "student";
+  return "public";
+}
+
+export function resolveViewerAccessTier(
+  user?: {
+    role?: string | null;
+    isVerified?: boolean | null;
+    emailVerified?: boolean | null;
+    isEmailVerified?: boolean | null;
+    isActive?: boolean | null;
+  } | null
+): CampusAccessTier {
+  if (!user || user.isActive === false) return "public";
+  const role = String(user.role || "").toLowerCase().trim();
+  if (role === "admin") return "admin";
+  if (role === "staff") return "staff";
+  if (role === "student" || role === "user") {
+    const verified =
+      user.isVerified !== false &&
+      user.emailVerified !== false &&
+      user.isEmailVerified !== false;
+    return verified ? "student" : "public";
+  }
+  return "public";
+}
+
+export function getEffectiveAccessLevel(
+  itemLevel?: string | null,
+  parentFloorLevel?: string | null
+): CampusAccessTier {
+  const a = normalizeAccessTier(itemLevel);
+  const b = normalizeAccessTier(parentFloorLevel);
+  return ACCESS_TIER_RANK[a] >= ACCESS_TIER_RANK[b] ? a : b;
+}
+
+export function canAccessTier(
+  viewerTier: CampusAccessTier | string | null | undefined,
+  requiredTier: CampusAccessTier | string | null | undefined
+): boolean {
+  const viewerRank = ACCESS_TIER_RANK[normalizeAccessTier(viewerTier)];
+  const requiredRank = ACCESS_TIER_RANK[normalizeAccessTier(requiredTier)];
+  return viewerRank >= requiredRank;
+}
 
 export interface NavBuilding {
   id: number;
@@ -38,6 +130,12 @@ export interface NavFloor {
   widthMeters: number;
   heightMeters: number;
   isOutdoor: boolean;
+  accessLevel?: CampusAccessTier | string;
+  effectiveAccessLevel?: CampusAccessTier;
+  isSensitive?: boolean;
+  restrictedNotice?: string | null;
+  blueprintUpdatedAt?: string | Date | null;
+  isLocked?: boolean;
 }
 
 export interface NavNode {
@@ -51,8 +149,14 @@ export interface NavNode {
   y: number; // Normalized 0..100
   isAccessible: boolean;
   qrSpotCode?: string | null;
+  displayQrSpotCode?: string | null;
   departmentId?: number | null;
   description?: string | null;
+  accessLevel?: CampusAccessTier | string;
+  effectiveAccessLevel?: CampusAccessTier;
+  isSensitive?: boolean;
+  restrictedNotice?: string | null;
+  isLocked?: boolean;
 }
 
 export interface NavEdge {
@@ -62,6 +166,10 @@ export interface NavEdge {
   distanceMeters: number;
   edgeType: CampusEdgeType | string;
   isAccessible: boolean;
+  accessLevel?: CampusAccessTier | string;
+  effectiveAccessLevel?: CampusAccessTier;
+  isSensitive?: boolean;
+  isLocked?: boolean;
 }
 
 export interface RouteStep {
@@ -86,11 +194,16 @@ export interface SolverMetrics {
   executionMs: number;
   floorTransitions: number;
   accessibleConstraintApplied: boolean;
+  viewerAccessTier: CampusAccessTier;
+  restrictedNodesSkipped: number;
 }
 
 export interface RouteResult {
   found: boolean;
   reason?: string;
+  blockedByPolicy?: boolean;
+  requiredTier?: CampusAccessTier;
+  detouredAroundRestricted?: boolean;
   nodeIds: number[];
   nodes: NavNode[];
   edges: NavEdge[];
@@ -100,6 +213,164 @@ export interface RouteResult {
   estimatedSeconds: number;
   accessibleOnly: boolean;
   solverMetrics: SolverMetrics;
+}
+
+/**
+ * Pure server-side & preview policy projection.
+ * Computes effective access tiers and redacts sensitive blueprints, descriptions,
+ * QR spot codes, and live pins for any floor/node/edge locked to the viewer.
+ */
+export function applyCampusAccessPolicies<
+  T extends {
+    floors: NavFloor[];
+    nodes: NavNode[];
+    edges: NavEdge[];
+    livePins?: {
+      complaints?: Array<{ mapNodeId?: number | null; [key: string]: unknown }>;
+      qrSpots?: Array<{ mapNodeId?: number | null; [key: string]: unknown }>;
+      lostFound?: Array<{ mapNodeId?: number | null; [key: string]: unknown }>;
+    };
+    [key: string]: unknown;
+  }
+>(bundle: T, viewerTierInput: CampusAccessTier | string = "public") {
+  const viewerTier = normalizeAccessTier(viewerTierInput);
+  const floorTierMap = new Map<number, CampusAccessTier>();
+  const lockedFloorIds = new Set<number>();
+  const lockedNodeIds = new Set<number>();
+
+  let totalProtectedFloors = 0;
+  let totalProtectedNodes = 0;
+  let totalProtectedEdges = 0;
+  let lockedCountForViewer = 0;
+
+  const floors = (bundle.floors || []).map((fl) => {
+    const ownTier = normalizeAccessTier(fl.accessLevel);
+    const isProtected = ownTier !== "public" || Boolean(fl.isSensitive);
+    if (isProtected) totalProtectedFloors += 1;
+
+    floorTierMap.set(Number(fl.id), ownTier);
+    const allowed = canAccessTier(viewerTier, ownTier);
+    const isLocked = !allowed;
+    if (isLocked) {
+      lockedFloorIds.add(Number(fl.id));
+      lockedCountForViewer += 1;
+    }
+
+    const defaultNotice = `This floor is protected (${ACCESS_TIER_META[ownTier].label} clearance required).`;
+    return {
+      ...fl,
+      accessLevel: ownTier,
+      effectiveAccessLevel: ownTier,
+      isSensitive: Boolean(fl.isSensitive || ownTier !== "public"),
+      restrictedNotice: fl.restrictedNotice?.trim() || (isProtected ? defaultNotice : ""),
+      isLocked,
+      // Never expose blueprint image URL of a locked floor to unauthorized viewers
+      mapImageUrl: isLocked ? "" : fl.mapImageUrl,
+    };
+  });
+
+  const nodes = (bundle.nodes || []).map((n) => {
+    const floorTier = floorTierMap.get(Number(n.floorId)) || "public";
+    const ownTier = normalizeAccessTier(n.accessLevel);
+    const effectiveTier = getEffectiveAccessLevel(ownTier, floorTier);
+    const isProtected = effectiveTier !== "public" || Boolean(n.isSensitive);
+    if (ownTier !== "public" || Boolean(n.isSensitive)) totalProtectedNodes += 1;
+
+    const isLocked = !canAccessTier(viewerTier, effectiveTier);
+    if (isLocked) {
+      lockedNodeIds.add(Number(n.id));
+      lockedCountForViewer += 1;
+    }
+
+    const notice =
+      n.restrictedNotice?.trim() ||
+      (isProtected
+        ? `Entry restricted — ${ACCESS_TIER_META[effectiveTier].label} clearance required.`
+        : "");
+
+    if (isLocked) {
+      return {
+        ...n,
+        label: `Restricted Area (${ACCESS_TIER_META[effectiveTier].shortLabel})`,
+        description: "",
+        qrSpotCode: null,
+        displayQrSpotCode: null,
+        accessLevel: ownTier,
+        effectiveAccessLevel: effectiveTier,
+        isSensitive: true,
+        restrictedNotice: notice,
+        isLocked: true,
+      };
+    }
+
+    return {
+      ...n,
+      accessLevel: ownTier,
+      effectiveAccessLevel: effectiveTier,
+      isSensitive: Boolean(n.isSensitive || effectiveTier !== "public"),
+      restrictedNotice: notice,
+      isLocked: false,
+    };
+  });
+
+  const nodeTierMap = new Map<number, CampusAccessTier>(
+    nodes.map((n) => [Number(n.id), n.effectiveAccessLevel || "public"])
+  );
+
+  const edges = (bundle.edges || []).map((e) => {
+    const ownTier = normalizeAccessTier(e.accessLevel);
+    const fromTier = nodeTierMap.get(Number(e.fromNodeId)) || "public";
+    const toTier = nodeTierMap.get(Number(e.toNodeId)) || "public";
+    const inherited = getEffectiveAccessLevel(fromTier, toTier);
+    const effectiveTier = getEffectiveAccessLevel(ownTier, inherited);
+    if (ownTier !== "public" || Boolean(e.isSensitive)) totalProtectedEdges += 1;
+
+    const isLocked =
+      !canAccessTier(viewerTier, effectiveTier) ||
+      lockedNodeIds.has(Number(e.fromNodeId)) ||
+      lockedNodeIds.has(Number(e.toNodeId));
+
+    return {
+      ...e,
+      accessLevel: ownTier,
+      effectiveAccessLevel: effectiveTier,
+      isSensitive: Boolean(e.isSensitive || ownTier !== "public"),
+      isLocked,
+    };
+  });
+
+  // Strip live pins inside locked nodes so sensitive incidents/QR spots are never leaked
+  const livePins = bundle.livePins
+    ? {
+        complaints: (bundle.livePins.complaints || []).filter(
+          (c) => !c.mapNodeId || !lockedNodeIds.has(Number(c.mapNodeId))
+        ),
+        qrSpots: (bundle.livePins.qrSpots || []).filter(
+          (q) => !q.mapNodeId || !lockedNodeIds.has(Number(q.mapNodeId))
+        ),
+        lostFound: (bundle.livePins.lostFound || []).filter(
+          (l) => !l.mapNodeId || !lockedNodeIds.has(Number(l.mapNodeId))
+        ),
+      }
+    : undefined;
+
+  return {
+    ...bundle,
+    floors,
+    nodes,
+    edges,
+    ...(livePins ? { livePins } : {}),
+    viewerAccessTier: viewerTier,
+    policySummary: {
+      viewerAccessTier: viewerTier,
+      totalProtectedFloors,
+      totalProtectedNodes,
+      totalProtectedEdges,
+      lockedCountForViewer,
+      lockedFloorCount: lockedFloorIds.size,
+      lockedNodeCount: lockedNodeIds.size,
+    },
+  };
 }
 
 /**
@@ -124,8 +395,40 @@ const EDGE_EFFORT_PENALTY: Record<string, number> = {
   walkway: 0,
 };
 
+function isNodeLockedForViewer(
+  node: NavNode,
+  floor: NavFloor | undefined,
+  viewerTier: CampusAccessTier,
+  enforceAccessPolicy: boolean
+): { locked: boolean; requiredTier: CampusAccessTier } {
+  const floorTier = normalizeAccessTier(floor?.effectiveAccessLevel || floor?.accessLevel);
+  const nodeTier = getEffectiveAccessLevel(
+    node.effectiveAccessLevel || node.accessLevel,
+    floorTier
+  );
+  if (!enforceAccessPolicy) {
+    return { locked: false, requiredTier: nodeTier };
+  }
+  const locked =
+    Boolean(node.isLocked) ||
+    Boolean(floor?.isLocked) ||
+    !canAccessTier(viewerTier, nodeTier);
+  return { locked, requiredTier: nodeTier };
+}
+
+function isEdgeLockedForViewer(
+  edge: NavEdge,
+  viewerTier: CampusAccessTier,
+  enforceAccessPolicy: boolean
+): boolean {
+  if (!enforceAccessPolicy) return false;
+  const edgeTier = normalizeAccessTier(edge.effectiveAccessLevel || edge.accessLevel);
+  return Boolean(edge.isLocked) || !canAccessTier(viewerTier, edgeTier);
+}
+
 /**
- * Multi-floor weighted Dijkstra shortest-path solver with Divyangjan (wheelchair-accessible) constraints.
+ * Multi-floor weighted Dijkstra shortest-path solver with Divyangjan (wheelchair-accessible)
+ * constraints and per-zone sensitive-place access policy blocking.
  */
 export function findShortestCampusRoute(
   nodes: NavNode[],
@@ -134,10 +437,16 @@ export function findShortestCampusRoute(
   buildings: NavBuilding[],
   startNodeId: number,
   endNodeId: number,
-  options: { accessibleOnly?: boolean } = {}
+  options: {
+    accessibleOnly?: boolean;
+    viewerAccessTier?: CampusAccessTier | string;
+    ignoreAccessPolicy?: boolean;
+  } = {}
 ): RouteResult {
   const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
   const accessibleOnly = Boolean(options.accessibleOnly);
+  const viewerTier = normalizeAccessTier(options.viewerAccessTier || "public");
+  const enforceAccessPolicy = !options.ignoreAccessPolicy;
 
   const nodeMap = new Map<number, NavNode>(nodes.map((n) => [Number(n.id), n]));
   const floorMap = new Map<number, NavFloor>(floors.map((f) => [Number(f.id), f]));
@@ -146,11 +455,20 @@ export function findShortestCampusRoute(
   const startId = Number(startNodeId);
   const endId = Number(endNodeId);
 
-  const buildEmpty = (reason: string, visitedCount = 0): RouteResult => {
+  let restrictedNodesSkipped = 0;
+
+  const buildEmpty = (
+    reason: string,
+    visitedCount = 0,
+    extra: { blockedByPolicy?: boolean; requiredTier?: CampusAccessTier } = {}
+  ): RouteResult => {
     const t1 = typeof performance !== "undefined" ? performance.now() : Date.now();
     return {
       found: false,
       reason,
+      blockedByPolicy: Boolean(extra.blockedByPolicy),
+      requiredTier: extra.requiredTier,
+      detouredAroundRestricted: false,
       nodeIds: [],
       nodes: [],
       edges: [],
@@ -168,6 +486,8 @@ export function findShortestCampusRoute(
         executionMs: Math.max(0.01, Math.round((t1 - t0) * 100) / 100),
         floorTransitions: 0,
         accessibleConstraintApplied: accessibleOnly,
+        viewerAccessTier: viewerTier,
+        restrictedNodesSkipped,
       },
     };
   };
@@ -176,13 +496,48 @@ export function findShortestCampusRoute(
     return buildEmpty("Select both a valid starting point and destination on the campus map.");
   }
 
+  const startNode = nodeMap.get(startId)!;
+  const endNode = nodeMap.get(endId)!;
+  const startLock = isNodeLockedForViewer(
+    startNode,
+    floorMap.get(startNode.floorId),
+    viewerTier,
+    enforceAccessPolicy
+  );
+  const endLock = isNodeLockedForViewer(
+    endNode,
+    floorMap.get(endNode.floorId),
+    viewerTier,
+    enforceAccessPolicy
+  );
+
+  if (endLock.locked) {
+    const reqMeta = ACCESS_TIER_META[endLock.requiredTier];
+    return buildEmpty(
+      `Entry blocked: this destination is a protected zone requiring ${reqMeta.label} clearance.`,
+      0,
+      { blockedByPolicy: true, requiredTier: endLock.requiredTier }
+    );
+  }
+
+  if (startLock.locked) {
+    const reqMeta = ACCESS_TIER_META[startLock.requiredTier];
+    return buildEmpty(
+      `Starting location is inside a protected zone requiring ${reqMeta.label} clearance.`,
+      0,
+      { blockedByPolicy: true, requiredTier: startLock.requiredTier }
+    );
+  }
+
   if (startId === endId) {
-    const single = nodeMap.get(startId)!;
+    const single = startNode;
     const floor = floorMap.get(single.floorId);
     const bldg = single.buildingId ? buildingMap.get(single.buildingId) : null;
     const t1 = typeof performance !== "undefined" ? performance.now() : Date.now();
     return {
       found: true,
+      blockedByPolicy: false,
+      detouredAroundRestricted: false,
       nodeIds: [startId],
       nodes: [single],
       edges: [],
@@ -213,8 +568,20 @@ export function findShortestCampusRoute(
         executionMs: Math.max(0.01, Math.round((t1 - t0) * 100) / 100),
         floorTransitions: 0,
         accessibleConstraintApplied: accessibleOnly,
+        viewerAccessTier: viewerTier,
+        restrictedNodesSkipped: 0,
       },
     };
+  }
+
+  // Precompute locked node set for fast edge filtering
+  const lockedNodeSet = new Set<number>();
+  if (enforceAccessPolicy) {
+    for (const n of nodes) {
+      const check = isNodeLockedForViewer(n, floorMap.get(n.floorId), viewerTier, true);
+      if (check.locked) lockedNodeSet.add(Number(n.id));
+    }
+    restrictedNodesSkipped = lockedNodeSet.size;
   }
 
   // Build bidirectional adjacency list
@@ -223,12 +590,24 @@ export function findShortestCampusRoute(
     adj.set(Number(n.id), []);
   }
 
+  let skippedPolicyEdgeCount = 0;
+
   for (const edge of edges) {
     const u = Number(edge.fromNodeId);
     const v = Number(edge.toNodeId);
     const nodeU = nodeMap.get(u);
     const nodeV = nodeMap.get(v);
     if (!nodeU || !nodeV) continue;
+
+    if (
+      enforceAccessPolicy &&
+      (lockedNodeSet.has(u) ||
+        lockedNodeSet.has(v) ||
+        isEdgeLockedForViewer(edge, viewerTier, true))
+    ) {
+      skippedPolicyEdgeCount += 1;
+      continue;
+    }
 
     if (accessibleOnly) {
       if (!edge.isAccessible || edge.edgeType === "stairs") continue;
@@ -285,6 +664,25 @@ export function findShortestCampusRoute(
   }
 
   if (!prevNode.has(endId)) {
+    // Check if an unrestricted route exists so we can tell the user access policy blocked the path
+    if (enforceAccessPolicy && skippedPolicyEdgeCount > 0) {
+      const unrestricted = findShortestCampusRoute(
+        nodes,
+        edges,
+        floors,
+        buildings,
+        startId,
+        endId,
+        { accessibleOnly, ignoreAccessPolicy: true }
+      );
+      if (unrestricted.found) {
+        return buildEmpty(
+          "No authorized detour exists — all connecting paths pass through a restricted security zone.",
+          visited.size,
+          { blockedByPolicy: true }
+        );
+      }
+    }
     return buildEmpty(
       accessibleOnly
         ? "No stair-free (Divyangjan accessible) route currently links these two points. Ask an admin to connect an elevator or ramp in Campus Studio."
@@ -365,6 +763,22 @@ export function findShortestCampusRoute(
     });
   }
 
+  let detouredAroundRestricted = false;
+  if (enforceAccessPolicy && skippedPolicyEdgeCount > 0) {
+    const unrestricted = findShortestCampusRoute(
+      nodes,
+      edges,
+      floors,
+      buildings,
+      startId,
+      endId,
+      { accessibleOnly, ignoreAccessPolicy: true }
+    );
+    if (unrestricted.found && unrestricted.totalMeters < Math.round(totalMeters)) {
+      detouredAroundRestricted = true;
+    }
+  }
+
   const walkSpeedMps = accessibleOnly ? 0.95 : 1.25;
   const estimatedSeconds = Math.max(
     10,
@@ -375,6 +789,8 @@ export function findShortestCampusRoute(
 
   return {
     found: true,
+    blockedByPolicy: false,
+    detouredAroundRestricted,
     nodeIds: orderedIds,
     nodes: orderedNodes,
     edges: orderedEdges,
@@ -392,6 +808,8 @@ export function findShortestCampusRoute(
       executionMs: Math.max(0.01, Math.round((t1 - t0) * 100) / 100),
       floorTransitions,
       accessibleConstraintApplied: accessibleOnly,
+      viewerAccessTier: viewerTier,
+      restrictedNodesSkipped,
     },
   };
 }
