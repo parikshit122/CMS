@@ -53,6 +53,8 @@
     "vite-plugin-pwa": "^2.0.0"
   },
   "overrides": {
+    "@grpc/grpc-js": "^1.14.7",
+    "glob": "^14.0.6",
     "form-data": "^4.0.1",
     "postcss": "^8.5.1",
     "esbuild": "^0.25.0",
