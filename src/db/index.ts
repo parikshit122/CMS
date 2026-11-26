@@ -32,19 +32,76 @@ export function isTransientIdleDisconnectError(err: unknown): boolean {
   );
 }
 
+export function hasDatabaseConfig(
+  env: Record<string, string | undefined> = process.env
+): boolean {
+  return Boolean(
+    (env.DATABASE_URL && env.DATABASE_URL.trim()) ||
+      (env.SQL_HOST && env.SQL_HOST.trim())
+  );
+}
+
+export function buildPoolConfig(
+  env: Record<string, string | undefined> = process.env
+) {
+  const base = {
+    max: 10,
+    idleTimeoutMillis: 15000,
+    connectionTimeoutMillis: 15000,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10000,
+  };
+
+  const databaseUrl = env.DATABASE_URL?.trim();
+  if (databaseUrl) {
+    let isLocalOrInternal = false;
+    let sslMode = "";
+    try {
+      const parsed = new URL(databaseUrl);
+      const host = parsed.hostname.toLowerCase();
+      isLocalOrInternal =
+        host === "localhost" ||
+        host === "127.0.0.1" ||
+        !host.includes(".");
+      sslMode = (parsed.searchParams.get("sslmode") || "").toLowerCase();
+    } catch {
+      // Keep safe defaults for non-standard connection strings
+    }
+
+    const sslExplicitlyRequired =
+      env.SQL_SSL === "true" ||
+      sslMode === "require" ||
+      sslMode === "verify-ca" ||
+      sslMode === "verify-full";
+    const sslExplicitlyDisabled =
+      env.SQL_SSL === "false" || sslMode === "disable";
+
+    const useSsl =
+      sslExplicitlyRequired ||
+      (!sslExplicitlyDisabled && !isLocalOrInternal);
+
+    return {
+      ...base,
+      connectionString: databaseUrl,
+      ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+    };
+  }
+
+  const port = env.SQL_PORT ? Number(env.SQL_PORT) : undefined;
+  return {
+    ...base,
+    host: env.SQL_HOST,
+    ...(port && Number.isFinite(port) ? { port } : {}),
+    user: env.SQL_USER,
+    password: env.SQL_PASSWORD,
+    database: env.SQL_DB_NAME,
+    ...(env.SQL_SSL === "true" ? { ssl: { rejectUnauthorized: false } } : {}),
+  };
+}
+
 export const createPool = () => {
   if (!global._postgresPool) {
-    global._postgresPool = new Pool({
-      host: process.env.SQL_HOST,
-      user: process.env.SQL_USER,
-      password: process.env.SQL_PASSWORD,
-      database: process.env.SQL_DB_NAME,
-      max: 10,
-      idleTimeoutMillis: 15000,
-      connectionTimeoutMillis: 15000,
-      keepAlive: true,
-      keepAliveInitialDelayMillis: 10000,
-    });
+    global._postgresPool = new Pool(buildPoolConfig(process.env));
 
     global._postgresPool.on("error", (err) => {
       // Cloud SQL (scale-to-zero / proxy) routinely closes idle TCP sockets.

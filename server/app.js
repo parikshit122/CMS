@@ -30,11 +30,12 @@ app.use(
 app.use(compression());
 
 // ── 3. CORS ───────────────────────────────────────────────
-const configuredOrigins = (
-  process.env.CORS_ORIGIN || "http://localhost:3000,http://localhost:5173"
-)
-  .split(",")
-  .map((o) => o.trim())
+const configuredOrigins = [
+  ...(process.env.CORS_ORIGIN || "http://localhost:3000,http://localhost:5173").split(","),
+  process.env.FRONTEND_URL || "",
+  process.env.RENDER_EXTERNAL_URL || "",
+]
+  .map((o) => o.trim().replace(/\/+$/, ""))
   .filter(Boolean);
 
 app.use(

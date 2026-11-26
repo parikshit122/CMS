@@ -8,6 +8,7 @@ const { findAndUpdateSlaEscalations } = require("../../src/db/avishkar.ts");
 const { findUsersByRole } = require("../../src/db/users.ts");
 const { createNotificationRow } = require("../../src/db/notifications.ts");
 const { getSettingsSingleton } = require("../../src/db/settings.ts");
+const { hasDatabaseConfig } = require("../../src/db/index.ts");
 const { sendMail, escapeHtml } = require("./email.service");
 
 let escalationTimer = null;
@@ -97,19 +98,30 @@ async function runSlaEscalationSweep(app) {
   return result;
 }
 
+function formatDbError(err) {
+  return err?.cause?.message || err?.message || String(err);
+}
+
 function startSlaEscalationScheduler(app, intervalMs = 5 * 60 * 1000) {
   if (escalationTimer) return escalationTimer;
+
+  if (!hasDatabaseConfig(process.env)) {
+    console.warn(
+      "[SLA Escalation] Database environment variables not configured (set DATABASE_URL or SQL_HOST); scheduler paused."
+    );
+    return null;
+  }
 
   // Run first check 45 seconds after startup so DB pool warms up cleanly
   setTimeout(() => {
     runSlaEscalationSweep(app).catch((err) => {
-      console.warn("[SLA Escalation] Initial sweep skipped:", err.message);
+      console.warn("[SLA Escalation] Initial sweep skipped:", formatDbError(err));
     });
   }, 45 * 1000);
 
   escalationTimer = setInterval(() => {
     runSlaEscalationSweep(app).catch((err) => {
-      console.warn("[SLA Escalation] Periodic sweep failed:", err.message);
+      console.warn("[SLA Escalation] Periodic sweep failed:", formatDbError(err));
     });
   }, intervalMs);
 

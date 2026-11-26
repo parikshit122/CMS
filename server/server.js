@@ -16,7 +16,7 @@ const {
   stopSlaEscalationScheduler,
 } = require("./services/escalation.service");
 
-const PORT = 3000;
+const PORT = process.env.RENDER ? Number(process.env.PORT) || 10000 : 3000;
 const HOST = "0.0.0.0";
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -24,11 +24,12 @@ const isDev = process.env.NODE_ENV !== "production";
 const httpServer = http.createServer(app);
 
 // ── Attach socket.io ──────────────────────────────────────
-const configuredOrigins = (
-  process.env.CORS_ORIGIN || "http://localhost:3000,http://localhost:5173"
-)
-  .split(",")
-  .map((o) => o.trim())
+const configuredOrigins = [
+  ...(process.env.CORS_ORIGIN || "http://localhost:3000,http://localhost:5173").split(","),
+  process.env.FRONTEND_URL || "",
+  process.env.RENDER_EXTERNAL_URL || "",
+]
+  .map((o) => o.trim().replace(/\/+$/, ""))
   .filter(Boolean);
 
 const isAllowedOrigin = (origin) => {

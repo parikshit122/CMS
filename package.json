@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "scripts": {
     "postinstall": "npm --prefix server install --omit=dev --no-audit --no-fund && (cd client && npm install --include=dev --legacy-peer-deps --no-audit --no-fund)",
-    "build": "npm --prefix server install --omit=dev --no-audit --no-fund && (cd client && npm install --include=dev --legacy-peer-deps --no-audit --no-fund && npm run build)",
-    "start": "./node_modules/.bin/tsx server/server.js",
+    "build": "npm --prefix server install --omit=dev --no-audit --no-fund && (cd client && npm install --include=dev --legacy-peer-deps --no-audit --no-fund && npm run build) && if [ -n \"$DATABASE_URL\" ]; then ./node_modules/.bin/drizzle-kit push --config=src/db/drizzle.external.config.ts --force || true; fi",
+    "db:push:external": "./node_modules/.bin/drizzle-kit push --config=src/db/drizzle.external.config.ts --force",
+    "start": "if [ -n \"$DATABASE_URL\" ]; then ./node_modules/.bin/drizzle-kit push --config=src/db/drizzle.external.config.ts --force || true; fi && ./node_modules/.bin/tsx server/server.js",
     "dev": "if [ ! -s client/dist/index.html ] || [ ! -d client/dist/assets ]; then npm --prefix client run build; fi && ./node_modules/.bin/tsx server/server.js",
     "lint": "for f in server/*.js server/config/*.js server/constants/*.js server/controllers/*.js server/middlewares/*.js server/routes/*.js server/services/*.js server/utils/*.js; do node --check \"$f\" || exit 1; done",
     "server": "./node_modules/.bin/tsx server/server.js",
