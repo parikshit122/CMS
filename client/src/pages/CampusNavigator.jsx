@@ -52,6 +52,7 @@ export default function CampusNavigator() {
   const [qrLockInfo, setQrLockInfo] = useState(null);
   const [walkthroughActive, setWalkthroughActive] = useState(false);
   const [walkthroughStepIndex, setWalkthroughStepIndex] = useState(0);
+  const [locationQuery, setLocationQuery] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -251,17 +252,42 @@ export default function CampusNavigator() {
   );
 
   const groupedSelectableNodes = useMemo(() => {
-    return floors.map((fl) => ({
-      floor: fl,
-      items: nodes.filter(
-        (n) => Number(n.floorId) === Number(fl.id) && n.nodeType !== "corridor"
-      ),
-    }));
-  }, [floors, nodes]);
+    const q = locationQuery.trim().toLowerCase();
+    return floors
+      .map((fl) => ({
+        floor: fl,
+        items: nodes.filter((n) => {
+          if (Number(n.floorId) !== Number(fl.id) || n.nodeType === "corridor") {
+            return false;
+          }
+          if (!q) return true;
+          const isPinnedSelection =
+            String(n.id) === String(startNodeId) || String(n.id) === String(endNodeId);
+          if (isPinnedSelection) return true;
+          return (
+            String(n.label || "").toLowerCase().includes(q) ||
+            String(n.code || "").toLowerCase().includes(q) ||
+            String(n.nodeType || "").toLowerCase().includes(q) ||
+            String(n.displayQrSpotCode || n.qrSpotCode || "").toLowerCase().includes(q) ||
+            String(fl.floorLabel || "").toLowerCase().includes(q)
+          );
+        }),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [floors, nodes, locationQuery, startNodeId, endNodeId]);
 
   const selectedNode = selectedNodeId ? nodeById.get(Number(selectedNodeId)) : null;
   const selectedComplaints = selectedNode ? complaintsByNode.get(selectedNode.id) || [] : [];
   const selectedLostFound = selectedNode ? lostFoundByNode.get(selectedNode.id) || [] : [];
+
+  const selectedBuildingIndoorFloors = useMemo(() => {
+    if (!selectedNode?.buildingId || !activeFloor?.isOutdoor) return [];
+    return floors
+      .filter(
+        (fl) => !fl.isOutdoor && Number(fl.buildingId) === Number(selectedNode.buildingId)
+      )
+      .sort((a, b) => Number(a.floorNumber || 0) - Number(b.floorNumber || 0));
+  }, [selectedNode, activeFloor, floors]);
 
   const activeRouteSegments =
     routeResult?.found && activeFloor
@@ -463,6 +489,18 @@ export default function CampusNavigator() {
                 <i className="bx bx-transfer" aria-hidden="true" />
                 Swap
               </button>
+            </div>
+
+            <div className="cn-field">
+              <label htmlFor="cn-location-search">Filter Campus Rooms, Labs &amp; Landmarks</label>
+              <input
+                id="cn-location-search"
+                type="search"
+                className="cn-input"
+                placeholder="Search lab, lift, library, gate, or QR code..."
+                value={locationQuery}
+                onChange={(e) => setLocationQuery(e.target.value)}
+              />
             </div>
 
             <div className="cn-field">
@@ -1112,6 +1150,19 @@ export default function CampusNavigator() {
                 </div>
 
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {selectedBuildingIndoorFloors.length > 0 && (
+                    <button
+                      type="button"
+                      className="av-btn av-btn--primary av-btn--compact"
+                      onClick={() => {
+                        setActiveFloorId(selectedBuildingIndoorFloors[0].id);
+                        setZoom(1);
+                      }}
+                    >
+                      <i className="bx bx-layer" aria-hidden="true" />
+                      Open Indoor Floor Plan ({selectedBuildingIndoorFloors.length}) →
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="av-btn av-btn--secondary av-btn--compact"

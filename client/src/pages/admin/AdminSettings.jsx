@@ -62,6 +62,7 @@ export default function AdminSettings() {
       if (res.success) {
         alert.success("Settings saved successfully");
         setSettings(res.data);
+        window.dispatchEvent(new Event("branding-updated"));
       }
     } catch (err) {
       alert.error(err?.response?.data?.message || "Failed to save");
@@ -258,6 +259,49 @@ export default function AdminSettings() {
                   className="setting-input"
                   value={settings.siteTagline}
                   onChange={(e) => handleChange("siteTagline", e.target.value)}
+                />
+              </div>
+
+              <div className="setting-row toggle-row">
+                <div className="setting-info">
+                  <label>Avishkar Blind-Evaluation Mode</label>
+                  <span>
+                    Masks college identifiers across UI headers, QR posters, demo accounts, and NAAC PDF audits for anonymous judging
+                  </span>
+                </div>
+                <Toggle
+                  checked={settings.blindEvaluationMode !== false}
+                  onChange={(v) => handleChange("blindEvaluationMode", v)}
+                />
+              </div>
+
+              <div className="setting-row">
+                <div className="setting-info">
+                  <label>Institution Code</label>
+                  <span>Short neutral code used for QR spots and reports when custom branding is enabled</span>
+                </div>
+                <input
+                  type="text"
+                  className="setting-input"
+                  value={settings.institutionCode || ""}
+                  placeholder="CAMPUS"
+                  onChange={(e) =>
+                    handleChange("institutionCode", e.target.value.toUpperCase())
+                  }
+                />
+              </div>
+
+              <div className="setting-row">
+                <div className="setting-info">
+                  <label>Allowed Campus Email Domain</label>
+                  <span>Institutional domain for campus accounts (e.g. campus.edu)</span>
+                </div>
+                <input
+                  type="text"
+                  className="setting-input"
+                  value={settings.allowedDomain || ""}
+                  placeholder="campus.edu"
+                  onChange={(e) => handleChange("allowedDomain", e.target.value)}
                 />
               </div>
 

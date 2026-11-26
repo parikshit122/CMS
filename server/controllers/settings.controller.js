@@ -25,6 +25,9 @@ const getSettings = async (req, res) => {
 const ALLOWED_SETTING_FIELDS = new Set([
   "siteName",
   "siteTagline",
+  "institutionCode",
+  "allowedDomain",
+  "blindEvaluationMode",
   "maintenanceMode",
   "maintenanceMessage",
   "defaultPriority",
