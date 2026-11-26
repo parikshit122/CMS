@@ -13,18 +13,32 @@ const isDev = process.env.NODE_ENV !== "production";
 //   console.log("   EMAIL_SENDER_NAME:", process.env.EMAIL_SENDER_NAME || "❌ not set");
 // }
 
+let brevoDisabledUntil = 0;
+let brevoDisabledKey = "";
+let brevoNoticeLogged = false;
+const BREVO_AUTH_COOLDOWN_MS = 10 * 60 * 1000;
+
+const isBrevoAuthFailure = (status, errorMsg = "") => {
+  if (status === 401 || status === 403) return true;
+  return /api key is not enabled|unauthorized|key not found/i.test(String(errorMsg));
+};
+
 const sendMail = async (to, subject, html, label = "Email") => {
-  const senderEmail = process.env.EMAIL_FROM;
+  const apiKey = (process.env.BREVO_API_KEY || "").trim();
+  const senderEmail = (process.env.EMAIL_FROM || "").trim();
   const senderName = process.env.EMAIL_SENDER_NAME || "ComplaintSync";
 
-  if (!process.env.BREVO_API_KEY) {
-    // console.warn(`⚠️  [${label}] BREVO_API_KEY not set — skipping`);
-    return { success: false, skipped: true };
+  if (!apiKey || !senderEmail) {
+    return { success: false, skipped: true, error: "Email service not configured" };
   }
 
-  if (!senderEmail) {
-    // console.warn(`⚠️  [${label}] EMAIL_FROM not set — skipping`);
-    return { success: false, skipped: true };
+  // If the current Brevo key was recently rejected as disabled/unauthorized, skip cleanly
+  if (brevoDisabledKey === apiKey && Date.now() < brevoDisabledUntil) {
+    return {
+      success: false,
+      skipped: true,
+      error: "Email provider API key is disabled",
+    };
   }
 
   try {
@@ -38,7 +52,7 @@ const sendMail = async (to, subject, html, label = "Email") => {
       },
       {
         headers: {
-          "api-key": process.env.BREVO_API_KEY,
+          "api-key": apiKey,
           "Content-Type": "application/json",
           accept: "application/json",
         },
@@ -46,14 +60,28 @@ const sendMail = async (to, subject, html, label = "Email") => {
       }
     );
 
+    brevoDisabledUntil = 0;
+    brevoNoticeLogged = false;
     console.log("✅ [%s] Sent to %s | MessageId: %s", String(label), String(to), response.data.messageId);
     return { success: true, messageId: response.data.messageId };
   } catch (err) {
+    const status = err.response?.status;
     const errorMsg = err.response?.data?.message || err.message;
-    console.error("❌ [%s] Failed to send to %s:", String(label), String(to), errorMsg);
-    if (err.response?.data) {
-      console.error(`   Details:`, JSON.stringify(err.response.data));
+
+    if (isBrevoAuthFailure(status, errorMsg)) {
+      brevoDisabledKey = apiKey;
+      brevoDisabledUntil = Date.now() + BREVO_AUTH_COOLDOWN_MS;
+      if (!brevoNoticeLogged) {
+        brevoNoticeLogged = true;
+        console.warn(
+          "⚠️  [EmailService] Brevo API key rejected (%s) — skipping outgoing emails for 10 minutes until key is re-enabled.",
+          String(errorMsg)
+        );
+      }
+      return { success: false, skipped: true, error: errorMsg };
     }
+
+    console.warn("⚠️  [%s] Could not send email to %s: %s", String(label), String(to), errorMsg);
     return { success: false, error: errorMsg };
   }
 };

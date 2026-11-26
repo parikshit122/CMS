@@ -16,6 +16,40 @@ export const CUSTODY_OPTIONS = [
   { value: "admin_office", label: "Deposited at Student Affairs / Admin Office" },
 ];
 
+export const LOST_FOUND_STATUS_META = {
+  open: {
+    label: "Available",
+    detail: "Open for Claims",
+    icon: "bx-check-circle",
+    cls: "lf-status--open",
+    badgeCls: "lf-status-badge--available",
+  },
+  claim_pending: {
+    label: "In Progress",
+    detail: "Claim Under Verification",
+    icon: "bx-time-five",
+    cls: "lf-status--pending",
+    badgeCls: "lf-status-badge--progress",
+  },
+  approved: {
+    label: "Pickup Pending",
+    detail: "Owner Verified — Awaiting Handover",
+    icon: "bx-key",
+    cls: "lf-status--approved",
+    badgeCls: "lf-status-badge--approved",
+  },
+  returned: {
+    label: "Claimed",
+    detail: "Returned & Verified",
+    icon: "bx-badge-check",
+    cls: "lf-status--returned",
+    badgeCls: "lf-status-badge--claimed",
+  },
+};
+
+export const getItemStatusMeta = (status) =>
+  LOST_FOUND_STATUS_META[status] || LOST_FOUND_STATUS_META.open;
+
 export const getCategoryMeta = (value) =>
   LOST_FOUND_CATEGORIES.find((c) => c.value === value) || {
     value: "other",

@@ -242,3 +242,85 @@ export function verifyHandoverCode(
   if (bufA.length !== bufB.length) return false;
   return crypto.timingSafeEqual(bufA, bufB);
 }
+
+/**
+ * Sanitizes an optional phone/WhatsApp number for Lost & Found pickup coordination.
+ * Accepts 10-digit local numbers (e.g., 9876543210) or international numbers with country code
+ * (e.g., +91 98765 43210). Returns normalized digits (with optional leading '+') or "" if empty.
+ */
+export function normalizeContactPhone(raw: unknown): {
+  valid: boolean;
+  normalized: string;
+  digits: string;
+  reason?: string;
+} {
+  const trimmed = String(raw ?? "").trim();
+  if (!trimmed) {
+    return { valid: true, normalized: "", digits: "" };
+  }
+
+  // Reject any unexpected letters or protocol payloads
+  if (/[a-zA-Z]/.test(trimmed)) {
+    return {
+      valid: false,
+      normalized: "",
+      digits: "",
+      reason: "Phone number must contain only digits (and optional + country code).",
+    };
+  }
+
+  const hasPlus = trimmed.startsWith("+");
+  const digits = trimmed.replace(/\D/g, "");
+
+  if (digits.length < 10 || digits.length > 15) {
+    return {
+      valid: false,
+      normalized: "",
+      digits: "",
+      reason: "Enter a valid 10-digit mobile number (or 11–15 digits with country code).",
+    };
+  }
+
+  return {
+    valid: true,
+    normalized: hasPlus ? `+${digits}` : digits,
+    digits,
+  };
+}
+
+/**
+ * Builds safe tel: and WhatsApp (wa.me) links for pickup coordination and reminders.
+ * Defaults 10-digit local numbers to country code 91 while preserving explicit country codes.
+ */
+export function buildLostFoundContactLinks(
+  rawPhone: unknown,
+  message: string,
+  defaultCountryCode = "91"
+): {
+  displayPhone: string;
+  telHref: string;
+  whatsappHref: string;
+} | null {
+  const parsed = normalizeContactPhone(rawPhone);
+  if (!parsed.valid || !parsed.digits) return null;
+
+  const waDigits =
+    parsed.digits.length === 10 ? `${defaultCountryCode}${parsed.digits}` : parsed.digits;
+  const telHref = `tel:+${waDigits}`;
+  const encodedMsg = encodeURIComponent(String(message || "").trim());
+  const whatsappHref = encodedMsg
+    ? `https://wa.me/${waDigits}?text=${encodedMsg}`
+    : `https://wa.me/${waDigits}`;
+
+  const displayPhone =
+    parsed.digits.length === 10
+      ? `+${defaultCountryCode} ${parsed.digits.slice(0, 5)} ${parsed.digits.slice(5)}`
+      : `+${waDigits}`;
+
+  return {
+    displayPhone,
+    telHref,
+    whatsappHref,
+  };
+}
+

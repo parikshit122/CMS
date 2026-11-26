@@ -5,12 +5,16 @@ import {
   submitLostFoundClaim,
 } from "../../services/lostFoundService";
 import { useToast } from "../common/Alert";
+import { useAuth } from "../../context/AuthContext";
+import { normalizeContactPhone } from "../../utils/contactLinks";
 
 export default function ClaimAppealModal({ open, item, onClose, onSubmitted }) {
   const toast = useToast();
+  const { user } = useAuth();
   const [verificationAnswer, setVerificationAnswer] = useState("");
   const [identifyingDetails, setIdentifyingDetails] = useState("");
   const [lostLocation, setLostLocation] = useState("");
+  const [claimantPhone, setClaimantPhone] = useState("");
   const [proofFile, setProofFile] = useState(null);
   const [honestyPledge, setHonestyPledge] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -21,10 +25,11 @@ export default function ClaimAppealModal({ open, item, onClose, onSubmitted }) {
     setVerificationAnswer("");
     setIdentifyingDetails("");
     setLostLocation("");
+    setClaimantPhone(user?.phone || "");
     setProofFile(null);
     setHonestyPledge(false);
     setError("");
-  }, [open, item?.id]);
+  }, [open, item?.id, user?.phone]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -56,12 +61,21 @@ export default function ClaimAppealModal({ open, item, onClose, onSubmitted }) {
       return;
     }
 
+    const parsedPhone = normalizeContactPhone(claimantPhone);
+    if (!parsedPhone.valid) {
+      setError(parsedPhone.reason || "Enter a valid 10-digit mobile or WhatsApp number.");
+      return;
+    }
+
     try {
       setSubmitting(true);
       const fd = new FormData();
       fd.append("verificationAnswer", verificationAnswer.trim());
       fd.append("identifyingDetails", identifyingDetails.trim());
       fd.append("lostLocation", lostLocation.trim());
+      if (parsedPhone.normalized) {
+        fd.append("claimantPhone", parsedPhone.normalized);
+      }
       fd.append("honestyPledgeAccepted", "true");
       if (proofFile) {
         fd.append("proofImage", proofFile);
@@ -182,6 +196,20 @@ export default function ClaimAppealModal({ open, item, onClose, onSubmitted }) {
               />
             </label>
           </div>
+
+          <label className="lf-field">
+            <span>Phone / WhatsApp for Pickup Reminder (Optional)</span>
+            <input
+              type="tel"
+              value={claimantPhone}
+              onChange={(e) => setClaimantPhone(e.target.value)}
+              placeholder="e.g., 9876543210 or +91 98765 43210"
+              maxLength={20}
+            />
+            <small className="lf-field-hint">
+              So the finder or campus desk can call or WhatsApp you directly if you miss email notifications or forget to collect your item.
+            </small>
+          </label>
 
           <label className="lf-pledge-box">
             <input

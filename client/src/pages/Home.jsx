@@ -1,213 +1,214 @@
-import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
-import "../styles/Home.css";
-import Button from "../components/common/Button";
-import HeroMotionGraphics from "../components/layout/HeroMotionGraphics";
-import "boxicons/css/boxicons.min.css";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import API from "../services/api";
+import JudgeDemoSwitcher from "../components/demo/JudgeDemoSwitcher";
+import useInstitutionBranding from "../hooks/useInstitutionBranding";
 
-function Home() {
-  const navigate = useNavigate();
+const INNOVATION_PILLARS = [
+  {
+    icon: "bx bx-brain",
+    title: "AI Smart Triage & Duplicate Guard",
+    body: "Gemini structured analysis predicts category, urgency SLA, and English normalization while detecting active semantic duplicates so students tap +1 Affected instead of flooding staff.",
+  },
+  {
+    icon: "bx bx-map-alt",
+    title: "Outdoor & Multi-Floor Wayfinding",
+    body: "Zero-API-key custom campus & floor-plan routing powered by weighted multi-floor Dijkstra, QR indoor anchor lock, and a Divyangjan wheelchair-accessible mode that avoids stairs.",
+  },
+  {
+    icon: "bx bx-qr-scan",
+    title: "QR Spot Reporting & Anchor Lock",
+    body: "Printable A5 posters across labs, hostels, and corridors deep-link directly to pre-filled grievance forms or lock indoor 'You Are Here' navigation without Bluetooth beacons.",
+  },
+  {
+    icon: "bx bx-microphone",
+    title: "Multilingual Voice Intake (EN · MR · HI)",
+    body: "Inclusive speech dictation in English, Marathi, and Hindi with server-side audio transcription fallback and automatic English structuring while preserving original transcripts.",
+  },
+  {
+    icon: "bx bx-shield-alt-2",
+    title: "Automated SLA Escalation & NAAC PDF",
+    body: "Deterministic SLA engine promotes overdue tickets at 75% (L1) and 100% (L2) breach while generating verifiable NAAC Criterion V & VII institutional PDF dossiers.",
+  },
+  {
+    icon: "bx bx-buildings",
+    title: "University Courses & Lost & Found Pins",
+    body: "Multi-university department and course hierarchy paired with map-pinned Lost & Found recovery featuring anti-fraud secret verification and 6-character handover codes.",
+  },
+];
 
-  const handleNavigation = (panel) => {
-    navigate("/auth", { state: { panel } });
-  };
+export default function Home() {
+  const branding = useInstitutionBranding();
+  const [liveStats, setLiveStats] = useState(null);
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await API.get("/public/transparency");
+        if (active && res.data?.success) {
+          setLiveStats(res.data.data);
+        }
+      } catch {
+        // Honest fallback when database has no records yet
+      } finally {
+        if (active) setLoadingStats(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const heroKicker = branding.blindEvaluationMode
+    ? "Avishkar · Engineering & Technology · Smart Campus Platform"
+    : `Avishkar · Engineering & Technology · ${branding.institutionCode} Campus Governance`;
 
   return (
-    <div className="landing">
-      <HeroMotionGraphics />
+    <main className="av-page">
+      {/* ── Executive Hero & Judge Demo Launcher ── */}
+      <section className="av-hero">
+        <div className="av-container">
+          <div className="av-hero__grid">
+            <div>
+              <p className="av-kicker">{heroKicker}</p>
+              <h1 className="av-hero__title">
+                Smart Campus Governance &amp; Indoor Wayfinding, Verified in Real Time.
+              </h1>
+              <p className="av-hero__lead">
+                ComplaintSync unifies custom campus maps with accessible multi-floor Dijkstra routing, QR spot reporting, Marathi/Hindi/English voice intake, Gemini AI triage, map-pinned Lost &amp; Found, and NAAC PDF auditing in one installable PWA.
+              </p>
 
-      <section className="stats-container" aria-label="ComplaintSync at a glance">
-        <motion.div className="card" initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.45 }}>
-          <i className="bx bx-check-circle stat-icon" />
-          <h2>10,000+</h2>
-          <p>Complaints Resolved</p>
-        </motion.div>
+              <div className="av-hero__cta-row">
+                <Link to="/campus-map" className="av-btn av-btn--primary">
+                  <i className="bx bx-map-alt" aria-hidden="true" />
+                  Explore Campus Map
+                </Link>
+                <Link to="/transparency" className="av-btn av-btn--secondary">
+                  <i className="bx bx-bar-chart-alt-2" aria-hidden="true" />
+                  Live SLA Leaderboard
+                </Link>
+                <Link to="/report?spot=CAMPUS-CSLAB-02" className="av-btn av-btn--ghost">
+                  <i className="bx bx-qr-scan" aria-hidden="true" />
+                  Try QR Spot
+                </Link>
+              </div>
 
-        <motion.div className="card" initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.45, delay: 0.08 }}>
-          <i className="bx bx-smile stat-icon" />
-          <h2>98%</h2>
-          <p>Satisfaction Rate</p>
-        </motion.div>
-
-        <motion.div className="card" initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.45, delay: 0.16 }}>
-          <i className="bx bx-time-five stat-icon" />
-          <h2>24/7</h2>
-          <p>Support Available</p>
-        </motion.div>
-
-        <motion.div className="card" initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.45, delay: 0.24 }}>
-          <i className="bx bx-buildings stat-icon" />
-          <h2>50+</h2>
-          <p>Organizations</p>
-        </motion.div>
-      </section>
-
-      {/* ── FEATURES SECTION ── */}
-      <div id="features" className="container1 section-intro">
-        <span className="eyebrow">A better resolution experience</span>
-        <h1>
-          <span>
-            <i className="bx bx-star section-emoji" /> Everything You Need
-          </span>
-        </h1>
-        <p>
-          Powerful features to manage complaints efficiently and effectively,
-          <br />
-          user-friendly platform designed for organizations of all sizes.
-        </p>
-      </div>
-
-      <section className="features-wrap" aria-label="Platform features">
-        <div className="features-grid">
-          <motion.article className="feature-card" whileHover={{ y: -10, rotateX: 3, rotateY: -3 }} transition={{ type: "spring", stiffness: 280, damping: 20 }}>
-            <div className="feature-icon" aria-hidden="true">
-              <i className="bx bx-edit" />
+              <div className="av-meta-line">
+                <span>Multi-Floor Dijkstra + Wheelchair Mode</span>
+                <span className="av-meta-sep">·</span>
+                <span>Server-Side Gemini AI</span>
+                <span className="av-meta-sep">·</span>
+                <span>Cloud SQL PostgreSQL</span>
+                <span className="av-meta-sep">·</span>
+                <span>Installable PWA</span>
+              </div>
             </div>
-            <h3>Easy Submission</h3>
-            <p>Submit complaints in minutes with our intuitive interface</p>
-          </motion.article>
 
-          <motion.article className="feature-card" whileHover={{ y: -10, rotateX: 3, rotateY: -3 }} transition={{ type: "spring", stiffness: 280, damping: 20 }}>
-            <div className="feature-icon" aria-hidden="true">
-              <i className="bx bx-radar" />
+            {/* Right Column: Live Judge One-Click Demo Panel */}
+            <div className="av-surface av-hero__demo-panel">
+              <div style={{ marginBottom: "16px" }}>
+                <p className="av-kicker" style={{ marginBottom: "6px" }}>
+                  Avishkar Evaluator Fast-Track
+                </p>
+                <h2 style={{ fontSize: "1.2rem", fontWeight: 700, marginBottom: "4px" }}>
+                  One-Click Live Role Exploration
+                </h2>
+                <p style={{ fontSize: "0.85rem", color: "var(--av-ink-muted)", lineHeight: 1.5 }}>
+                  Launch any role instantly with pre-seeded smart campus maps, academic departments, Lost &amp; Found pins, active QR spots, multilingual transcripts, and live SLA triggers.
+                </p>
+              </div>
+              <JudgeDemoSwitcher variant="cards" />
             </div>
-            <h3>Real-time Tracking</h3>
-            <p>Track your complaint status 24/7 with live updates</p>
-          </motion.article>
-
-          <motion.article className="feature-card" whileHover={{ y: -10, rotateX: 3, rotateY: -3 }} transition={{ type: "spring", stiffness: 280, damping: 20 }}>
-            <div className="feature-icon" aria-hidden="true">
-              <i className="bx bx-shield-quarter" />
-            </div>
-            <h3>Secure &amp; Private</h3>
-            <p>Your data is encrypted and protected at all times</p>
-          </motion.article>
-
-          <motion.article className="feature-card" whileHover={{ y: -10, rotateX: 3, rotateY: -3 }} transition={{ type: "spring", stiffness: 280, damping: 20 }}>
-            <div className="feature-icon" aria-hidden="true">
-              <i className="bx bx-bar-chart-alt-2" />
-            </div>
-            <h3>Analytics Dashboard</h3>
-            <p>Get insights and reports on complaint trends</p>
-          </motion.article>
-
-          <motion.article className="feature-card" whileHover={{ y: -10, rotateX: 3, rotateY: -3 }} transition={{ type: "spring", stiffness: 280, damping: 20 }}>
-            <div className="feature-icon" aria-hidden="true">
-              <i className="bx bx-group" />
-            </div>
-            <h3>Multi-role Support</h3>
-            <p>Designed for users, staff, and administrators</p>
-          </motion.article>
-
-          <motion.article className="feature-card" whileHover={{ y: -10, rotateX: 3, rotateY: -3 }} transition={{ type: "spring", stiffness: 280, damping: 20 }}>
-            <div className="feature-icon" aria-hidden="true">
-              <i className="bx bx-rocket" />
-            </div>
-            <h3>Fast Resolution</h3>
-            <p>Streamlined workflow for quick issue resolution</p>
-          </motion.article>
-        </div>
-      </section>
-
-      {/* ── WORKFLOW SECTION ── */}
-      <div id="workflow" className="container1 workflow-header section-intro">
-        <span className="eyebrow">From signal to solution</span>
-        <h1>
-          <span>
-            <i className="bx bx-git-branch section-emoji" /> How It Works
-          </span>
-        </h1>
-        <p>
-          A simple, streamlined process from complaint submission to resolution.
-          <br />
-          Follow your complaint every step of the way.
-        </p>
-      </div>
-
-      <section className="workflow-wrap">
-        <div className="workflow-grid">
-          <article className="workflow-card">
-            <div className="workflow-step">1</div>
-            <div className="workflow-icon">
-              <i className="bx bx-user-plus" />
-            </div>
-            <h3>Sign Up</h3>
-            <p>Create your free account in seconds with email or social login</p>
-          </article>
-
-          <div className="workflow-arrow">
-            <i className="bx bx-right-arrow-alt" />
-          </div>
-
-          <article className="workflow-card">
-            <div className="workflow-step">2</div>
-            <div className="workflow-icon">
-              <i className="bx bx-edit-alt" />
-            </div>
-            <h3>Submit Complaint</h3>
-            <p>File your complaint with details, attachments, and category</p>
-          </article>
-
-          <div className="workflow-arrow">
-            <i className="bx bx-right-arrow-alt" />
-          </div>
-
-          <article className="workflow-card">
-            <div className="workflow-step">3</div>
-            <div className="workflow-icon">
-              <i className="bx bx-search-alt" />
-            </div>
-            <h3>Track Progress</h3>
-            <p>Monitor your complaint status in real-time with live updates</p>
-          </article>
-
-          <div className="workflow-arrow">
-            <i className="bx bx-right-arrow-alt" />
-          </div>
-
-          <article className="workflow-card">
-            <div className="workflow-step">4</div>
-            <div className="workflow-icon">
-              <i className="bx bx-check-double" />
-            </div>
-            <h3>Get Resolved</h3>
-            <p>Receive notifications and confirmation when issue is resolved</p>
-          </article>
-        </div>
-      </section>
-
-      {/* ── READY TO START ── */}
-      <section className="ready-container">
-        <div className="ready-orbit ready-orbit-one" aria-hidden="true" />
-        <div className="ready-orbit ready-orbit-two" aria-hidden="true" />
-        <div className="ready">
-          <h2>
-            <i className="bx bx-rocket ready-icon" /> Ready to Get Started?
-          </h2>
-          <p>
-            Join thousands of organizations that trust ComplaintSync for their
-            <br />
-            complaint management needs.
-          </p>
-
-          <div className="Button">
-            <Button
-              className="btn-home register-btn"
-              onClick={() => handleNavigation("register")}
-            >
-              <i className="bx bx-user-plus" /> Create Free Account →
-            </Button>
-            <Button
-              className="btn-home login-btn"
-              onClick={() => handleNavigation("login")}
-            >
-              <i className="bx bx-log-in" /> Sign In Now
-            </Button>
           </div>
         </div>
       </section>
-    </div>
+
+      {/* ── Live Campus Transparency Telemetry (Zero Hardcoded Stats) ── */}
+      <section className="av-section">
+        <div className="av-container">
+          <div className="av-section__head">
+            <div>
+              <h2 className="av-section__title">Live Institutional Pulse</h2>
+              <p className="av-section__sub">
+                Computed directly from Cloud SQL records—never static marketing numbers.
+              </p>
+            </div>
+            <Link to="/transparency" className="av-btn av-btn--ghost av-btn--compact">
+              View Full Leaderboard &amp; Ticket Tracker →
+            </Link>
+          </div>
+
+          <div className="av-kpi-grid">
+            <div className="av-kpi-card">
+              <div className="av-kpi-card__label">SLA Compliance</div>
+              <div className="av-kpi-card__value" style={{ color: "var(--av-success)" }}>
+                {loadingStats ? "—" : `${liveStats?.slaCompliancePct ?? 0}%`}
+              </div>
+              <div className="av-kpi-card__meta">
+                {liveStats?.resolvedCount ?? 0} resolved · {liveStats?.totalComplaints ?? 0} total tickets
+              </div>
+            </div>
+
+            <div className="av-kpi-card">
+              <div className="av-kpi-card__label">Avg Resolution Speed</div>
+              <div className="av-kpi-card__value">
+                {loadingStats ? "—" : `${liveStats?.avgResolutionHours ?? 0}h`}
+              </div>
+              <div className="av-kpi-card__meta">
+                Urgent 4h · High 24h · Medium 72h SLA windows
+              </div>
+            </div>
+
+            <div className="av-kpi-card">
+              <div className="av-kpi-card__label">Duplicates Suppressed</div>
+              <div className="av-kpi-card__value" style={{ color: "var(--av-primary)" }}>
+                {loadingStats ? "—" : liveStats?.duplicateEndorsementsSaved ?? 0}
+              </div>
+              <div className="av-kpi-card__meta">
+                Merged via AI duplicate matching &amp; +1 endorsements
+              </div>
+            </div>
+
+            <div className="av-kpi-card">
+              <div className="av-kpi-card__label">Active Campus QR Spots</div>
+              <div className="av-kpi-card__value">
+                {loadingStats ? "—" : liveStats?.activeQrSpotCount ?? 0}
+              </div>
+              <div className="av-kpi-card__meta">
+                {liveStats?.totalQrScans ?? 0} total on-site scans recorded
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Engineering & Technology Innovation Architecture ── */}
+      <section className="av-section" style={{ borderBottom: "none" }}>
+        <div className="av-container">
+          <div className="av-section__head">
+            <div>
+              <h2 className="av-section__title">Core Engineering Modules</h2>
+              <p className="av-section__sub">
+                Closed-loop cyber-physical workflow from on-site reporting to accredited institutional compliance.
+              </p>
+            </div>
+          </div>
+
+          <div className="av-pillars-grid">
+            {INNOVATION_PILLARS.map((item) => (
+              <article key={item.title} className="av-pillar">
+                <div className="av-pillar__icon" aria-hidden="true">
+                  <i className={item.icon} />
+                </div>
+                <h3 className="av-pillar__title">{item.title}</h3>
+                <p className="av-pillar__body">{item.body}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+    </main>
   );
 }
-
-export default Home;

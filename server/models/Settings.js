@@ -9,7 +9,7 @@ const settingsSchema = new mongoose.Schema(
     },
     siteTagline: {
       type: String,
-      default: "MITM — Jayawanti Babu Foundation",
+      default: "Smart Campus University",
       trim: true,
     },
     maintenanceMode: {
@@ -70,7 +70,7 @@ const settingsSchema = new mongoose.Schema(
     },
     emailSenderName: {
       type: String,
-      default: "ComplaintSync — MITM",
+      default: "ComplaintSync — Smart Campus",
       trim: true,
     },
     notifyOnSubmit: {

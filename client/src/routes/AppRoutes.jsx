@@ -33,11 +33,17 @@ const StaffDashboard = lazy(() => import("../pages/staff/StaffDashboard"));
 const StaffComplaints = lazy(() => import("../pages/staff/StaffComplaints"));
 const Notifications = lazy(() => import("../pages/Notifications"));
 const LostFound = lazy(() => import("../pages/LostFound"));
+const PublicTransparency = lazy(() => import("../pages/PublicTransparency"));
+const QrReportEntry = lazy(() => import("../pages/QrReportEntry"));
+const QrSpotStudio = lazy(() => import("../pages/admin/QrSpotStudio"));
+const CampusNavigator = lazy(() => import("../pages/CampusNavigator"));
+const CampusStudio = lazy(() => import("../pages/admin/CampusStudio"));
 
 const studentMenuItems = [
   { label: "Dashboard", path: "/dashboard", icon: "bx bx-grid-alt" },
   { label: "Submit Complaint", path: "/submit", icon: "bx bx-plus-circle" },
   { label: "My Complaints", path: "/complaints", icon: "bx bx-file" },
+  { label: "Campus Map", path: "/campus-map", icon: "bx bx-map-alt" },
   { label: "Lost & Found", path: "/lost-found", icon: "bx bx-search-alt-2" },
   { label: "Notifications", path: "/notifications", icon: "bx bx-bell" },
   { label: "Profile", path: "/profile", icon: "bx bx-user" },
@@ -45,6 +51,8 @@ const studentMenuItems = [
 
 const adminMenuItems = [
   { label: "Dashboard", path: "/admin", icon: "bx bx-grid-alt" },
+  { label: "Campus Studio", path: "/admin/campus-studio", icon: "bx bx-map-alt" },
+  { label: "QR Spots", path: "/admin/qr-spots", icon: "bx bx-qr" },
   { label: "Users", path: "/admin/users", icon: "bx bx-group" },
   { label: "Reports", path: "/admin/reports", icon: "bx bx-bar-chart-alt-2" },
   { label: "Lost & Found", path: "/lost-found", icon: "bx bx-search-alt-2" },
@@ -60,6 +68,7 @@ const staffMenuItems = [
     path: "/staff/complaints",
     icon: "bx bx-task",
   },
+  { label: "Campus Map", path: "/campus-map", icon: "bx bx-map-alt" },
   { label: "Lost & Found", path: "/lost-found", icon: "bx bx-search-alt-2" },
   { label: "Notifications", path: "/staff/notifications", icon: "bx bx-bell" },
   { label: "Profile", path: "/profile", icon: "bx bx-user" },
@@ -127,6 +136,36 @@ function AppRoutes() {
         <Route path="/auth/verify-email" element={<PageTransition><VerifyEmail /></PageTransition>} />
         <Route path="/auth/reset-password" element={<PageTransition><ResetPassword /></PageTransition>} />
         <Route path="/maintenance" element={<PageTransition><Maintenance /></PageTransition>} />
+        <Route path="/transparency" element={<PageTransition><PublicTransparency /></PageTransition>} />
+        <Route path="/report" element={<PageTransition><QrReportEntry /></PageTransition>} />
+        <Route
+          path="/campus-map"
+          element={
+            user ? (
+              <PageTransition>
+                <DashboardLayout
+                  menuItems={
+                    user.role === "admin"
+                      ? adminMenuItems
+                      : user.role === "staff"
+                        ? staffMenuItems
+                        : studentMenuItems
+                  }
+                  userName={user?.name}
+                  role={getDisplayRole(user?.role)}
+                >
+                  <CampusNavigator />
+                </DashboardLayout>
+              </PageTransition>
+            ) : (
+              <PageTransition>
+                <Header />
+                <CampusNavigator />
+                <Footer />
+              </PageTransition>
+            )
+          }
+        />
 
       <Route
         path="/dashboard"
@@ -213,6 +252,36 @@ function AppRoutes() {
               role={getDisplayRole(user?.role)}
             >
               <AdminReports />
+            </DashboardLayout></PageTransition>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/qr-spots"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <PageTransition><DashboardLayout
+              menuItems={adminMenuItems}
+              userName={user?.name}
+              role={getDisplayRole(user?.role)}
+            >
+              <QrSpotStudio />
+            </DashboardLayout></PageTransition>
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/admin/campus-studio"
+        element={
+          <ProtectedRoute allowedRoles={["admin"]}>
+            <PageTransition><DashboardLayout
+              menuItems={adminMenuItems}
+              userName={user?.name}
+              role={getDisplayRole(user?.role)}
+            >
+              <CampusStudio />
             </DashboardLayout></PageTransition>
           </ProtectedRoute>
         }

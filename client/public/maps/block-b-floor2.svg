@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700" width="1000" height="700">
+  <defs>
+    <pattern id="f2grid" width="35" height="35" patternUnits="userSpaceOnUse">
+      <path d="M 35 0 L 0 0 0 35" fill="none" stroke="#1e293b" stroke-width="1" opacity="0.5"/>
+    </pattern>
+  </defs>
+  <rect width="1000" height="700" fill="#0b1322"/>
+  <rect width="1000" height="700" fill="url(#f2grid)"/>
+
+  <!-- Building Shell -->
+  <rect x="60" y="55" width="880" height="590" rx="14" fill="#111d33" stroke="#475569" stroke-width="3"/>
+
+  <!-- Main 2nd Floor Corridor -->
+  <rect x="110" y="300" width="780" height="100" rx="8" fill="#182742" stroke="#334155" stroke-width="1.5"/>
+  <text x="500" y="355" text-anchor="middle" fill="#64748b" font-family="monospace" font-size="13" letter-spacing="3">2ND FLOOR ACADEMIC LAB CORRIDOR</text>
+
+  <!-- Top Wing Labs -->
+  <!-- Computer Lab 1 (18%, 24%) -->
+  <rect x="85" y="80" width="215" height="190" rx="8" fill="#16243d" stroke="#38bdf8" stroke-width="1.8"/>
+  <text x="192" y="160" text-anchor="middle" fill="#f1f5f9" font-family="system-ui, sans-serif" font-size="15" font-weight="700">COMPUTER LAB 1</text>
+  <text x="192" y="182" text-anchor="middle" fill="#7dd3fc" font-family="monospace" font-size="11">ROOM 201 · AI &amp; ML</text>
+
+  <!-- Staircase B 2F (34%, 28%) -->
+  <rect x="315" y="110" width="95" height="160" rx="8" fill="#231c2e" stroke="#f59e0b" stroke-width="2"/>
+  <g stroke="#f59e0b" stroke-width="1.5" opacity="0.55">
+    <line x1="330" y1="145" x2="395" y2="145"/>
+    <line x1="330" y1="163" x2="395" y2="163"/>
+    <line x1="330" y1="181" x2="395" y2="181"/>
+    <line x1="330" y1="199" x2="395" y2="199"/>
+    <line x1="330" y1="217" x2="395" y2="217"/>
+  </g>
+  <text x="362" y="132" text-anchor="middle" fill="#fcd34d" font-family="monospace" font-size="11" font-weight="700">STAIRS B</text>
+
+  <!-- Computer Lab 2 (50%, 22%) -->
+  <rect x="425" y="80" width="165" height="190" rx="8" fill="#1e2942" stroke="#ea580c" stroke-width="2.4"/>
+  <text x="507" y="158" text-anchor="middle" fill="#f8fafc" font-family="system-ui, sans-serif" font-size="15" font-weight="700">COMPUTER LAB 2</text>
+  <text x="507" y="180" text-anchor="middle" fill="#fdba74" font-family="monospace" font-size="11">ROOM 202 · QR SPOT</text>
+
+  <!-- Elevator 1 2F (66%, 28%) -->
+  <rect x="605" y="110" width="115" height="160" rx="8" fill="#0f2b27" stroke="#10b981" stroke-width="2.2"/>
+  <text x="662" y="168" text-anchor="middle" fill="#6ee7b7" font-family="system-ui, sans-serif" font-size="13" font-weight="700">ELEVATOR 1</text>
+  <text x="662" y="188" text-anchor="middle" fill="#34d399" font-family="monospace" font-size="10">ACCESSIBLE LIFT</text>
+
+  <!-- Electronics & IoT Lab (82%, 24%) -->
+  <rect x="735" y="80" width="180" height="190" rx="8" fill="#16243d" stroke="#38bdf8" stroke-width="1.8"/>
+  <text x="825" y="158" text-anchor="middle" fill="#f1f5f9" font-family="system-ui, sans-serif" font-size="14" font-weight="700">IoT &amp; VLSI LAB</text>
+  <text x="825" y="178" text-anchor="middle" fill="#7dd3fc" font-family="monospace" font-size="11">ROOM 203</text>
+
+  <!-- Bottom Wing -->
+  <!-- CSE HOD Office (18%, 72%) -->
+  <rect x="85" y="435" width="245" height="185" rx="8" fill="#16243d" stroke="#a78bfa" stroke-width="1.8"/>
+  <text x="207" y="520" text-anchor="middle" fill="#f1f5f9" font-family="system-ui, sans-serif" font-size="14" font-weight="700">CSE DEPT &amp; HOD CABIN</text>
+  <text x="207" y="542" text-anchor="middle" fill="#c4b5fd" font-family="monospace" font-size="11">FACULTY WING · ROOM 204</text>
+
+  <!-- Smart Lecture Hall 205 (50%, 72%) -->
+  <rect x="355" y="435" width="275" height="185" rx="8" fill="#16243d" stroke="#64748b" stroke-width="1.8"/>
+  <text x="492" y="520" text-anchor="middle" fill="#f1f5f9" font-family="system-ui, sans-serif" font-size="14" font-weight="700">SMART CLASSROOM 205</text>
+  <text x="492" y="542" text-anchor="middle" fill="#94a3b8" font-family="monospace" font-size="11">LECTURE HALL · 90 SEATS</text>
+
+  <!-- Research & Avishkar Innovation Cell (82%, 72%) -->
+  <rect x="655" y="435" width="260" height="185" rx="8" fill="#1b263b" stroke="#22c55e" stroke-width="2"/>
+  <text x="785" y="520" text-anchor="middle" fill="#f8fafc" font-family="system-ui, sans-serif" font-size="14" font-weight="700">INNOVATION &amp; R&amp;D CELL</text>
+  <text x="785" y="542" text-anchor="middle" fill="#86efac" font-family="monospace" font-size="11">PROTOTYPE LAB · ROOM 206</text>
+
+  <!-- Floor Title Tag -->
+  <text x="85" y="42" fill="#94a3b8" font-family="monospace" font-size="12" font-weight="700">ENGINEERING BLOCK B — 2ND FLOOR (60m × 42m)</text>
+</svg>

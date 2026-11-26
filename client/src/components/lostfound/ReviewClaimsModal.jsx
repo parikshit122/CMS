@@ -5,6 +5,11 @@ import {
   reviewLostFoundClaim,
   confirmLostFoundHandover,
 } from "../../services/lostFoundService";
+import {
+  buildContactLinks,
+  buildPickupReminderMessage,
+  buildOwnerToFinderMessage,
+} from "../../utils/contactLinks";
 import { useToast } from "../common/Alert";
 
 const MATCH_LABELS = {
@@ -158,29 +163,66 @@ export default function ReviewClaimsModal({ open, item, onClose, onUpdated }) {
           )}
 
           {/* Approved Claimant's Private Handover Code Banner */}
-          {item.myApprovedClaim && item.handoverCode && item.status === "approved" && (
-            <div className="lf-handover-ticket">
-              <div>
-                <span className="lf-ticket-kicker">Ownership Verified — Show at Pickup</span>
-                <div className="lf-ticket-code-row">
-                  <code className="lf-ticket-code">{item.handoverCode}</code>
-                  <button
-                    type="button"
-                    className="lf-btn lf-btn--ghost lf-btn--sm"
-                    onClick={() => copyPickupCode(item.handoverCode)}
-                  >
-                    <i className="bx bx-copy" aria-hidden="true" />
-                    <span>Copy Code</span>
-                  </button>
+          {item.myApprovedClaim && item.handoverCode && item.status === "approved" && (() => {
+            const finderLinks = buildContactLinks(
+              item.contactPhone || item.finder?.phone,
+              buildOwnerToFinderMessage({
+                finderName: item.finder?.name,
+                itemTitle: item.title,
+                itemCode: item.itemCode,
+                handoverCode: item.handoverCode,
+              })
+            );
+            return (
+              <div className="lf-handover-ticket">
+                <div>
+                  <span className="lf-ticket-kicker">Ownership Verified — Show at Pickup</span>
+                  <div className="lf-ticket-code-row">
+                    <code className="lf-ticket-code">{item.handoverCode}</code>
+                    <button
+                      type="button"
+                      className="lf-btn lf-btn--ghost lf-btn--sm"
+                      onClick={() => copyPickupCode(item.handoverCode)}
+                    >
+                      <i className="bx bx-copy" aria-hidden="true" />
+                      <span>Copy Code</span>
+                    </button>
+                  </div>
+                  <p>
+                    Present this code in person to{" "}
+                    <strong>{item.finder?.name || "the finder"}</strong>
+                    {item.finder?.email ? ` (${item.finder.email})` : ""} to complete verified handover.
+                  </p>
+                  {finderLinks && (
+                    <div className="lf-contact-bar" role="group" aria-label="Contact finder for pickup">
+                      <span className="lf-contact-bar__num">
+                        <i className="bx bx-phone" aria-hidden="true" />
+                        <span>{finderLinks.displayPhone}</span>
+                      </span>
+                      <div className="lf-contact-bar__btns">
+                        <a
+                          href={finderLinks.telHref}
+                          className="lf-btn lf-btn--call lf-btn--sm"
+                        >
+                          <i className="bx bx-phone-call" aria-hidden="true" />
+                          <span>Call Finder</span>
+                        </a>
+                        <a
+                          href={finderLinks.whatsappHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="lf-btn lf-btn--whatsapp lf-btn--sm"
+                        >
+                          <i className="bx bxl-whatsapp" aria-hidden="true" />
+                          <span>Contact on WhatsApp</span>
+                        </a>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <p>
-                  Present this code in person to{" "}
-                  <strong>{item.finder?.name || "the finder"}</strong>
-                  {item.finder?.email ? ` (${item.finder.email})` : ""} to complete verified handover.
-                </p>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Private Finder Reference Box (Only Reviewers Ever See This) */}
           {canReview && data && (
@@ -205,35 +247,95 @@ export default function ReviewClaimsModal({ open, item, onClose, onUpdated }) {
           )}
 
           {/* Two-Factor Handover Verification Form for Finder / Admin */}
-          {canReview && item.status === "approved" && (
-            <form className="lf-handover-form" onSubmit={handleHandover}>
-              <div className="lf-handover-form__copy">
-                <h3>Confirm Physical Handover</h3>
-                <p>
-                  Ask the verified owner for their 6-character Pickup Code when meeting in person. Never hand over the item without verifying the code.
-                </p>
+          {canReview && item.status === "approved" && (() => {
+            const approvedClaim = (data?.claims || []).find((c) => c.status === "approved");
+            const ownerPhone = approvedClaim?.claimantPhone || approvedClaim?.claimant?.phone;
+            const pickupPlace = item.custodyLocation || item.foundLocation;
+            const ownerLinks = buildContactLinks(
+              ownerPhone,
+              buildPickupReminderMessage({
+                recipientName: approvedClaim?.claimant?.name,
+                itemTitle: item.title,
+                itemCode: item.itemCode,
+                pickupPlace,
+                status: "approved",
+              })
+            );
+            return (
+              <div className="lf-handover-stack">
+                <form className="lf-handover-form" onSubmit={handleHandover}>
+                  <div className="lf-handover-form__copy">
+                    <h3>Confirm Physical Handover</h3>
+                    <p>
+                      Ask the verified owner for their 6-character Pickup Code when meeting in person. Never hand over the item without verifying the code.
+                    </p>
+                  </div>
+                  <div className="lf-handover-form__controls">
+                    <input
+                      type="text"
+                      value={handoverCode}
+                      onChange={(e) => setHandoverCode(e.target.value.toUpperCase())}
+                      placeholder="LF-XXXXXX"
+                      aria-label="Enter 6-character handover pickup code"
+                      maxLength={12}
+                      required
+                    />
+                    <button
+                      type="submit"
+                      className="lf-btn lf-btn--primary"
+                      disabled={handoverBusy}
+                    >
+                      <i className={`bx ${handoverBusy ? "bx-loader-alt bx-spin" : "bx-check-double"}`} aria-hidden="true" />
+                      <span>{handoverBusy ? "Verifying..." : "Confirm Handover"}</span>
+                    </button>
+                  </div>
+                </form>
+
+                {approvedClaim && (
+                  <div className="lf-reminder-strip">
+                    <div className="lf-reminder-strip__copy">
+                      <strong>Owner hasn&apos;t picked up yet?</strong>
+                      <span>
+                        {ownerLinks
+                          ? `Reach ${approvedClaim.claimant?.name || "the verified owner"} directly at ${ownerLinks.displayPhone} if they missed email alerts.`
+                          : `${approvedClaim.claimant?.name || "The verified owner"} did not add a phone number — contact via ${approvedClaim.claimant?.email || "campus email"}.`}
+                      </span>
+                    </div>
+                    <div className="lf-reminder-strip__actions">
+                      {ownerLinks ? (
+                        <>
+                          <a
+                            href={ownerLinks.telHref}
+                            className="lf-btn lf-btn--call lf-btn--sm"
+                          >
+                            <i className="bx bx-phone-call" aria-hidden="true" />
+                            <span>Call Owner</span>
+                          </a>
+                          <a
+                            href={ownerLinks.whatsappHref}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="lf-btn lf-btn--whatsapp lf-btn--sm"
+                          >
+                            <i className="bx bxl-whatsapp" aria-hidden="true" />
+                            <span>WhatsApp Reminder</span>
+                          </a>
+                        </>
+                      ) : approvedClaim.claimant?.email ? (
+                        <a
+                          href={`mailto:${approvedClaim.claimant.email}?subject=${encodeURIComponent(`Pickup Reminder: ${item.title} (${item.itemCode})`)}`}
+                          className="lf-btn lf-btn--ghost lf-btn--sm"
+                        >
+                          <i className="bx bx-envelope" aria-hidden="true" />
+                          <span>Email Reminder</span>
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="lf-handover-form__controls">
-                <input
-                  type="text"
-                  value={handoverCode}
-                  onChange={(e) => setHandoverCode(e.target.value.toUpperCase())}
-                  placeholder="LF-XXXXXX"
-                  aria-label="Enter 6-character handover pickup code"
-                  maxLength={12}
-                  required
-                />
-                <button
-                  type="submit"
-                  className="lf-btn lf-btn--primary"
-                  disabled={handoverBusy}
-                >
-                  <i className={`bx ${handoverBusy ? "bx-loader-alt bx-spin" : "bx-check-double"}`} aria-hidden="true" />
-                  <span>{handoverBusy ? "Verifying..." : "Confirm Handover"}</span>
-                </button>
-              </div>
-            </form>
-          )}
+            );
+          })()}
 
           {/* Claims List */}
           {loading ? (
@@ -254,6 +356,20 @@ export default function ReviewClaimsModal({ open, item, onClose, onUpdated }) {
                   CLAIM_STATUS_LABELS[claim.status] || CLAIM_STATUS_LABELS.pending;
                 const isBusy = busyClaimId === claim.id;
 
+                const claimPhone = claim.claimantPhone || claim.claimant?.phone;
+                const claimantLinks = canReview
+                  ? buildContactLinks(
+                      claimPhone,
+                      buildPickupReminderMessage({
+                        recipientName: claim.claimant?.name,
+                        itemTitle: item.title,
+                        itemCode: item.itemCode,
+                        pickupPlace: item.custodyLocation || item.foundLocation,
+                        status: claim.status,
+                      })
+                    )
+                  : null;
+
                 return (
                   <article key={claim.id} className="lf-claim-card">
                     <div className="lf-claim-card__top">
@@ -262,10 +378,10 @@ export default function ReviewClaimsModal({ open, item, onClose, onUpdated }) {
                           <strong>{claim.claimant?.name || "Campus User"}</strong>
                           <span aria-hidden="true">·</span>
                           <span>{claim.claimant?.email || ""}</span>
-                          {claim.claimant?.phone && (
+                          {claimPhone && (
                             <>
                               <span aria-hidden="true">·</span>
-                              <span>{claim.claimant.phone}</span>
+                              <span className="lf-mono">{claimantLinks ? claimantLinks.displayPhone : claimPhone}</span>
                             </>
                           )}
                         </div>
@@ -283,6 +399,28 @@ export default function ReviewClaimsModal({ open, item, onClose, onUpdated }) {
                             </>
                           )}
                         </div>
+                        {claimantLinks && (
+                          <div className="lf-claim-contact-row">
+                            <a
+                              href={claimantLinks.telHref}
+                              className="lf-btn lf-btn--call lf-btn--xs"
+                              aria-label={`Call ${claim.claimant?.name || "claimant"}`}
+                            >
+                              <i className="bx bx-phone-call" aria-hidden="true" />
+                              <span>Call</span>
+                            </a>
+                            <a
+                              href={claimantLinks.whatsappHref}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="lf-btn lf-btn--whatsapp lf-btn--xs"
+                              aria-label={`WhatsApp ${claim.claimant?.name || "claimant"}`}
+                            >
+                              <i className="bx bxl-whatsapp" aria-hidden="true" />
+                              <span>WhatsApp</span>
+                            </a>
+                          </div>
+                        )}
                       </div>
 
                       <div className="lf-claim-card__signals">

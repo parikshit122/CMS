@@ -75,6 +75,21 @@ const formatPopulatedComplaint = (
   ratingFeedback: row.ratingFeedback ?? undefined,
   ratedAt: row.ratedAt ?? null,
   attachments: Array.isArray(row.attachments) ? row.attachments : [],
+  sourceChannel: row.sourceChannel ?? "web",
+  qrSpotCode: row.qrSpotCode ?? null,
+  originalLanguage: row.originalLanguage ?? "en",
+  originalTranscript: row.originalTranscript ?? null,
+  aiCategory: row.aiCategory ?? null,
+  aiPriority: row.aiPriority ?? null,
+  aiSummary: row.aiSummary ?? null,
+  aiConfidence: row.aiConfidence ?? null,
+  duplicateOfId: row.duplicateOfId ?? null,
+  endorsementCount: Math.max(1, Number(row.endorsementCount ?? 1)),
+  endorsedByUserIds: Array.isArray(row.endorsedByUserIds) ? row.endorsedByUserIds : [],
+  escalationLevel: Number(row.escalationLevel ?? 0),
+  escalatedAt: row.escalatedAt ?? null,
+  escalationReason: row.escalationReason ?? null,
+  isDemoRecord: Boolean(row.isDemoRecord),
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
 });
@@ -107,6 +122,16 @@ export async function createComplaint(data: {
   location?: string | null;
   studentId: unknown;
   attachments?: ComplaintAttachment[];
+  sourceChannel?: string;
+  qrSpotCode?: string | null;
+  originalLanguage?: string;
+  originalTranscript?: string | null;
+  aiCategory?: string | null;
+  aiPriority?: string | null;
+  aiSummary?: string | null;
+  aiConfidence?: number | null;
+  duplicateOfId?: number | null;
+  isDemoRecord?: boolean;
 }) {
   const numStudentId = toNumericId(data.studentId);
   if (!numStudentId) throw new Error("Invalid student ID.");
@@ -129,6 +154,19 @@ export async function createComplaint(data: {
         studentId: numStudentId,
         slaDueAt,
         attachments: data.attachments || [],
+        sourceChannel: data.sourceChannel || "web",
+        qrSpotCode: data.qrSpotCode ? data.qrSpotCode.trim().toUpperCase() : null,
+        originalLanguage: data.originalLanguage || "en",
+        originalTranscript: data.originalTranscript?.trim() || null,
+        aiCategory: data.aiCategory || null,
+        aiPriority: data.aiPriority || null,
+        aiSummary: data.aiSummary || null,
+        aiConfidence: typeof data.aiConfidence === "number" ? data.aiConfidence : null,
+        duplicateOfId: typeof data.duplicateOfId === "number" ? data.duplicateOfId : null,
+        endorsementCount: 1,
+        endorsedByUserIds: [numStudentId],
+        escalationLevel: 0,
+        isDemoRecord: Boolean(data.isDemoRecord),
       })
       .returning();
 
@@ -242,6 +280,14 @@ export async function findComplaintsByStaff(staffId: unknown) {
       ratingFeedback: complaint.ratingFeedback ?? undefined,
       ratedAt: complaint.ratedAt ?? null,
       attachments: Array.isArray(complaint.attachments) ? complaint.attachments : [],
+      sourceChannel: complaint.sourceChannel ?? "web",
+      qrSpotCode: complaint.qrSpotCode ?? null,
+      originalLanguage: complaint.originalLanguage ?? "en",
+      aiSummary: complaint.aiSummary ?? null,
+      endorsementCount: Math.max(1, Number(complaint.endorsementCount ?? 1)),
+      escalationLevel: Number(complaint.escalationLevel ?? 0),
+      escalatedAt: complaint.escalatedAt ?? null,
+      escalationReason: complaint.escalationReason ?? null,
       studentId: complaint.studentId,
       studentName: student?.name || "Unknown",
       studentEmail: student?.email || "",

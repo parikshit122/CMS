@@ -229,6 +229,14 @@
   font-size: 0.8rem;
 }
 
+.lf-btn--xs {
+  padding: 5px 10px;
+  font-size: 0.74rem;
+  border-radius: 8px;
+  gap: 5px;
+  text-decoration: none;
+}
+
 .lf-btn--primary {
   background: #ea580c;
   color: #ffffff;
@@ -242,6 +250,7 @@
   background: rgba(255, 255, 255, 0.04);
   border-color: rgba(255, 255, 255, 0.12);
   color: #e2e8f0;
+  text-decoration: none;
 }
 
 .lf-btn--ghost:hover:not(:disabled) {
@@ -255,6 +264,32 @@
 
 .lf-btn--approve:hover:not(:disabled) {
   background: #15803d;
+}
+
+.lf-btn--call {
+  background: rgba(56, 189, 248, 0.14);
+  border-color: rgba(56, 189, 248, 0.34);
+  color: #7dd3fc;
+  text-decoration: none;
+}
+
+.lf-btn--call:hover:not(:disabled) {
+  background: #0284c7;
+  border-color: #0284c7;
+  color: #ffffff;
+}
+
+.lf-btn--whatsapp {
+  background: rgba(34, 197, 94, 0.16);
+  border-color: rgba(34, 197, 94, 0.38);
+  color: #86efac;
+  text-decoration: none;
+}
+
+.lf-btn--whatsapp:hover:not(:disabled) {
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #ffffff;
 }
 
 .lf-btn--danger {
@@ -327,6 +362,68 @@
   background: #0b0e17;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   overflow: hidden;
+}
+
+/* ── Visual Status Badges (Available / In Progress / Pickup Pending / Claimed) ── */
+.lf-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 7px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  border: 1px solid transparent;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  white-space: nowrap;
+}
+
+.lf-status-badge--floating {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.lf-status-badge__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.lf-status-badge i {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.lf-status-badge--available {
+  background: rgba(14, 116, 144, 0.88);
+  border-color: rgba(56, 189, 248, 0.55);
+  color: #e0f2fe;
+}
+
+.lf-status-badge--progress {
+  background: rgba(146, 64, 14, 0.9);
+  border-color: rgba(251, 191, 36, 0.55);
+  color: #fef3c7;
+}
+
+.lf-status-badge--approved {
+  background: rgba(154, 52, 18, 0.92);
+  border-color: rgba(251, 146, 60, 0.6);
+  color: #ffedd5;
+}
+
+.lf-status-badge--claimed {
+  background: rgba(20, 83, 45, 0.92);
+  border-color: rgba(74, 222, 128, 0.55);
+  color: #dcfce7;
 }
 
 .lf-card__img {
@@ -413,6 +510,24 @@
   line-height: 1.3;
 }
 
+.lf-card__title-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.lf-card__title-btn:hover {
+  color: #fb923c;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .lf-card__desc {
   margin: 0;
   font-size: 0.85rem;
@@ -452,6 +567,12 @@
   font-weight: 500;
 }
 
+.lf-inline-ticket-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .lf-inline-ticket {
   display: flex;
   align-items: center;
@@ -463,6 +584,13 @@
   border: 1px solid rgba(22, 163, 74, 0.34);
   font-size: 0.8rem;
   color: #bbf7d0;
+}
+
+.lf-inline-contact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .lf-inline-ticket code {
@@ -510,7 +638,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .lf-muted-note {
@@ -695,6 +824,7 @@
 }
 
 .lf-field input[type="text"],
+.lf-field input[type="tel"],
 .lf-field input[type="datetime-local"],
 .lf-field input[type="file"],
 .lf-field select,
@@ -716,9 +846,14 @@
   border-color: #f97316;
 }
 
-.lf-char-count {
+.lf-char-count,
+.lf-field-hint {
   font-size: 0.74rem;
   color: #94a3b8;
+  line-height: 1.4;
+}
+
+.lf-char-count {
   font-variant-numeric: tabular-nums;
 }
 
@@ -837,6 +972,212 @@
   margin: 0;
   font-size: 0.82rem;
   color: #dcfce7;
+}
+
+.lf-contact-bar {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(22, 163, 74, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.lf-contact-bar__num {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #f8fafc;
+  font-variant-numeric: tabular-nums;
+}
+
+.lf-contact-bar__btns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lf-handover-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lf-reminder-strip {
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.lf-reminder-strip__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 200px;
+  flex: 1;
+}
+
+.lf-reminder-strip__copy strong {
+  font-size: 0.84rem;
+  color: #f8fafc;
+}
+
+.lf-reminder-strip__copy span {
+  font-size: 0.78rem;
+  color: #cbd5e1;
+}
+
+.lf-reminder-strip__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lf-claim-contact-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Item Details Modal ──────────────────────────────────── */
+.lf-detail-kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  color: #94a3b8;
+  margin-bottom: 6px;
+}
+
+.lf-detail-media {
+  position: relative;
+  height: 200px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #0b0e17;
+}
+
+.lf-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lf-detail-desc {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: #e2e8f0;
+}
+
+.lf-detail-facts {
+  margin: 4px 0 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 18px;
+}
+
+.lf-detail-facts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.lf-detail-facts dt {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.lf-detail-facts dd {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #f8fafc;
+}
+
+.lf-detail-contact-card {
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: rgba(34, 197, 94, 0.09);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.lf-detail-contact-card__copy {
+  flex: 1;
+  min-width: 240px;
+}
+
+.lf-detail-contact-card__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.lf-detail-contact-card__title i {
+  font-size: 20px;
+  color: #4ade80;
+}
+
+.lf-detail-contact-card__title h3 {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.lf-detail-contact-card__copy p {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #cbd5e1;
+}
+
+.lf-detail-contact-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lf-detail-footer {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.lf-detail-footer__left,
+.lf-detail-footer__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .lf-secret-ref {
@@ -1083,7 +1424,8 @@
   .lf-grid,
   .lf-kpi-strip,
   .lf-grid-2,
-  .lf-secret-ref__row {
+  .lf-secret-ref__row,
+  .lf-detail-facts {
     grid-template-columns: 1fr;
   }
   .lf-filters {
@@ -1092,6 +1434,9 @@
   .lf-search,
   .lf-select {
     flex: 1 1 100%;
+  }
+  .lf-detail-media {
+    height: 140px;
   }
 }
 
@@ -1174,6 +1519,8 @@ html[data-bs-theme="light"] .lf-mono {
 
 html[data-theme="light"] .lf-field input[type="text"],
 html[data-bs-theme="light"] .lf-field input[type="text"],
+html[data-theme="light"] .lf-field input[type="tel"],
+html[data-bs-theme="light"] .lf-field input[type="tel"],
 html[data-theme="light"] .lf-field input[type="datetime-local"],
 html[data-bs-theme="light"] .lf-field input[type="datetime-local"],
 html[data-theme="light"] .lf-field input[type="file"],
@@ -1258,6 +1605,92 @@ html[data-bs-theme="light"] .lf-inline-ticket code {
 
 html[data-theme="light"] .lf-handover-ticket p,
 html[data-bs-theme="light"] .lf-handover-ticket p {
+  color: #166534;
+}
+
+html[data-theme="light"] .lf-contact-bar__num,
+html[data-bs-theme="light"] .lf-contact-bar__num,
+html[data-theme="light"] .lf-reminder-strip__copy strong,
+html[data-bs-theme="light"] .lf-reminder-strip__copy strong {
+  color: #0f172a;
+}
+
+html[data-theme="light"] .lf-reminder-strip,
+html[data-bs-theme="light"] .lf-reminder-strip {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+html[data-theme="light"] .lf-reminder-strip__copy span,
+html[data-bs-theme="light"] .lf-reminder-strip__copy span {
+  color: #334155;
+}
+
+html[data-theme="light"] .lf-btn--call,
+html[data-bs-theme="light"] .lf-btn--call {
+  background: #e0f2fe;
+  border-color: #7dd3fc;
+  color: #0369a1;
+}
+
+html[data-theme="light"] .lf-btn--whatsapp,
+html[data-bs-theme="light"] .lf-btn--whatsapp {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #15803d;
+}
+
+html[data-theme="light"] .lf-detail-desc,
+html[data-bs-theme="light"] .lf-detail-desc,
+html[data-theme="light"] .lf-detail-facts dd,
+html[data-bs-theme="light"] .lf-detail-facts dd,
+html[data-theme="light"] .lf-detail-contact-card__title h3,
+html[data-bs-theme="light"] .lf-detail-contact-card__title h3 {
+  color: #0f172a;
+}
+
+html[data-theme="light"] .lf-detail-facts,
+html[data-bs-theme="light"] .lf-detail-facts {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+html[data-theme="light"] .lf-detail-contact-card,
+html[data-bs-theme="light"] .lf-detail-contact-card {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+html[data-theme="light"] .lf-detail-contact-card__copy p,
+html[data-bs-theme="light"] .lf-detail-contact-card__copy p {
+  color: #334155;
+}
+
+html[data-theme="light"] .lf-status-badge--available,
+html[data-bs-theme="light"] .lf-status-badge--available {
+  background: rgba(224, 242, 254, 0.96);
+  border-color: #7dd3fc;
+  color: #0369a1;
+}
+
+html[data-theme="light"] .lf-status-badge--progress,
+html[data-bs-theme="light"] .lf-status-badge--progress {
+  background: rgba(254, 243, 199, 0.96);
+  border-color: #fcd34d;
+  color: #92400e;
+}
+
+html[data-theme="light"] .lf-status-badge--approved,
+html[data-bs-theme="light"] .lf-status-badge--approved {
+  background: rgba(255, 237, 213, 0.96);
+  border-color: #fdba74;
+  color: #9a3412;
+}
+
+html[data-theme="light"] .lf-status-badge--claimed,
+html[data-bs-theme="light"] .lf-status-badge--claimed {
+  background: rgba(220, 252, 231, 0.96);
+  border-color: #86efac;
   color: #166534;
 }
 

@@ -11,7 +11,11 @@ const adminRoutes = require("./admin.routes");
 const notificationRoutes = require("./notification.routes");
 const settingsRoutes = require("./settings.routes");
 const lostFoundRoutes = require("./lostFound.routes");
+const publicRoutes = require("./public.routes");
+const avishkarRoutes = require("./avishkar.routes");
+const campusRoutes = require("./campus.routes");
 
+router.use("/public", publicRoutes);
 router.use("/auth", authRoutes);
 router.use("/settings", settingsRoutes);
 
@@ -23,5 +27,8 @@ router.use("/users", userRoutes);
 router.use("/admin", adminRoutes);
 router.use("/notifications", notificationRoutes);
 router.use("/lost-found", lostFoundRoutes);
+router.use("/avishkar", avishkarRoutes);
+router.use("/ai", avishkarRoutes);
+router.use("/campus", campusRoutes);
 
 module.exports = router;

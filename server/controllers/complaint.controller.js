@@ -21,6 +21,10 @@ const {
   addComplaintActivity,
   getComplaintActivities,
 } = require("../../src/db/activities.ts");
+const {
+  incrementQrSpotComplaintCount,
+  getAvishkarAdminExtras,
+} = require("../../src/db/avishkar.ts");
 const { getSettingsSingleton } = require("../../src/db/settings.ts");
 const {
   sendComplaintSubmittedEmail,
@@ -55,7 +59,21 @@ const canAccessComplaint = (user, complaint) => {
 
 const submitComplaint = async (req, res) => {
   try {
-    const { title, description, category, priority, location } = req.body;
+    const {
+      title,
+      description,
+      category,
+      priority,
+      location,
+      sourceChannel,
+      qrSpotCode,
+      originalLanguage,
+      originalTranscript,
+      aiCategory,
+      aiPriority,
+      aiSummary,
+      aiConfidence,
+    } = req.body;
 
     if (!title || !description || !category) {
       return res.status(400).json({
@@ -88,6 +106,21 @@ const submitComplaint = async (req, res) => {
       }
     }
 
+    const normalizedChannel = ["web", "qr", "voice"].includes(sourceChannel)
+      ? sourceChannel
+      : qrSpotCode
+        ? "qr"
+        : "web";
+
+    const normalizedLang = ["en", "mr", "hi"].includes(originalLanguage)
+      ? originalLanguage
+      : "en";
+
+    const parsedConfidence =
+      aiConfidence !== undefined && aiConfidence !== "" && !Number.isNaN(Number(aiConfidence))
+        ? Math.min(99, Math.max(0, Math.round(Number(aiConfidence))))
+        : null;
+
     const complaint = await createComplaint({
       title: title.trim(),
       description: description.trim(),
@@ -96,7 +129,20 @@ const submitComplaint = async (req, res) => {
       location: location?.trim() || null,
       studentId: req.user.id,
       attachments,
+      sourceChannel: normalizedChannel,
+      qrSpotCode: qrSpotCode ? String(qrSpotCode).trim().toUpperCase() : null,
+      originalLanguage: normalizedLang,
+      originalTranscript: originalTranscript ? String(originalTranscript).trim() : null,
+      aiCategory: aiCategory ? String(aiCategory).toLowerCase().trim() : null,
+      aiPriority: aiPriority ? String(aiPriority).toLowerCase().trim() : null,
+      aiSummary: aiSummary ? String(aiSummary).trim() : null,
+      aiConfidence: parsedConfidence,
+      isDemoRecord: Boolean(req.user?.isDemo),
     });
+
+    if (complaint.qrSpotCode) {
+      incrementQrSpotComplaintCount(complaint.qrSpotCode).catch(() => {});
+    }
 
     try {
       await addComplaintActivity({
@@ -652,6 +698,8 @@ const getAdminStats = async (req, res) => {
       icon: iconMap[(item.category || "other").toLowerCase()] || "bx bxs-category",
     }));
 
+    const avishkarExtras = await getAvishkarAdminExtras();
+
     res.json({
       success: true,
       data: {
@@ -665,6 +713,7 @@ const getAdminStats = async (req, res) => {
         weeklyData,
         monthlyData,
         categoryBreakdown,
+        avishkar: avishkarExtras,
         trendMeta: {
           totalComplaints: { current: totalThisMonth, previous: totalPrevMonth },
           pending: { current: pendingThisMonth, previous: pendingPrevMonth },

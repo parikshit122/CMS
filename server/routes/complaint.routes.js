@@ -17,6 +17,7 @@ const {
   addComplaintCommentController,
   rateComplaintController,
 } = require("../controllers/complaint.controller");
+const { endorseComplaint } = require("../controllers/avishkar.controller");
 
 // ── Student routes ────────────────────────────────────────
 router.post(
@@ -47,6 +48,7 @@ router.get("/staff",       protect, authorizeRoles("admin"),         getStaffLis
 router.get("/:id/activities",  protect, authorizeRoles("user", "staff", "admin"), getComplaintActivitiesController);
 router.post("/:id/comments",   protect, authorizeRoles("user", "staff", "admin"), addComplaintCommentController);
 router.post("/:id/rate",       protect, authorizeRoles("user"),                   rateComplaintController);
+router.post("/:id/endorse",    protect, authorizeRoles("user"),                   endorseComplaint);
 router.patch("/:id/status",    protect, authorizeRoles("staff", "admin"),         updateComplaintStatus);
 router.get("/:id",             protect, authorizeRoles("user", "staff", "admin"), getComplaintById);
 

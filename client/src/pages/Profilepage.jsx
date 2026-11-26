@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
 import { useAlert } from "../components/common/Alert";
 import { useAuth } from "../context/AuthContext";
 import API from "../services/api";
@@ -107,7 +106,7 @@ const Profile = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [popupClosed, setPopupClosed] = useState(false);
+  const [academicCourses, setAcademicCourses] = useState([]);
 
   // ── Password change state ─────────────────────────────
   const [showPwdSection, setShowPwdSection] = useState(false);
@@ -157,7 +156,30 @@ const Profile = () => {
 
     loadUser();
     window.addEventListener("user-updated", loadUser);
+
+    let active = true;
+    API.get("/public/academic-structure")
+      .then((res) => {
+        if (!active || !res.data?.success) return;
+        const depts = res.data.data?.departments || [];
+        const list = [];
+        for (const dept of depts) {
+          for (const course of dept.courses || []) {
+            list.push({
+              id: course.id,
+              code: course.code,
+              name: course.name,
+              degreeLevel: course.degreeLevel,
+              departmentName: dept.name,
+            });
+          }
+        }
+        setAcademicCourses(list);
+      })
+      .catch(() => {});
+
     return () => {
+      active = false;
       window.removeEventListener("user-updated", loadUser);
       if (avatarBlobUrlRef.current) {
         URL.revokeObjectURL(avatarBlobUrlRef.current);
@@ -181,28 +203,7 @@ const Profile = () => {
     setIsDirty(hasFieldChanges || hasNewAvatar);
   }, [formData, originalData]);
 
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      if (e.key === "Escape") setPopupClosed(true);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
-
   if (!formData || !user) return null;
-
-  // ── Missing fields popup ──────────────────────────────
-  const missingFields = [];
-  if (!formData.phone) missingFields.push("Phone Number");
-  if (user.role === "user") {
-    if (!formData.course) missingFields.push("Course");
-    if (!formData.year) missingFields.push("Year");
-  }
-  if (user.role === "staff" && !user.category) {
-    missingFields.push("Specialization");
-  }
-
-  const showMissingPopup = missingFields.length > 0 && !popupClosed;
 
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -350,51 +351,6 @@ const Profile = () => {
   // ── Render ────────────────────────────────────────────
   return (
     <div className="student-profile-page">
-      {/* ── Missing fields popup (portaled to body to cover Dynamic Island & Dock cleanly) ── */}
-      {showMissingPopup &&
-        createPortal(
-          <div
-            className="profile-missing-overlay"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="profile-missing-title"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setPopupClosed(true);
-            }}
-          >
-            <div className="profile-missing-modal">
-              <h3 id="profile-missing-title">Complete Your Profile</h3>
-              <p>The following information is missing:</p>
-              <ul>
-                {missingFields.map((field, idx) => (
-                  <li key={idx}>{field}</li>
-                ))}
-              </ul>
-              <p>Please update your profile to continue.</p>
-              <div className="profile-missing-actions">
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={() => {
-                    setIsEditing(true);
-                    setPopupClosed(true);
-                  }}
-                >
-                  Edit Profile
-                </button>
-                <button
-                  type="button"
-                  className="btn-cancel"
-                  onClick={() => setPopupClosed(true)}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
-
       {/* ── Header ── */}
       <div className="profile-header">
         <div>
@@ -512,26 +468,53 @@ const Profile = () => {
           </div>
 
           <div className="form-field">
-            <label>Phone</label>
+            <label>Phone / WhatsApp (Optional)</label>
             <input
               disabled={!isEditing}
               value={formData.phone}
               maxLength={10}
+              placeholder="10-digit mobile number"
               onChange={(e) =>
                 handleChange("phone", e.target.value.replace(/\D/g, ""))
               }
             />
+            <small style={{ color: "#94a3b8", fontSize: "0.75rem", marginTop: "4px", display: "block" }}>
+              Auto-fills for Call &amp; WhatsApp pickup reminders in Lost &amp; Found (hidden publicly).
+            </small>
           </div>
 
           {user.role === "user" && (
             <>
               <div className="form-field">
                 <label>Course</label>
-                <input
-                  disabled={!isEditing}
-                  value={formData.course}
-                  onChange={(e) => handleChange("course", e.target.value)}
-                />
+                {academicCourses.length > 0 ? (
+                  <select
+                    disabled={!isEditing}
+                    value={formData.course}
+                    onChange={(e) => handleChange("course", e.target.value)}
+                  >
+                    <option value="">Select Course / Program</option>
+                    {formData.course &&
+                      !academicCourses.some(
+                        (c) =>
+                          c.name === formData.course ||
+                          `${c.code} — ${c.name}` === formData.course
+                      ) && (
+                        <option value={formData.course}>{formData.course}</option>
+                      )}
+                    {academicCourses.map((c) => (
+                      <option key={c.id} value={c.name}>
+                        {c.code} — {c.name} ({c.degreeLevel})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    disabled={!isEditing}
+                    value={formData.course}
+                    onChange={(e) => handleChange("course", e.target.value)}
+                  />
+                )}
               </div>
 
               <div className="form-field">

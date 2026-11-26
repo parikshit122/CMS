@@ -6,14 +6,19 @@ import {
   postFoundItem,
 } from "../../services/lostFoundService";
 import { useToast } from "../common/Alert";
+import { useAuth } from "../../context/AuthContext";
+import { normalizeContactPhone } from "../../utils/contactLinks";
+import API from "../../services/api";
 
 const initialForm = {
   title: "",
   category: "electronics",
   foundLocation: "",
+  mapNodeId: "",
   foundAt: "",
   custodyType: "finder",
   custodyLocation: "",
+  contactPhone: "",
   description: "",
   blurImagePublicly: true,
   verificationQuestion: "",
@@ -23,7 +28,9 @@ const initialForm = {
 
 export default function PostFoundItemModal({ open, onClose, onCreated }) {
   const toast = useToast();
+  const { user } = useAuth();
   const [form, setForm] = useState(initialForm);
+  const [mapNodes, setMapNodes] = useState([]);
   const [imageFile, setImageFile] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -33,10 +40,36 @@ export default function PostFoundItemModal({ open, onClose, onCreated }) {
     const nowLocal = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
       .toISOString()
       .slice(0, 16);
-    setForm({ ...initialForm, foundAt: nowLocal });
+    setForm({
+      ...initialForm,
+      foundAt: nowLocal,
+      contactPhone: user?.phone || "",
+    });
     setImageFile(null);
     setError("");
-  }, [open]);
+
+    let active = true;
+    API.get("/public/campus-navigation")
+      .then((res) => {
+        if (!active || !res.data?.success) return;
+        const floorsById = new Map(
+          (res.data.data?.floors || []).map((f) => [Number(f.id), f.name])
+        );
+        const list = (res.data.data?.nodes || [])
+          .filter((n) => n.nodeType !== "corridor")
+          .map((n) => ({
+            id: n.id,
+            label: n.label,
+            floorName: floorsById.get(Number(n.floorId)) || "Campus",
+          }));
+        setMapNodes(list);
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, [open, user?.phone]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -92,15 +125,25 @@ export default function PostFoundItemModal({ open, onClose, onCreated }) {
       return;
     }
 
+    const parsedPhone = normalizeContactPhone(form.contactPhone);
+    if (!parsedPhone.valid) {
+      setError(parsedPhone.reason || "Enter a valid 10-digit mobile or WhatsApp number.");
+      return;
+    }
+
     try {
       setSubmitting(true);
       const fd = new FormData();
       fd.append("title", form.title.trim());
       fd.append("category", form.category);
       fd.append("foundLocation", form.foundLocation.trim());
+      if (form.mapNodeId) fd.append("mapNodeId", String(form.mapNodeId));
       if (form.foundAt) fd.append("foundAt", new Date(form.foundAt).toISOString());
       fd.append("custodyType", form.custodyType);
       fd.append("custodyLocation", form.custodyLocation.trim());
+      if (parsedPhone.normalized) {
+        fd.append("contactPhone", parsedPhone.normalized);
+      }
       fd.append("description", form.description.trim());
       fd.append("blurImagePublicly", String(form.blurImagePublicly));
       fd.append("verificationQuestion", form.verificationQuestion.trim());
@@ -218,6 +261,32 @@ export default function PostFoundItemModal({ open, onClose, onCreated }) {
               </label>
             </div>
 
+            {mapNodes.length > 0 && (
+              <label className="lf-field">
+                <span>Pin on Campus Map (Optional — Enables Turn-by-Turn Pickup Routing)</span>
+                <select
+                  value={form.mapNodeId}
+                  onChange={(e) => {
+                    const nextId = e.target.value;
+                    updateField("mapNodeId", nextId);
+                    if (nextId && !form.foundLocation.trim()) {
+                      const picked = mapNodes.find((n) => String(n.id) === String(nextId));
+                      if (picked) {
+                        updateField("foundLocation", `${picked.label} (${picked.floorName})`);
+                      }
+                    }
+                  }}
+                >
+                  <option value="">No map pin selected</option>
+                  {mapNodes.map((n) => (
+                    <option key={n.id} value={n.id}>
+                      {n.label} — {n.floorName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
             <div className="lf-grid-2">
               <label className="lf-field">
                 <span>Item Custody *</span>
@@ -244,6 +313,20 @@ export default function PostFoundItemModal({ open, onClose, onCreated }) {
                 />
               </label>
             </div>
+
+            <label className="lf-field">
+              <span>Phone / WhatsApp for Pickup Coordination (Optional)</span>
+              <input
+                type="tel"
+                value={form.contactPhone}
+                onChange={(e) => updateField("contactPhone", e.target.value)}
+                placeholder="e.g., 9876543210 or +91 98765 43210"
+                maxLength={20}
+              />
+              <small className="lf-field-hint">
+                Enables a one-tap &ldquo;Contact on WhatsApp&rdquo; &amp; Call button on the item details view for signed-in campus members.
+              </small>
+            </label>
 
             <label className="lf-field">
               <span>General Public Description *</span>

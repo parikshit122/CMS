@@ -18,12 +18,13 @@ const authLimiter = rateLimit({
 });
 
 const registerLimiter = rateLimit({
-  windowMs:        60 * 60 * 1000,
-  max:             5,
-  message:         { success: false, message: "Too many accounts created. Please try again in an hour." },
-  standardHeaders: true,
-  legacyHeaders:   false,
-  skip:            skipAll,
+  windowMs:           60 * 60 * 1000,
+  max:                5,
+  message:            { success: false, message: "Too many accounts created. Please try again in an hour." },
+  standardHeaders:    true,
+  legacyHeaders:      false,
+  skipFailedRequests: true,
+  skip:               skipAll,
 });
 
 const otpLimiter = rateLimit({

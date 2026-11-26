@@ -1,0 +1,10 @@
+{
+  "name": "ComplaintSync",
+  "description": "Universal Smart Campus Governance, Outdoor & Multi-Floor Wayfinding, and Grievance Platform featuring server-side Gemini AI triage, QR spot reporting, multilingual voice intake, Divyangjan accessible routing, Lost & Found map pins, automated SLA escalation, and NAAC PDF audit reports.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

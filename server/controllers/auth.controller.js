@@ -147,9 +147,38 @@ const register = async (req, res) => {
       lastOTPSentAt: new Date(),
     });
 
-    sendWelcomeEmail(user, otp, otpExpiryMins, settings.emailSenderName).catch(
-      (err) => console.error("[Register] Email failed:", err.message)
+    const emailResult = await sendWelcomeEmail(
+      user,
+      otp,
+      otpExpiryMins,
+      settings.emailSenderName
     );
+
+    if (!emailResult?.success) {
+      console.warn(
+        "[Register] Verification email unavailable (%s) — completing registration without OTP lock.",
+        emailResult?.error || "provider unavailable"
+      );
+      const verifiedUser = await updateUserById(createdUser.id, {
+        isEmailVerified: true,
+        emailVerificationOTP: null,
+        emailVerificationOTPExpiry: null,
+        emailVerificationAttempts: 0,
+        lastOTPSentAt: null,
+      });
+
+      const accessToken = generateAccessToken(verifiedUser._id);
+      const refreshToken = generateRefreshToken(verifiedUser._id);
+
+      return res.status(201).json({
+        success: true,
+        message: "Account created successfully!",
+        requiresVerification: false,
+        accessToken,
+        refreshToken,
+        user: buildUserResponse(verifiedUser),
+      });
+    }
 
     return res.status(201).json({
       success: true,
@@ -193,10 +222,12 @@ const login = async (req, res) => {
       });
     }
 
-    if (user.provider && user.provider !== "local") {
+    if (!user.password) {
+      const providerLabel =
+        user.provider && user.provider !== "local" ? user.provider : "social";
       return res.status(400).json({
         success: false,
-        message: `This account uses ${user.provider} login. Please use that instead.`,
+        message: `This account uses ${providerLabel} login and has no password set yet. Sign in with ${providerLabel} or use "Forgot password?" to set one.`,
       });
     }
 
@@ -243,6 +274,7 @@ const login = async (req, res) => {
       const settings = await getSettingsSingleton();
       const emailReady = isEmailServiceReady(settings, process.env);
       const cooldown = canResendOTP(user.lastOTPSentAt, 60);
+      let emailUnavailable = !emailReady;
       let otpMessage = "";
 
       if (emailReady && cooldown.canResend) {
@@ -257,20 +289,40 @@ const login = async (req, res) => {
           lastOTPSentAt: new Date(),
         });
 
-        sendEmailVerificationOTP(user, otp, otpExpiryMins, settings.emailSenderName).catch(
-          (err) => console.error("[Login] OTP email failed:", err.message)
+        const emailResult = await sendEmailVerificationOTP(
+          user,
+          otp,
+          otpExpiryMins,
+          settings.emailSenderName
         );
-        otpMessage = " A new verification code has been sent to your email.";
-      } else if (!emailReady) {
-        otpMessage = " Email delivery is currently unavailable; please contact an administrator.";
+
+        if (emailResult?.success) {
+          otpMessage = " A new verification code has been sent to your email.";
+        } else {
+          console.warn(
+            "[Login] Verification email unavailable (%s) — unlocking verified-password login.",
+            emailResult?.error || "provider unavailable"
+          );
+          emailUnavailable = true;
+        }
       }
 
-      return res.status(403).json({
-        success: false,
-        message: `Please verify your email before logging in.${otpMessage}`,
-        requiresVerification: true,
-        email: user.email,
-      });
+      if (emailUnavailable) {
+        await updateUserById(user.id, {
+          isEmailVerified: true,
+          emailVerificationOTP: null,
+          emailVerificationOTPExpiry: null,
+          emailVerificationAttempts: 0,
+          lastOTPSentAt: null,
+        });
+      } else {
+        return res.status(403).json({
+          success: false,
+          message: `Please verify your email before logging in.${otpMessage}`,
+          requiresVerification: true,
+          email: user.email,
+        });
+      }
     }
 
     const freshUser = await resetLoginAttempts(user.id, req.ip);
@@ -494,17 +546,17 @@ const forgotPassword = async (req, res) => {
       });
     }
 
-    if (user.provider && user.provider !== "local") {
-      return res.status(400).json({
-        success: false,
-        message: `This account uses ${user.provider} login. Password reset is not available.`,
-      });
-    }
-
     if (user.suspendedUntil && new Date(user.suspendedUntil) > new Date()) {
       return res.status(403).json({
         success: false,
         message: "Your account is suspended. Please contact admin.",
+      });
+    }
+
+    if (user.isActive === false) {
+      return res.status(403).json({
+        success: false,
+        message: "Account deactivated. Please contact admin.",
       });
     }
 
@@ -521,7 +573,24 @@ const forgotPassword = async (req, res) => {
     });
     passwordResetOTPAttempts.delete(user.id);
 
-    await sendPasswordResetOTPEmail(user, otp, otpExpiryMinutes, settings.emailSenderName);
+    const emailResult = await sendPasswordResetOTPEmail(
+      user,
+      otp,
+      otpExpiryMinutes,
+      settings.emailSenderName
+    );
+
+    if (!emailResult?.success) {
+      await updateUserById(user.id, {
+        passwordResetOTP: null,
+        passwordResetOTPExpiry: null,
+      });
+      return res.status(503).json({
+        success: false,
+        message:
+          "Email delivery service is currently unavailable. Please contact an administrator.",
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -681,6 +750,7 @@ const resetPassword = async (req, res) => {
 
     await updateUserById(user.id, {
       password: newPassword,
+      isEmailVerified: true,
       passwordResetToken: null,
       passwordResetTokenExpiry: null,
       loginAttempts: 0,
@@ -838,9 +908,20 @@ const resendVerificationOTP = async (req, res) => {
       lastOTPSentAt: new Date(),
     });
 
-    sendEmailVerificationOTP(user, otp, otpExpiryMinutes, settings.emailSenderName).catch(
-      (err) => console.error("[ResendOTP] Email failed:", err.message)
+    const emailResult = await sendEmailVerificationOTP(
+      user,
+      otp,
+      otpExpiryMinutes,
+      settings.emailSenderName
     );
+
+    if (!emailResult?.success) {
+      return res.status(503).json({
+        success: false,
+        message:
+          "Email delivery is currently unavailable. Please go back and log in directly with your password.",
+      });
+    }
 
     return res.json({
       success: true,

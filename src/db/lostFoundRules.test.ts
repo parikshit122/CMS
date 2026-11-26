@@ -7,6 +7,8 @@ import {
   generateHandoverCode,
   hashHandoverCode,
   verifyHandoverCode,
+  normalizeContactPhone,
+  buildLostFoundContactLinks,
   MAX_CLAIM_ATTEMPTS_PER_ITEM,
   FRAUD_STRIKE_BLOCK_THRESHOLD,
 } from "./lostFoundRules.ts";
@@ -113,3 +115,42 @@ test("generates and verifies cryptographic handover pickup codes", () => {
   assert.equal(verifyHandoverCode("LF-WRONG1", hashed), false);
   assert.equal(verifyHandoverCode("", hashed), false);
 });
+
+test("normalizes optional contact phone numbers and rejects invalid/unsafe values", () => {
+  assert.deepEqual(normalizeContactPhone(""), { valid: true, normalized: "", digits: "" });
+  assert.deepEqual(normalizeContactPhone("98765 43210"), {
+    valid: true,
+    normalized: "9876543210",
+    digits: "9876543210",
+  });
+  assert.deepEqual(normalizeContactPhone("+91-98765-43210"), {
+    valid: true,
+    normalized: "+919876543210",
+    digits: "919876543210",
+  });
+  assert.equal(normalizeContactPhone("12345").valid, false);
+  assert.equal(normalizeContactPhone("javascript:alert(1)").valid, false);
+});
+
+test("builds safe tel: and WhatsApp reminder links for local and international numbers", () => {
+  const localLinks = buildLostFoundContactLinks(
+    "9876543210",
+    "Hi Aarav, please collect your Calculator (LF-2026-0001)."
+  );
+  assert.ok(localLinks);
+  assert.equal(localLinks.displayPhone, "+91 98765 43210");
+  assert.equal(localLinks.telHref, "tel:+919876543210");
+  assert.equal(
+    localLinks.whatsappHref,
+    "https://wa.me/919876543210?text=Hi%20Aarav%2C%20please%20collect%20your%20Calculator%20(LF-2026-0001)."
+  );
+
+  const intlLinks = buildLostFoundContactLinks("+1 415 555 0199", "Pickup ready");
+  assert.ok(intlLinks);
+  assert.equal(intlLinks.telHref, "tel:+14155550199");
+  assert.equal(intlLinks.whatsappHref, "https://wa.me/14155550199?text=Pickup%20ready");
+
+  assert.equal(buildLostFoundContactLinks("", "Reminder"), null);
+  assert.equal(buildLostFoundContactLinks("invalid-phone", "Reminder"), null);
+});
+

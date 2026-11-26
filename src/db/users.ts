@@ -47,6 +47,7 @@ export const serializeUser = (
     lastLoginAt: user.lastLoginAt ?? undefined,
     lastLoginIP: user.lastLoginIP ?? undefined,
     isEmailVerified: user.isEmailVerified,
+    isDemo: Boolean(user.isDemo),
     lastOTPSentAt: user.lastOTPSentAt ?? undefined,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,

@@ -14,6 +14,7 @@ const {
   CUSTODY_TYPES,
   MIN_IDENTIFYING_DETAILS_LENGTH,
   normalizeAnswerText,
+  normalizeContactPhone,
 } = require("../../src/db/lostFoundRules.ts");
 const { uploadToCloudinary } = require("../services/cloudinary.service");
 const {
@@ -121,10 +122,12 @@ const createItem = async (req, res, next) => {
       foundAt,
       custodyType = "finder",
       custodyLocation = "",
+      contactPhone = "",
       blurImagePublicly = true,
       verificationQuestion = "",
       verificationAnswerSecret = "",
       privateNotes = "",
+      mapNodeId = null,
     } = req.body;
 
     const cleanTitle = String(title).trim();
@@ -198,6 +201,14 @@ const createItem = async (req, res, next) => {
       }
     }
 
+    const parsedContactPhone = normalizeContactPhone(contactPhone);
+    if (!parsedContactPhone.valid) {
+      return res.status(400).json({
+        success: false,
+        message: parsedContactPhone.reason || "Invalid contact phone number.",
+      });
+    }
+
     const uploaded = await tryUploadImage(req.file, "complaint-sync/lost-found");
     const shouldBlur =
       blurImagePublicly === false || blurImagePublicly === "false" ? false : true;
@@ -210,12 +221,14 @@ const createItem = async (req, res, next) => {
       foundAt: parsedFoundAt,
       custodyType: cleanCustody,
       custodyLocation: String(custodyLocation || "").trim().slice(0, 180),
+      contactPhone: parsedContactPhone.normalized,
       imageUrl: uploaded.url,
       imagePublicId: uploaded.publicId,
       blurImagePublicly: shouldBlur,
       verificationQuestion: cleanQ,
       verificationAnswerSecret: cleanA,
       privateNotes: String(privateNotes || "").trim().slice(0, 800),
+      mapNodeId: mapNodeId || null,
       finderId: viewer.id,
     });
 
@@ -248,6 +261,7 @@ const submitClaim = async (req, res, next) => {
       verificationAnswer = "",
       identifyingDetails = "",
       lostLocation = "",
+      claimantPhone = "",
       honestyPledgeAccepted,
     } = req.body;
 
@@ -279,6 +293,14 @@ const submitClaim = async (req, res, next) => {
       });
     }
 
+    const parsedClaimantPhone = normalizeContactPhone(claimantPhone);
+    if (!parsedClaimantPhone.valid) {
+      return res.status(400).json({
+        success: false,
+        message: parsedClaimantPhone.reason || "Invalid phone/WhatsApp number.",
+      });
+    }
+
     const uploadedProof = await tryUploadImage(
       req.file,
       "complaint-sync/lost-found-proofs"
@@ -290,6 +312,7 @@ const submitClaim = async (req, res, next) => {
       verificationAnswer: cleanAnswer,
       identifyingDetails: cleanDetails,
       lostLocation: String(lostLocation || "").trim().slice(0, 160),
+      claimantPhone: parsedClaimantPhone.normalized,
       proofImageUrl: uploadedProof.url,
       proofImagePublicId: uploadedProof.publicId,
       honestyPledgeAccepted: true,

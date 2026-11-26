@@ -5,6 +5,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  real,
   serial,
   text,
   timestamp,
@@ -67,6 +68,8 @@ export const users = pgTable(
     emailVerificationAttempts: integer("email_verification_attempts").notNull().default(0),
     lastOTPSentAt: timestamp("last_otp_sent_at"),
 
+    isDemo: boolean("is_demo").notNull().default(false),
+
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -111,6 +114,27 @@ export const complaints = pgTable(
       .$type<ComplaintAttachment[]>()
       .notNull()
       .default([]),
+
+    // Avishkar Engineering & Technology Extensions
+    sourceChannel: text("source_channel").notNull().default("web"), // "web" | "qr" | "voice"
+    qrSpotCode: text("qr_spot_code"),
+    originalLanguage: text("original_language").notNull().default("en"), // "en" | "mr" | "hi"
+    originalTranscript: text("original_transcript"),
+    aiCategory: text("ai_category"),
+    aiPriority: text("ai_priority"),
+    aiSummary: text("ai_summary"),
+    aiConfidence: integer("ai_confidence"),
+    duplicateOfId: integer("duplicate_of_id"),
+    endorsementCount: integer("endorsement_count").notNull().default(1),
+    endorsedByUserIds: jsonb("endorsed_by_user_ids")
+      .$type<number[]>()
+      .notNull()
+      .default([]),
+    escalationLevel: integer("escalation_level").notNull().default(0), // 0 = Standard, 1 = Dept Head Warning, 2 = Principal Breach
+    escalatedAt: timestamp("escalated_at"),
+    escalationReason: text("escalation_reason"),
+    isDemoRecord: boolean("is_demo_record").notNull().default(false),
+
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -120,6 +144,36 @@ export const complaints = pgTable(
     index("complaints_status_created_idx").on(table.status, table.createdAt),
     index("complaints_category_idx").on(table.category),
     index("complaints_sla_due_at_idx").on(table.slaDueAt),
+    index("complaints_escalation_idx").on(table.escalationLevel, table.status),
+    index("complaints_qr_spot_idx").on(table.qrSpotCode),
+  ]
+);
+
+// ── Campus QR Code Reporting Spots ────────────────────────
+export const campusQrSpots = pgTable(
+  "campus_qr_spots",
+  {
+    id: serial("id").primaryKey(),
+    spotCode: text("spot_code").notNull().unique(), // e.g. CAMPUS-CSLAB-02
+    label: text("label").notNull(),
+    building: text("building").notNull(),
+    floor: text("floor").notNull().default("Ground Floor"),
+    locationId: text("location_id").notNull(), // maps to LOCATION_GROUPS item id
+    defaultCategory: text("default_category").notNull().default("infrastructure"),
+    scanCount: integer("scan_count").notNull().default(0),
+    complaintCount: integer("complaint_count").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    mapNodeId: integer("map_node_id"),
+    isDemoRecord: boolean("is_demo_record").notNull().default(false),
+    createdById: integer("created_by_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("campus_qr_spots_active_idx").on(table.isActive),
+    index("campus_qr_spots_location_idx").on(table.locationId),
   ]
 );
 
@@ -189,7 +243,7 @@ export const settings = pgTable("settings", {
   siteName: text("site_name").notNull().default("ComplaintSync"),
   siteTagline: text("site_tagline")
     .notNull()
-    .default("MITM — Jayawanti Babu Foundation"),
+    .default("Smart Campus University"),
   maintenanceMode: boolean("maintenance_mode").notNull().default(false),
   maintenanceMessage: text("maintenance_message")
     .notNull()
@@ -215,7 +269,7 @@ export const settings = pgTable("settings", {
   emailEnabled: boolean("email_enabled").notNull().default(true),
   emailSenderName: text("email_sender_name")
     .notNull()
-    .default("ComplaintSync — MITM"),
+    .default("ComplaintSync — Smart Campus"),
   notifyOnSubmit: boolean("notify_on_submit").notNull().default(true),
   notifyOnAssign: boolean("notify_on_assign").notNull().default(true),
   notifyOnResolve: boolean("notify_on_resolve").notNull().default(true),
@@ -228,6 +282,11 @@ export const settings = pgTable("settings", {
   autoCloseResolvedDays: integer("auto_close_resolved_days")
     .notNull()
     .default(30),
+
+  // Multi-University & Avishkar Blind-Evaluation Anonymity Settings
+  blindEvaluationMode: boolean("blind_evaluation_mode").notNull().default(true),
+  institutionCode: text("institution_code").notNull().default("CAMPUS"),
+  allowedDomain: text("allowed_domain").notNull().default("campus.edu"),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -246,6 +305,7 @@ export const lostFoundItems = pgTable(
     foundAt: timestamp("found_at").defaultNow().notNull(),
     custodyType: text("custody_type").notNull().default("finder"), // finder | security_desk | admin_office
     custodyLocation: text("custody_location").default(""),
+    contactPhone: text("contact_phone").default(""),
     imageUrl: text("image_url").default(""),
     imagePublicId: text("image_public_id").default(""),
     blurImagePublicly: boolean("blur_image_publicly").notNull().default(true),
@@ -263,6 +323,8 @@ export const lostFoundItems = pgTable(
     returnedAt: timestamp("returned_at"),
     handoverCodeHash: text("handover_code_hash"),
     handoverCodePlain: text("handover_code_plain"),
+    mapNodeId: integer("map_node_id"),
+    isDemoRecord: boolean("is_demo_record").notNull().default(false),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
@@ -288,6 +350,7 @@ export const lostFoundClaims = pgTable(
     verificationAnswer: text("verification_answer").notNull(),
     identifyingDetails: text("identifying_details").notNull(),
     lostLocation: text("lost_location").default(""),
+    claimantPhone: text("claimant_phone").default(""),
     proofImageUrl: text("proof_image_url").default(""),
     proofImagePublicId: text("proof_image_public_id").default(""),
     honestyPledgeAccepted: boolean("honesty_pledge_accepted").notNull().default(false),
@@ -395,3 +458,144 @@ export const lostFoundClaimsRelations = relations(lostFoundClaims, ({ one }) => 
     references: [users.id],
   }),
 }));
+
+export const campusQrSpotsRelations = relations(campusQrSpots, ({ one }) => ({
+  createdBy: one(users, {
+    fields: [campusQrSpots.createdById],
+    references: [users.id],
+  }),
+}));
+
+// ── Multi-Campus Spatial Navigation Tables ────────────────
+
+export const campusBuildings = pgTable(
+  "campus_buildings",
+  {
+    id: serial("id").primaryKey(),
+    code: text("code").notNull().unique(), // e.g. BLK-B, LIB-MAIN
+    name: text("name").notNull(),
+    shortLabel: text("short_label").notNull(),
+    category: text("category").notNull().default("academic"), // academic | hostel | library | amenities | admin | sports
+    siteX: real("site_x").notNull().default(50),
+    siteY: real("site_y").notNull().default(50),
+    description: text("description").default(""),
+    isDemoRecord: boolean("is_demo_record").notNull().default(false),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [index("campus_buildings_category_idx").on(table.category)]
+);
+
+export const campusFloors = pgTable(
+  "campus_floors",
+  {
+    id: serial("id").primaryKey(),
+    buildingId: integer("building_id").references(() => campusBuildings.id, {
+      onDelete: "cascade",
+    }),
+    floorNumber: integer("floor_number").notNull().default(0), // -1 = outdoor site map, 0 = Ground, 1 = 1st, etc.
+    floorLabel: text("floor_label").notNull(),
+    mapImageUrl: text("map_image_url").notNull().default(""),
+    widthMeters: real("width_meters").notNull().default(60),
+    heightMeters: real("height_meters").notNull().default(40),
+    isOutdoor: boolean("is_outdoor").notNull().default(false),
+    isDemoRecord: boolean("is_demo_record").notNull().default(false),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [index("campus_floors_building_idx").on(table.buildingId, table.floorNumber)]
+);
+
+export const campusMapNodes = pgTable(
+  "campus_map_nodes",
+  {
+    id: serial("id").primaryKey(),
+    floorId: integer("floor_id")
+      .notNull()
+      .references(() => campusFloors.id, { onDelete: "cascade" }),
+    buildingId: integer("building_id").references(() => campusBuildings.id, {
+      onDelete: "set null",
+    }),
+    code: text("code").notNull(),
+    label: text("label").notNull(),
+    nodeType: text("node_type").notNull().default("room"), // room | lab | corridor | stairs | elevator | ramp | entrance | washroom | desk | qr_anchor
+    x: real("x").notNull().default(50), // 0..100 normalized
+    y: real("y").notNull().default(50), // 0..100 normalized
+    isAccessible: boolean("is_accessible").notNull().default(true),
+    qrSpotCode: text("qr_spot_code"),
+    departmentId: integer("department_id"),
+    description: text("description").default(""),
+    isDemoRecord: boolean("is_demo_record").notNull().default(false),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("campus_map_nodes_floor_idx").on(table.floorId),
+    index("campus_map_nodes_building_idx").on(table.buildingId),
+  ]
+);
+
+export const campusMapEdges = pgTable(
+  "campus_map_edges",
+  {
+    id: serial("id").primaryKey(),
+    fromNodeId: integer("from_node_id")
+      .notNull()
+      .references(() => campusMapNodes.id, { onDelete: "cascade" }),
+    toNodeId: integer("to_node_id")
+      .notNull()
+      .references(() => campusMapNodes.id, { onDelete: "cascade" }),
+    distanceMeters: real("distance_meters").notNull().default(10),
+    edgeType: text("edge_type").notNull().default("corridor"), // corridor | walkway | stairs | elevator | ramp
+    isAccessible: boolean("is_accessible").notNull().default(true),
+    isDemoRecord: boolean("is_demo_record").notNull().default(false),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("campus_map_edges_from_idx").on(table.fromNodeId),
+    index("campus_map_edges_to_idx").on(table.toNodeId),
+  ]
+);
+
+// ── University / College Academic & Course Hierarchy ──────
+
+export const academicDepartments = pgTable(
+  "academic_departments",
+  {
+    id: serial("id").primaryKey(),
+    code: text("code").notNull().unique(), // e.g. CSE, MECH, ECE, MBA
+    name: text("name").notNull(),
+    buildingId: integer("building_id").references(() => campusBuildings.id, {
+      onDelete: "set null",
+    }),
+    hodName: text("hod_name").default(""),
+    hodEmail: text("hod_email").default(""),
+    isActive: boolean("is_active").notNull().default(true),
+    isDemoRecord: boolean("is_demo_record").notNull().default(false),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [index("academic_departments_active_idx").on(table.isActive)]
+);
+
+export const academicCourses = pgTable(
+  "academic_courses",
+  {
+    id: serial("id").primaryKey(),
+    departmentId: integer("department_id")
+      .notNull()
+      .references(() => academicDepartments.id, { onDelete: "cascade" }),
+    code: text("code").notNull().unique(), // e.g. BTECH-CSE, MBA-GEN
+    name: text("name").notNull(),
+    degreeLevel: text("degree_level").notNull().default("UG"), // UG | PG | Diploma | PhD
+    durationYears: integer("duration_years").notNull().default(4),
+    divisions: jsonb("divisions").$type<string[]>().notNull().default(["A", "B"]),
+    intakeCapacity: integer("intake_capacity").notNull().default(60),
+    isActive: boolean("is_active").notNull().default(true),
+    isDemoRecord: boolean("is_demo_record").notNull().default(false),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [index("academic_courses_department_idx").on(table.departmentId)]
+);
+

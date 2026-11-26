@@ -11,6 +11,10 @@ const {
   findUserById,
   findUserByUid,
 } = require("../src/db/users.ts");
+const {
+  startSlaEscalationScheduler,
+  stopSlaEscalationScheduler,
+} = require("./services/escalation.service");
 
 const PORT = 3000;
 const HOST = "0.0.0.0";
@@ -99,11 +103,13 @@ app.set("io", io);
 // ── Start server (pg.Pool connects lazily on demand) ──────
 httpServer.listen(PORT, HOST, () => {
   console.log(`🚀 Server running on http://${HOST}:${PORT}`);
+  startSlaEscalationScheduler(app);
 });
 
 // ── Graceful shutdown ─────────────────────────────────────
 const shutdown = (signal) => {
   if (isDev) console.log(`\n${signal} received. Shutting down...`);
+  stopSlaEscalationScheduler();
   httpServer.close(() => {
     pool.end().finally(() => process.exit(0));
   });

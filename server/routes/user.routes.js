@@ -183,11 +183,13 @@ router.patch("/change-password", protect, async (req, res) => {
       });
     }
 
-    // ── Social login users cannot change password ─────────
-    if (user.provider && user.provider !== "local") {
+    // ── Social-only accounts without a password must set one via Forgot Password first ──
+    if (!user.password) {
+      const providerLabel =
+        user.provider && user.provider !== "local" ? user.provider : "social";
       return res.status(400).json({
         success: false,
-        message: `Your account uses ${user.provider} login. Password change is not available.`,
+        message: `Your account uses ${providerLabel} login and does not have a password yet. Use "Forgot password?" on the login page to set one first.`,
       });
     }
 

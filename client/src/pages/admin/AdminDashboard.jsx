@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   BarChart,
   Bar,
@@ -10,27 +11,12 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { motion } from "framer-motion";
 import API from "../../services/api";
-import SpatialCard from "../../components/layout/SpatialCard";
-import StatCard from "../../components/common/StatCard";
 import { useToast } from "../../components/common/Alert";
+import { downloadNaacAuditPdf } from "../../utils/naacPdfExport";
+import useInstitutionBranding from "../../hooks/useInstitutionBranding";
 import "../../styles/AdminDashboard.css";
 import "../../styles/ComplaintExtras.css";
-
-// Helpers
-const calcShareOfTotal = (current, total) => {
-  if (!total || total === 0) return { value: 0, type: "none" };
-  if (current === 0) return { value: 0, type: "none" };
-  const share = (current / total) * 100;
-  return { value: Math.round(share * 10) / 10, type: "share" };
-};
-
-const formatShare = (trend) => {
-  if (trend.type === "none") return "0";
-  const absValue = Math.abs(trend.value);
-  return `${Number.isInteger(absValue) ? absValue : absValue.toFixed(1)}`;
-};
 
 const formatLastUpdated = (value) => {
   if (!value) return "Live";
@@ -40,38 +26,9 @@ const formatLastUpdated = (value) => {
   });
 };
 
-const CategoryCard = ({ icon, label, value }) => (
-  <SpatialCard className="category-bento-card">
-    <div style={{ padding: "20px", display: "flex", alignItems: "center", gap: "16px" }}>
-      <div
-        style={{
-          width: "44px",
-          height: "44px",
-          borderRadius: "12px",
-          background: "rgba(249, 115, 22, 0.1)",
-          border: "1px solid rgba(249, 115, 22, 0.25)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: "22px",
-          color: "var(--neon-orange)",
-          boxShadow: "0 0 12px rgba(249, 115, 22, 0.2)",
-        }}
-      >
-        <i className={icon} />
-      </div>
-      <div>
-        <h3 style={{ fontSize: "22px", fontWeight: 700, color: "var(--text-primary)" }}>{value}</h3>
-        <p style={{ color: "var(--text-secondary)", fontSize: "13px" }}>
-          {label?.charAt(0).toUpperCase() + label?.slice(1)}
-        </p>
-      </div>
-    </div>
-  </SpatialCard>
-);
-
 const AdminDashboard = () => {
   const toast = useToast();
+  const branding = useInstitutionBranding();
   const [stats, setStats] = useState({
     totalComplaints: 0,
     pending: 0,
@@ -87,21 +44,33 @@ const AdminDashboard = () => {
     weeklyData: [],
     monthlyData: [],
     categoryBreakdown: [],
-    trendMeta: {},
+    avishkar: {
+      escalatedL1Count: 0,
+      escalatedL2Count: 0,
+      qrComplaintCount: 0,
+      voiceComplaintCount: 0,
+      aiTriagedCount: 0,
+      duplicateEndorsementsSaved: 0,
+      regionalLanguageCount: 0,
+    },
     lastUpdated: null,
   });
 
   const [loading, setLoading] = useState(true);
+  const [escalating, setEscalating] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [naacRange, setNaacRange] = useState("all");
+  const [seedingDemo, setSeedingDemo] = useState(false);
+  const [lastEscalationLog, setLastEscalationLog] = useState([]);
 
   const fetchAdminStats = async () => {
     try {
       setLoading(true);
       const res = await API.get("/complaints/stats/admin");
-      if (res.data.success) {
+      if (res.data?.success) {
         setStats(res.data.data);
       }
     } catch (err) {
-      console.error("Failed to fetch admin stats:", err);
       toast.error(err?.response?.data?.message || "Failed to load dashboard statistics.");
     } finally {
       setLoading(false);
@@ -112,279 +81,372 @@ const AdminDashboard = () => {
     fetchAdminStats();
   }, []);
 
-  const metricCards = useMemo(() => {
-    const meta = stats.trendMeta || {};
-    const total = stats.totalComplaints || 0;
-    const totalPending = stats.pending || 0;
-    const totalResolved = stats.resolved || 0;
+  const handleRunEscalation = async () => {
+    if (escalating) return;
+    setEscalating(true);
+    try {
+      const res = await API.post("/avishkar/escalate/run");
+      if (res.data?.success) {
+        toast.success(res.data.message);
+        setLastEscalationLog(res.data.data?.escalated || []);
+        await fetchAdminStats();
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "SLA escalation sweep failed.");
+    } finally {
+      setEscalating(false);
+    }
+  };
 
-    const totalCurrent = meta.totalComplaints?.current || 0;
-    const pendingCurrent = meta.pending?.current || 0;
-    const resolvedCurrent = meta.resolved?.current || 0;
+  const handleExportNaacPdf = async () => {
+    if (exportingPdf) return;
+    setExportingPdf(true);
+    try {
+      const res = await API.get(`/avishkar/naac-report?range=${encodeURIComponent(naacRange)}`);
+      if (res.data?.success) {
+        downloadNaacAuditPdf(res.data.data);
+        toast.success("NAAC Criterion V & VII Audit PDF downloaded.");
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to generate NAAC audit report.");
+    } finally {
+      setExportingPdf(false);
+    }
+  };
 
-    const totalShare = calcShareOfTotal(totalCurrent, total);
-    const pendingShare = calcShareOfTotal(pendingCurrent, totalPending);
-    const resolvedShare = calcShareOfTotal(resolvedCurrent, totalResolved);
+  const handleSeedDemoData = async () => {
+    if (seedingDemo) return;
+    setSeedingDemo(true);
+    try {
+      const res = await API.post("/avishkar/demo/reset");
+      if (res.data?.success) {
+        toast.success(res.data.message);
+        setLastEscalationLog([]);
+        await fetchAdminStats();
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to reset demo campus dataset.");
+    } finally {
+      setSeedingDemo(false);
+    }
+  };
 
-    return [
-      {
-        title: "Total System Complaints",
-        value: total,
-        trend: "up",
-        trendValue: formatShare(totalShare),
-        context: "added this month",
-        isFeatured: true,
-      },
-      {
-        title: "Pending Review",
-        value: totalPending,
-        trend: "down",
-        trendValue: formatShare(pendingShare),
-        context: "new pending",
-        isFeatured: false,
-      },
-      {
-        title: "Resolved Tickets",
-        value: totalResolved,
-        trend: "up",
-        trendValue: formatShare(resolvedShare),
-        context: "resolved successfully",
-        isFeatured: true,
-      },
-      {
-        title: "Avg Resolution Velocity",
-        value: stats.avgResponseTime || 0,
-        trend: "up",
-        trendValue: "98.4",
-        context: "hours turnaround",
-        isFeatured: false,
-      },
-    ];
-  }, [stats]);
-
-  const weeklyData = stats.weeklyData?.length
-    ? stats.weeklyData
-    : [
-        { day: "Mon", submitted: 12, resolved: 8 },
-        { day: "Tue", submitted: 19, resolved: 14 },
-        { day: "Wed", submitted: 15, resolved: 12 },
-        { day: "Thu", submitted: 22, resolved: 18 },
-        { day: "Fri", submitted: 28, resolved: 24 },
-        { day: "Sat", submitted: 10, resolved: 9 },
-        { day: "Sun", submitted: 8, resolved: 7 },
-      ];
-
-  const monthlyData = stats.monthlyData?.length
-    ? stats.monthlyData
-    : [
-        { month: "Jan", value: 45 },
-        { month: "Feb", value: 62 },
-        { month: "Mar", value: 78 },
-        { month: "Apr", value: 95 },
-        { month: "May", value: 110 },
-      ];
-
-  const categoryBreakdown = stats.categoryBreakdown?.length
-    ? stats.categoryBreakdown
-    : [
-        { icon: "bx bx-laptop", label: "IT & Tech", value: 42 },
-        { icon: "bx bx-wrench", label: "Maintenance", value: 28 },
-        { icon: "bx bx-building-house", label: "Hostel", value: 19 },
-        { icon: "bx bx-book-open", label: "Academic", value: 14 },
-      ];
+  const av = stats.avishkar || {};
+  const hasWeeklyData = useMemo(
+    () => (stats.weeklyData || []).some((d) => (d.submitted || 0) > 0 || (d.resolved || 0) > 0),
+    [stats.weeklyData]
+  );
+  const hasMonthlyData = useMemo(
+    () => (stats.monthlyData || []).some((d) => (d.value || 0) > 0),
+    [stats.monthlyData]
+  );
 
   return (
-    <motion.div
-      className="admin-dashboard-container"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
-    >
-      {/* Title & Live Status Bar */}
-      <div className="bento-header-row">
+    <div style={{ maxWidth: "1240px", margin: "0 auto", padding: "8px 0 128px" }}>
+      {/* ── Executive Header & Primary Action Bar ── */}
+      <div className="av-section__head" style={{ marginBottom: "20px" }}>
         <div>
-          <h1 className="bento-title">System Intelligence</h1>
-          <p className="bento-subtitle">Real-time analytical control and complaint telemetry</p>
-        </div>
-        <div className="live-status-pill">
-          <i className="bx bx-broadcast" style={{ color: "var(--success-color)" }} aria-hidden="true" />
-          <span>Updated • {formatLastUpdated(stats.lastUpdated)}</span>
-        </div>
-      </div>
-
-      {/* KPI 3D Tilt Grid */}
-      <div className="kpi-bento-grid">
-        {metricCards.map((item, idx) => (
-          <StatCard
-            key={idx}
-            title={item.title}
-            value={loading ? 0 : item.value}
-            trend={item.trend}
-            trendValue={item.trendValue}
-            context={item.context}
-            isFeatured={item.isFeatured}
-          />
-        ))}
-      </div>
-
-      {/* Student Satisfaction & SLA Compliance Telemetry */}
-      <div className="cs-telemetry-row">
-        <SpatialCard className="cs-telemetry-card">
-          <div className="cs-telemetry-card__top">
-            <span className="cs-telemetry-card__label">Student Satisfaction</span>
-            <span className="cs-rating-score">
-              <i className="bx bxs-star" aria-hidden="true" />{" "}
-              {stats.satisfaction?.totalRated
-                ? `${stats.satisfaction.averageRating} / 5`
-                : "No ratings yet"}
-            </span>
-          </div>
-          <div className="cs-telemetry-card__metric">
-            <span className="cs-telemetry-card__value">
-              {loading ? "—" : stats.satisfaction?.totalRated ? `${stats.satisfaction.averageRating}` : "—"}
-            </span>
-            <span className="cs-telemetry-card__sub">
-              based on {stats.satisfaction?.totalRated || 0} rated resolution
-              {(stats.satisfaction?.totalRated || 0) === 1 ? "" : "s"}
-            </span>
-          </div>
-          <div className="cs-rating-bars" aria-label="Rating distribution">
-            {[5, 4, 3, 2, 1].map((star) => {
-              const count = stats.satisfaction?.distribution?.[star] || 0;
-              const total = stats.satisfaction?.totalRated || 0;
-              const pct = total > 0 ? Math.round((count / total) * 100) : 0;
-              return (
-                <div key={star} className="cs-rating-bar-row">
-                  <span>{star}★</span>
-                  <div className="cs-rating-bar-track">
-                    <div
-                      className="cs-rating-bar-fill"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <span style={{ textAlign: "right" }}>{count}</span>
-                </div>
-              );
-            })}
-          </div>
-        </SpatialCard>
-
-        <SpatialCard className="cs-telemetry-card">
-          <div className="cs-telemetry-card__top">
-            <span className="cs-telemetry-card__label">Active SLA Watch</span>
-            <span
-              className={`cs-sla ${
-                (stats.overdueCount || 0) > 0 ? "cs-sla--overdue" : "cs-sla--met"
-              }`}
-            >
-              <i
-                className={`bx ${
-                  (stats.overdueCount || 0) > 0 ? "bx-error-circle" : "bx-check-shield"
-                }`}
-                aria-hidden="true"
-              />
-              {(stats.overdueCount || 0) > 0
-                ? `${stats.overdueCount} Overdue`
-                : "All Within SLA"}
-            </span>
-          </div>
-          <div className="cs-telemetry-card__metric">
-            <span className="cs-telemetry-card__value">
-              {loading ? 0 : stats.overdueCount || 0}
-            </span>
-            <span className="cs-telemetry-card__sub">
-              active ticket{(stats.overdueCount || 0) === 1 ? "" : "s"} past priority deadline
-            </span>
-          </div>
-          <p style={{ margin: "4px 0 0", fontSize: "0.78rem", color: "var(--text-secondary)" }}>
-            SLA Windows: Urgent 4h • High 24h • Medium 72h • Low 7d
+          <p className="av-kicker">
+            {branding.blindEvaluationMode
+              ? "Smart Campus Governance"
+              : `${branding.institutionCode} Campus Governance`}{" "}
+            · Updated {formatLastUpdated(stats.lastUpdated)}
           </p>
-        </SpatialCard>
+          <h1 className="av-section__title" style={{ marginBottom: "4px" }}>
+            Admin Command &amp; NAAC Compliance
+          </h1>
+          <p className="av-section__sub">
+            Live grievance telemetry, automated multi-tier SLA escalation, QR spot management, and accredited PDF reporting.
+          </p>
+        </div>
+
+        <div className="av-admin-actions">
+          <select
+            aria-label="NAAC audit report timeframe"
+            value={naacRange}
+            onChange={(e) => setNaacRange(e.target.value)}
+            style={{
+              minHeight: "44px",
+              padding: "0 12px",
+              borderRadius: "10px",
+              border: "1px solid var(--av-border-strong)",
+              background: "var(--av-surface)",
+              color: "var(--av-ink)",
+              fontSize: "0.85rem",
+            }}
+          >
+            <option value="all">NAAC: All Time</option>
+            <option value="semester">NAAC: Current Semester</option>
+            <option value="30d">NAAC: Last 30 Days</option>
+          </select>
+
+          <button
+            type="button"
+            className="av-btn av-btn--primary"
+            onClick={handleExportNaacPdf}
+            disabled={exportingPdf}
+          >
+            <i className="bx bxs-file-pdf" aria-hidden="true" />
+            {exportingPdf ? "Generating PDF..." : "Export NAAC PDF"}
+          </button>
+
+          <button
+            type="button"
+            className="av-btn av-btn--secondary"
+            onClick={handleRunEscalation}
+            disabled={escalating}
+          >
+            <i className="bx bx-shield-quarter" aria-hidden="true" />
+            {escalating ? "Scanning SLA..." : "Run SLA Escalation Check"}
+          </button>
+
+          <Link to="/admin/campus-studio" className="av-btn av-btn--ghost">
+            <i className="bx bx-map-alt" aria-hidden="true" />
+            Campus Studio
+          </Link>
+
+          <Link to="/admin/qr-spots" className="av-btn av-btn--ghost">
+            <i className="bx bx-qr" aria-hidden="true" />
+            QR Spot Studio
+          </Link>
+
+          <button
+            type="button"
+            className="av-btn av-btn--ghost"
+            onClick={handleSeedDemoData}
+            disabled={seedingDemo}
+            title="Safely populate or reset smart campus demo complaints, maps, courses, and Lost & Found pins"
+          >
+            <i className="bx bx-refresh" aria-hidden="true" />
+            {seedingDemo ? "Seeding..." : "Reset Demo Data"}
+          </button>
+        </div>
       </div>
 
-      {/* 3D Charts Row (Using CSS box-shadow container glow to eliminate live SVG filter lag) */}
-      <div className="charts-bento-grid">
-        <SpatialCard className="chart-bento-card">
-          <div className="chart-glow-container">
-            <h3 style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "4px" }}>
-              Weekly Workload Overview
-            </h3>
-            <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginBottom: "20px" }}>
-              Submitted vs Resolved Activity
-            </p>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={weeklyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                <XAxis dataKey="day" stroke="var(--text-muted)" tickLine={false} />
-                <YAxis stroke="var(--text-muted)" tickLine={false} allowDecimals={false} />
+      {/* ── Live Escalation Sweep Feedback Banner ── */}
+      {lastEscalationLog.length > 0 && (
+        <div
+          className="av-surface"
+          style={{
+            marginBottom: "20px",
+            borderColor: "rgba(239, 68, 68, 0.4)",
+            background: "var(--av-danger-soft)",
+          }}
+        >
+          <div style={{ fontWeight: 700, marginBottom: "8px", color: "var(--av-danger)" }}>
+            Escalation Engine Actioned {lastEscalationLog.length} Ticket(s)
+          </div>
+          {lastEscalationLog.map((e) => (
+            <div key={e.complaintId} style={{ fontSize: "0.86rem", marginBottom: "4px" }}>
+              <span className="av-mono" style={{ fontWeight: 700 }}>
+                {e.complaintId}
+              </span>{" "}
+              (L{e.previousLevel} → L{e.newLevel}): {e.title} — {e.reason}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Core Operational KPI Strip ── */}
+      <div className="av-kpi-grid" style={{ marginBottom: "16px" }}>
+        <div className="av-kpi-card">
+          <div className="av-kpi-card__label">Total Complaints</div>
+          <div className="av-kpi-card__value">{loading ? "—" : stats.totalComplaints}</div>
+          <div className="av-kpi-card__meta">
+            {stats.pending} pending · {stats.inProgress} in progress
+          </div>
+        </div>
+
+        <div className="av-kpi-card">
+          <div className="av-kpi-card__label">Resolved Tickets</div>
+          <div className="av-kpi-card__value" style={{ color: "var(--av-success)" }}>
+            {loading ? "—" : stats.resolved}
+          </div>
+          <div className="av-kpi-card__meta">
+            Avg turnaround: {stats.avgResponseTime || 0} hrs
+          </div>
+        </div>
+
+        <div className="av-kpi-card">
+          <div className="av-kpi-card__label">Active SLA Escalations</div>
+          <div
+            className="av-kpi-card__value"
+            style={{
+              color:
+                (av.escalatedL2Count || 0) > 0
+                  ? "var(--av-danger)"
+                  : (av.escalatedL1Count || 0) > 0
+                    ? "var(--av-warning)"
+                    : "var(--av-success)",
+            }}
+          >
+            {loading ? "—" : (av.escalatedL1Count || 0) + (av.escalatedL2Count || 0)}
+          </div>
+          <div className="av-kpi-card__meta av-mono">
+            L1 Warning: {av.escalatedL1Count || 0} · L2 Breach: {av.escalatedL2Count || 0}
+          </div>
+        </div>
+
+        <div className="av-kpi-card">
+          <div className="av-kpi-card__label">Student Satisfaction</div>
+          <div className="av-kpi-card__value">
+            {loading
+              ? "—"
+              : stats.satisfaction?.totalRated
+                ? `${stats.satisfaction.averageRating} ★`
+                : "—"}
+          </div>
+          <div className="av-kpi-card__meta">
+            {stats.satisfaction?.totalRated || 0} verified post-resolution ratings
+          </div>
+        </div>
+      </div>
+
+      {/* ── Avishkar Innovation Telemetry Strip ── */}
+      <div className="av-ops-strip">
+        <div className="av-kpi-card">
+          <div className="av-kpi-card__label">AI Triaged Reports</div>
+          <div className="av-kpi-card__value" style={{ fontSize: "1.45rem" }}>
+            {loading ? "—" : av.aiTriagedCount || 0}
+          </div>
+          <div className="av-kpi-card__meta">Gemini structured classification</div>
+        </div>
+
+        <div className="av-kpi-card">
+          <div className="av-kpi-card__label">Duplicates Prevented</div>
+          <div className="av-kpi-card__value" style={{ fontSize: "1.45rem", color: "var(--av-primary)" }}>
+            {loading ? "—" : av.duplicateEndorsementsSaved || 0}
+          </div>
+          <div className="av-kpi-card__meta">Endorsed via +1 Affected</div>
+        </div>
+
+        <div className="av-kpi-card">
+          <div className="av-kpi-card__label">QR Spot Filings</div>
+          <div className="av-kpi-card__value" style={{ fontSize: "1.45rem" }}>
+            {loading ? "—" : av.qrComplaintCount || 0}
+          </div>
+          <div className="av-kpi-card__meta">Direct on-site poster scans</div>
+        </div>
+
+        <div className="av-kpi-card">
+          <div className="av-kpi-card__label">Voice / Regional Intake</div>
+          <div className="av-kpi-card__value" style={{ fontSize: "1.45rem" }}>
+            {loading ? "—" : `${av.voiceComplaintCount || 0} / ${av.regionalLanguageCount || 0}`}
+          </div>
+          <div className="av-kpi-card__meta">Voice filings · Marathi/Hindi</div>
+        </div>
+      </div>
+
+      {/* ── Real Database Charts Row (Zero Synthetic Fallbacks) ── */}
+      <div className="charts-bento-grid" style={{ marginBottom: "24px" }}>
+        <div className="av-surface">
+          <h2 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "4px" }}>
+            7-Day Intake vs Resolution
+          </h2>
+          <p style={{ color: "var(--av-ink-muted)", fontSize: "0.82rem", marginBottom: "18px" }}>
+            Live daily tickets submitted vs closed
+          </p>
+          {hasWeeklyData ? (
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={stats.weeklyData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.14)" />
+                <XAxis dataKey="day" stroke="var(--av-ink-muted)" tickLine={false} />
+                <YAxis stroke="var(--av-ink-muted)" tickLine={false} allowDecimals={false} />
                 <Tooltip
                   contentStyle={{
-                    background: "rgba(20, 20, 28, 0.9)",
-                    border: "1px solid rgba(249, 115, 22, 0.3)",
-                    borderRadius: "12px",
-                    color: "#fff",
-                    boxShadow: "0 0 15px rgba(249, 115, 22, 0.2)",
+                    background: "var(--av-surface)",
+                    border: "1px solid var(--av-border-strong)",
+                    borderRadius: "10px",
+                    color: "var(--av-ink)",
                   }}
                 />
-                <Bar dataKey="submitted" fill="var(--neon-rose)" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="resolved" fill="var(--neon-orange)" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="submitted" name="Submitted" fill="#ea580c" radius={[5, 5, 0, 0]} />
+                <Bar dataKey="resolved" name="Resolved" fill="#10b981" radius={[5, 5, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
-          </div>
-        </SpatialCard>
+          ) : (
+            <div style={{ padding: "48px 16px", textAlign: "center", color: "var(--av-ink-muted)", fontSize: "0.875rem" }}>
+              No complaint activity in the past 7 days. Click <strong>Reset Demo Data</strong> to populate realistic smart campus records.
+            </div>
+          )}
+        </div>
 
-        <SpatialCard className="chart-bento-card">
-          <div className="chart-glow-container">
-            <h3 style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "4px" }}>
-              Volume Trajectory
-            </h3>
-            <p style={{ color: "var(--text-secondary)", fontSize: "13px", marginBottom: "20px" }}>
-              Monthly Growth Projection
-            </p>
-            <ResponsiveContainer width="100%" height={260}>
-              <LineChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                <XAxis dataKey="month" stroke="var(--text-muted)" tickLine={false} />
-                <YAxis stroke="var(--text-muted)" tickLine={false} allowDecimals={false} />
+        <div className="av-surface">
+          <h2 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "4px" }}>
+            6-Month Volume Trajectory
+          </h2>
+          <p style={{ color: "var(--av-ink-muted)", fontSize: "0.82rem", marginBottom: "18px" }}>
+            Monthly institutional complaint intake
+          </p>
+          {hasMonthlyData ? (
+            <ResponsiveContainer width="100%" height={240}>
+              <LineChart data={stats.monthlyData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.14)" />
+                <XAxis dataKey="month" stroke="var(--av-ink-muted)" tickLine={false} />
+                <YAxis stroke="var(--av-ink-muted)" tickLine={false} allowDecimals={false} />
                 <Tooltip
                   contentStyle={{
-                    background: "rgba(20, 20, 28, 0.9)",
-                    border: "1px solid rgba(251, 191, 36, 0.3)",
-                    borderRadius: "12px",
-                    color: "#fff",
+                    background: "var(--av-surface)",
+                    border: "1px solid var(--av-border-strong)",
+                    borderRadius: "10px",
+                    color: "var(--av-ink)",
                   }}
                 />
                 <Line
                   type="monotone"
                   dataKey="value"
-                  stroke="var(--neon-gold)"
-                  strokeWidth={3}
-                  dot={{ r: 4, fill: "var(--neon-gold)" }}
-                  activeDot={{ r: 7 }}
+                  name="Complaints"
+                  stroke="#ea580c"
+                  strokeWidth={2.5}
+                  dot={{ r: 4, fill: "#ea580c" }}
                 />
               </LineChart>
             </ResponsiveContainer>
-          </div>
-        </SpatialCard>
-      </div>
-
-      {/* Category Breakdown Section */}
-      <div className="category-bento-section">
-        <h3 style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-primary)", marginBottom: "16px" }}>
-          Category Distribution
-        </h3>
-        <div className="category-bento-grid">
-          {categoryBreakdown.map((item, idx) => (
-            <CategoryCard
-              key={idx}
-              icon={item.icon}
-              label={item.label}
-              value={loading ? 0 : item.value}
-            />
-          ))}
+          ) : (
+            <div style={{ padding: "48px 16px", textAlign: "center", color: "var(--av-ink-muted)", fontSize: "0.875rem" }}>
+              No monthly trend data recorded yet.
+            </div>
+          )}
         </div>
       </div>
-    </motion.div>
+
+      {/* ── Category Breakdown ── */}
+      <div className="av-surface">
+        <div className="av-section__head" style={{ marginBottom: "16px" }}>
+          <div>
+            <h2 style={{ fontSize: "1rem", fontWeight: 700 }}>Category Distribution</h2>
+            <p style={{ fontSize: "0.82rem", color: "var(--av-ink-muted)" }}>
+              SLA Windows: Urgent 4h · High 24h · Medium 72h · Low 7d
+            </p>
+          </div>
+          <Link to="/transparency" className="av-btn av-btn--ghost av-btn--compact">
+            Open Public SLA Board →
+          </Link>
+        </div>
+
+        {(stats.categoryBreakdown || []).length === 0 ? (
+          <p style={{ color: "var(--av-ink-muted)", fontSize: "0.875rem" }}>
+            No categorized complaints yet.
+          </p>
+        ) : (
+          <div className="av-kpi-grid">
+            {stats.categoryBreakdown.map((item) => (
+              <div key={item.label} className="av-kpi-card" style={{ background: "var(--av-surface-subtle)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+                  <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>
+                    {item.label?.charAt(0).toUpperCase() + item.label?.slice(1)}
+                  </span>
+                  <i className={item.icon} style={{ color: "var(--av-primary)", fontSize: "1.1rem" }} aria-hidden="true" />
+                </div>
+                <div className="av-kpi-card__value" style={{ fontSize: "1.5rem" }}>
+                  {loading ? "—" : item.value}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 

@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   LOST_FOUND_CATEGORIES,
   getCategoryMeta,
   getCustodyLabel,
+  getItemStatusMeta,
   fetchLostFoundItems,
   archiveLostFoundItem,
 } from "../services/lostFoundService";
@@ -12,14 +14,9 @@ import { useToast } from "../components/common/Alert";
 import PostFoundItemModal from "../components/lostfound/PostFoundItemModal";
 import ClaimAppealModal from "../components/lostfound/ClaimAppealModal";
 import ReviewClaimsModal from "../components/lostfound/ReviewClaimsModal";
+import ItemDetailsModal from "../components/lostfound/ItemDetailsModal";
+import { buildContactLinks, buildOwnerToFinderMessage } from "../utils/contactLinks";
 import "../styles/LostFound.css";
-
-const ITEM_STATUS_META = {
-  open: { label: "Open for Claims", icon: "bx-radio-circle-marked", cls: "lf-status--open" },
-  claim_pending: { label: "Under Verification", icon: "bx-time-five", cls: "lf-status--pending" },
-  approved: { label: "Owner Verified — Pickup Pending", icon: "bx-key", cls: "lf-status--approved" },
-  returned: { label: "Returned & Verified", icon: "bx-check-circle", cls: "lf-status--returned" },
-};
 
 const formatRelativeTime = (dateVal) => {
   if (!dateVal) return "";
@@ -36,6 +33,7 @@ const formatRelativeTime = (dateVal) => {
 
 export default function LostFound() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const toast = useToast();
   const role = String(user?.role || "user").toLowerCase();
 
@@ -56,10 +54,12 @@ export default function LostFound() {
   const [search, setSearch] = useState("");
 
   const [postOpen, setPostOpen] = useState(false);
+  const [detailItemId, setDetailItemId] = useState(null);
   const [claimItemId, setClaimItemId] = useState(null);
   const [reviewItemId, setReviewItemId] = useState(null);
   const [archivingId, setArchivingId] = useState(null);
 
+  const detailItem = items.find((it) => it.id === detailItemId) || null;
   const claimItem = items.find((it) => it.id === claimItemId) || null;
   const reviewItem = items.find((it) => it.id === reviewItemId) || null;
 
@@ -133,7 +133,11 @@ export default function LostFound() {
           </p>
         </div>
 
-        <div className="lf-header__actions">
+        <div className="lf-header__actions" style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <Link to="/campus-map" className="lf-btn lf-btn--ghost">
+            <i className="bx bx-map-alt" aria-hidden="true" />
+            <span>View on Campus Map</span>
+          </Link>
           <button
             type="button"
             className="lf-btn lf-btn--primary"
@@ -244,10 +248,10 @@ export default function LostFound() {
             aria-label="Filter by status"
           >
             <option value="all">All Statuses</option>
-            <option value="open">Open for Claims</option>
-            <option value="claim_pending">Under Verification</option>
+            <option value="open">Available</option>
+            <option value="claim_pending">In Progress</option>
             <option value="approved">Pickup Pending</option>
-            <option value="returned">Returned</option>
+            <option value="returned">Claimed</option>
           </select>
         </div>
       </div>
@@ -283,7 +287,7 @@ export default function LostFound() {
         <div className="lf-grid">
           {items.map((item) => {
             const catMeta = getCategoryMeta(item.category);
-            const statusMeta = ITEM_STATUS_META[item.status] || ITEM_STATUS_META.open;
+            const statusMeta = getItemStatusMeta(item.status);
             const shouldMaskPhoto =
               Boolean(item.imageUrl) &&
               item.blurImagePublicly &&
@@ -300,8 +304,17 @@ export default function LostFound() {
 
             return (
               <article key={item.id} className="lf-card">
-                {/* Media Preview (Optional photo or clean icon surface) */}
+                {/* Media Preview + Visual Status Badge */}
                 <div className="lf-card__media">
+                  <span
+                    className={`lf-status-badge lf-status-badge--floating ${statusMeta.badgeCls}`}
+                    aria-label={`Status: ${statusMeta.label}`}
+                  >
+                    <span className="lf-status-badge__dot" aria-hidden="true" />
+                    <i className={`bx ${statusMeta.icon}`} aria-hidden="true" />
+                    <span>{statusMeta.label}</span>
+                  </span>
+
                   {item.imageUrl ? (
                     <>
                       <img
@@ -335,7 +348,15 @@ export default function LostFound() {
                     <span>{formatRelativeTime(item.createdAt)}</span>
                   </div>
 
-                  <h2 className="lf-card__title">{item.title}</h2>
+                  <h2 className="lf-card__title">
+                    <button
+                      type="button"
+                      className="lf-card__title-btn"
+                      onClick={() => setDetailItemId(item.id)}
+                    >
+                      {item.title}
+                    </button>
+                  </h2>
                   <p className="lf-card__desc">{item.description}</p>
 
                   <dl className="lf-card__facts">
@@ -356,19 +377,54 @@ export default function LostFound() {
                     </div>
                   </dl>
 
-                  {/* Approved Claimant's Live Handover Pickup Code */}
-                  {item.myApprovedClaim && item.handoverCode && item.status === "approved" && (
-                    <div className="lf-inline-ticket">
-                      <span>Your Pickup Code</span>
-                      <code>{item.handoverCode}</code>
-                    </div>
-                  )}
+                  {/* Approved Claimant's Live Handover Pickup Code & Quick Call/WhatsApp */}
+                  {item.myApprovedClaim && item.handoverCode && item.status === "approved" && (() => {
+                    const finderLinks = buildContactLinks(
+                      item.contactPhone || item.finder?.phone,
+                      buildOwnerToFinderMessage({
+                        finderName: item.finder?.name,
+                        itemTitle: item.title,
+                        itemCode: item.itemCode,
+                        handoverCode: item.handoverCode,
+                      })
+                    );
+                    return (
+                      <div className="lf-inline-ticket-wrap">
+                        <div className="lf-inline-ticket">
+                          <span>Your Pickup Code</span>
+                          <code>{item.handoverCode}</code>
+                        </div>
+                        {finderLinks && (
+                          <div className="lf-inline-contact">
+                            <a
+                              href={finderLinks.telHref}
+                              className="lf-btn lf-btn--call lf-btn--xs"
+                              aria-label={`Call ${item.finder?.name || "finder"} about ${item.title}`}
+                            >
+                              <i className="bx bx-phone-call" aria-hidden="true" />
+                              <span>Call</span>
+                            </a>
+                            <a
+                              href={finderLinks.whatsappHref}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="lf-btn lf-btn--whatsapp lf-btn--xs"
+                              aria-label={`WhatsApp ${item.finder?.name || "finder"} about ${item.title}`}
+                            >
+                              <i className="bx bxl-whatsapp" aria-hidden="true" />
+                              <span>WhatsApp</span>
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
-                  {/* Status + Verification Challenge Hint */}
+                  {/* Status Detail + Pending Appeal Counter */}
                   <div className="lf-card__status-row">
                     <span className={`lf-status-text ${statusMeta.cls}`}>
                       <i className={`bx ${statusMeta.icon}`} aria-hidden="true" />
-                      <span>{statusMeta.label}</span>
+                      <span>{statusMeta.detail}</span>
                     </span>
                     {item.pendingClaimsCount > 0 && item.canReview && (
                       <span className="lf-pending-count">
@@ -458,6 +514,28 @@ export default function LostFound() {
                       )}
                     </>
                   )}
+
+                  <button
+                    type="button"
+                    className="lf-btn lf-btn--ghost lf-btn--sm"
+                    onClick={() => setDetailItemId(item.id)}
+                    aria-label={`View details for ${item.title}`}
+                  >
+                    <i className="bx bx-show" aria-hidden="true" />
+                    <span>Details</span>
+                  </button>
+
+                  {item.mapNodeId && (
+                    <button
+                      type="button"
+                      className="lf-btn lf-btn--ghost lf-btn--sm"
+                      onClick={() => navigate(`/campus-map?node=${item.mapNodeId}`)}
+                      aria-label={`Locate ${item.title} on Campus Map`}
+                    >
+                      <i className="bx bx-map-pin" aria-hidden="true" />
+                      <span>Map</span>
+                    </button>
+                  )}
                 </div>
               </article>
             );
@@ -466,6 +544,22 @@ export default function LostFound() {
       )}
 
       {/* Modals */}
+      <ItemDetailsModal
+        open={Boolean(detailItem)}
+        item={detailItem}
+        canClaim={
+          Boolean(detailItem) &&
+          !detailItem.isFinder &&
+          (detailItem.status === "open" || detailItem.status === "claim_pending") &&
+          !detailItem.myPendingClaim &&
+          detailItem.myRemainingAttempts > 0 &&
+          !isRestrictedByStrikes
+        }
+        onClose={() => setDetailItemId(null)}
+        onOpenClaim={(id) => setClaimItemId(id)}
+        onOpenReview={(id) => setReviewItemId(id)}
+      />
+
       <PostFoundItemModal
         open={postOpen}
         onClose={() => setPostOpen(false)}

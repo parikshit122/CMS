@@ -5,6 +5,8 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import SpatialDock from "../components/layout/SpatialDock";
 import NotificationBell from "../components/notification/NotificationBell";
+import PWAInstallButton from "../components/pwa/PWAInstallButton";
+import JudgeDemoSwitcher from "../components/demo/JudgeDemoSwitcher";
 import useAuthSync from "../hooks/useAuthSync";
 import {
   OPEN_COMMAND_PALETTE_EVENT,
@@ -96,6 +98,8 @@ export default function DashboardLayout({
           </button>
 
           <div className="island-actions">
+            {user?.isDemo && <JudgeDemoSwitcher variant="compact" />}
+            <PWAInstallButton compact />
             <button
               type="button"
               className="island-shortcuts-btn"

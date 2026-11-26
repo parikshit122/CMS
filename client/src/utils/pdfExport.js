@@ -2,9 +2,8 @@ import jsPDF from "jspdf";
 import logoSrc from "../assets/images/logo1.png";
 
 // ==================== CONFIG ====================
-const INSTITUTION =
-  "Jayawanti Babu Foundation's Metropolitan Institute of Technology & Management (MITM)";
-const INSTITUTION_SHORT = "MITM";
+const INSTITUTION = "ComplaintSync — Smart Campus Governance Platform";
+const INSTITUTION_SHORT = "CAMPUS";
 
 const COLORS = {
   primary: "#4f46e5",
@@ -414,7 +413,7 @@ const renderComplaint = (doc, complaint, logoBase64) => {
   doc.setFontSize(7);
   setText(doc, COLORS.textMuted);
   const declaration =
-    "This document is an officially generated record from the MITM Complaint Management System. " +
+    "This document is an officially generated record from the ComplaintSync Campus Governance System. " +
     "The information contained herein is confidential and intended solely for authorized personnel of " +
     `${INSTITUTION}. Unauthorized distribution or reproduction is strictly prohibited.`;
   const declLines = doc.splitTextToSize(declaration, PAGE.contentW - 4);
@@ -431,7 +430,7 @@ const renderComplaint = (doc, complaint, logoBase64) => {
   const sigPositions = [
     { x: PAGE.margin, label: "Student Signature", sub: "Complainant" },
     { x: PAGE.margin + sigWidth + sigGap, label: "Staff Signature", sub: "Assigned Personnel" },
-    { x: PAGE.margin + (sigWidth + sigGap) * 2, label: "Administrator", sub: "MITM Authority" },
+    { x: PAGE.margin + (sigWidth + sigGap) * 2, label: "Administrator", sub: "Campus Authority" },
   ];
 
   sigPositions.forEach((sig) => {
@@ -461,7 +460,7 @@ export const exportSinglePDF = async (complaint) => {
   const ref = complaint.complaintId || complaint._id;
   drawFooter(doc, 1, 1, ref);
 
-  doc.save(`MITM_Complaint_${ref}.pdf`);
+  doc.save(`ComplaintSync_Complaint_${ref}.pdf`);
 };
 
 export const exportBulkPDF = async (complaints) => {
@@ -478,5 +477,5 @@ export const exportBulkPDF = async (complaints) => {
     drawFooter(doc, i + 1, total, ref);
   }
 
-  doc.save(`MITM_Complaints_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
+  doc.save(`ComplaintSync_Report_${new Date().toISOString().slice(0, 10)}.pdf`);
 };

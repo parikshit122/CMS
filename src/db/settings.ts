@@ -27,6 +27,9 @@ const serializeSettings = (row: SettingsRow) => ({
   notifyOnResolve: row.notifyOnResolve,
   categories: Array.isArray(row.categories) ? row.categories : DEFAULT_CATEGORIES,
   autoCloseResolvedDays: row.autoCloseResolvedDays,
+  blindEvaluationMode: row.blindEvaluationMode ?? true,
+  institutionCode: row.institutionCode || "CAMPUS",
+  allowedDomain: row.allowedDomain || "campus.edu",
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
 });

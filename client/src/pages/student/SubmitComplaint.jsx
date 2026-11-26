@@ -5,10 +5,11 @@ import React, {
   useRef,
   useEffect,
 } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import "../../styles/SubmitComplaint.css";
 import API from "../../services/api";
 import { useAlert } from "../../components/common/Alert";
+import AiVoiceTriageBar from "../../components/student/AiVoiceTriageBar";
 
 // ── Icons (keeping all existing ones) ────────────────────
 const Icon = {
@@ -340,9 +341,10 @@ const LOCATION_GROUPS = [
 ];
 
 const PRIORITIES = [
-  { key: "low", label: "Low", color: "green" },
-  { key: "medium", label: "Medium", color: "yellow" },
-  { key: "high", label: "High", color: "red" },
+  { key: "low", label: "Low (7d)", color: "green" },
+  { key: "medium", label: "Medium (72h)", color: "yellow" },
+  { key: "high", label: "High (24h)", color: "red" },
+  { key: "urgent", label: "Urgent (4h)", color: "red" },
 ];
 
 const STEPS = [
@@ -1064,12 +1066,27 @@ const SectionHeader = ({ icon, title, desc }) => (
 const SubmitComplaint = () => {
   const alert = useAlert();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const spotParam = searchParams.get("spot") || "";
 
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submittedId, setSubmittedId] = useState("");
   const [attachmentFiles, setAttachmentFiles] = useState([]);
+
+  // Avishkar Innovation Intake State (QR Spot, Voice/Multilingual, Gemini AI Triage)
+  const [qrSpotInfo, setQrSpotInfo] = useState(null);
+  const [language, setLanguage] = useState("en");
+  const [intakeMeta, setIntakeMeta] = useState({
+    sourceChannel: "web",
+    qrSpotCode: "",
+    originalTranscript: "",
+    aiCategory: "",
+    aiPriority: "",
+    aiSummary: "",
+    aiConfidence: "",
+  });
 
   const [form, setForm] = useState({
     category: "",
@@ -1082,6 +1099,76 @@ const SubmitComplaint = () => {
   const update = useCallback((field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   }, []);
+
+  // Resolve QR Spot deep-link (/submit?spot=CAMPUS-CSLAB-02)
+  useEffect(() => {
+    if (!spotParam) return;
+    let active = true;
+    (async () => {
+      try {
+        const res = await API.get(`/public/qr-spots/${encodeURIComponent(spotParam)}`);
+        if (active && res.data?.success && res.data.data) {
+          const spot = res.data.data;
+          setQrSpotInfo(spot);
+          setForm((prev) => ({
+            ...prev,
+            category: prev.category || spot.defaultCategory || "infrastructure",
+            location: prev.location || spot.locationId || "",
+          }));
+          setIntakeMeta((prev) => ({
+            ...prev,
+            sourceChannel: "qr",
+            qrSpotCode: spot.spotCode,
+          }));
+          setStep(2);
+          alert.success(`QR Spot detected: ${spot.label}`);
+        }
+      } catch {
+        // Invalid spot falls back gracefully to normal manual form
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [spotParam, alert]);
+
+  const handleVoiceTranscript = useCallback((transcript, langCode) => {
+    setForm((prev) => ({
+      ...prev,
+      description: prev.description
+        ? `${prev.description.trim()} ${transcript}`.slice(0, 500)
+        : transcript.slice(0, 500),
+      title: prev.title || transcript.slice(0, 80),
+    }));
+    setIntakeMeta((prev) => ({
+      ...prev,
+      sourceChannel: prev.qrSpotCode ? "qr" : "voice",
+      originalTranscript: prev.originalTranscript
+        ? `${prev.originalTranscript} ${transcript}`
+        : transcript,
+    }));
+    setLanguage(langCode);
+  }, []);
+
+  const handleApplyAiSuggestions = useCallback((aiData) => {
+    setForm((prev) => ({
+      ...prev,
+      category: aiData.category || prev.category,
+      priority: aiData.priority || prev.priority,
+      title: aiData.normalizedTitle || prev.title,
+      description: aiData.normalizedDescription || prev.description,
+    }));
+    setIntakeMeta((prev) => ({
+      ...prev,
+      originalTranscript:
+        prev.originalTranscript ||
+        (aiData.detectedLanguage && aiData.detectedLanguage !== "en" ? form.description : ""),
+      aiCategory: aiData.category || "",
+      aiPriority: aiData.priority || "",
+      aiSummary: aiData.aiSummary || "",
+      aiConfidence: aiData.confidence ? String(aiData.confidence) : "",
+    }));
+  }, [form.description]);
 
   const canStep1 = !!form.category;
   const canStep2 = !!(
@@ -1116,6 +1203,16 @@ const SubmitComplaint = () => {
       formData.append("category", form.category);
       formData.append("priority", form.priority);
       formData.append("location", form.location);
+      formData.append("sourceChannel", intakeMeta.sourceChannel || "web");
+      formData.append("originalLanguage", language || "en");
+      if (intakeMeta.qrSpotCode) formData.append("qrSpotCode", intakeMeta.qrSpotCode);
+      if (intakeMeta.originalTranscript) {
+        formData.append("originalTranscript", intakeMeta.originalTranscript);
+      }
+      if (intakeMeta.aiCategory) formData.append("aiCategory", intakeMeta.aiCategory);
+      if (intakeMeta.aiPriority) formData.append("aiPriority", intakeMeta.aiPriority);
+      if (intakeMeta.aiSummary) formData.append("aiSummary", intakeMeta.aiSummary);
+      if (intakeMeta.aiConfidence) formData.append("aiConfidence", intakeMeta.aiConfidence);
 
       attachmentFiles.forEach((file) => {
         formData.append("attachments", file);
@@ -1148,7 +1245,7 @@ const SubmitComplaint = () => {
     } finally {
       setSubmitting(false);
     }
-  }, [form, attachmentFiles, alert, submitting, navigate]);
+  }, [form, intakeMeta, language, attachmentFiles, alert, submitting, navigate]);
 
   const reset = useCallback(() => {
     if (redirectTimerRef.current) {
@@ -1218,6 +1315,26 @@ const SubmitComplaint = () => {
 
         <StepIndicator currentStep={step} />
 
+        {qrSpotInfo && (
+          <div className="av-qr-banner" role="status">
+            <div>
+              <div className="av-mono" style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--av-primary)" }}>
+                QR SPOT PRE-FILLED · {qrSpotInfo.spotCode}
+              </div>
+              <div style={{ fontWeight: 600, fontSize: "0.92rem", marginTop: "2px" }}>
+                {qrSpotInfo.label} ({qrSpotInfo.building}, {qrSpotInfo.floor})
+              </div>
+            </div>
+            <button
+              type="button"
+              className="av-btn av-btn--ghost av-btn--compact"
+              onClick={() => setQrSpotInfo(null)}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         <div className="sc-card">
           {/* ── Step 1: Category ── */}
           {step === 1 && (
@@ -1226,7 +1343,7 @@ const SubmitComplaint = () => {
                 <SectionHeader
                   icon={<Icon.Grid />}
                   title="Select a Category"
-                  desc="Choose the category that best describes your complaint"
+                  desc="Choose a category or jump ahead and let Gemini AI classify it for you"
                 />
                 <div className="sc-cat-grid">
                   {CATEGORIES.map((cat) => (
@@ -1242,6 +1359,16 @@ const SubmitComplaint = () => {
                 </div>
               </div>
               <div className="sc-nav sc-nav--end">
+                <button
+                  type="button"
+                  className="sc-btn sc-btn--ghost"
+                  onClick={() => {
+                    if (!form.category) update("category", "other");
+                    setStep(2);
+                  }}
+                >
+                  Skip &amp; Use Voice / AI Triage
+                </button>
                 <button
                   type="button"
                   className="sc-btn sc-btn--primary"
@@ -1264,8 +1391,17 @@ const SubmitComplaint = () => {
                 <SectionHeader
                   icon={<Icon.FileText />}
                   title="Complaint Information"
-                  desc="Describe the issue clearly so we can resolve it faster"
+                  desc="Dictate in English, मराठी, or हिन्दी — then click Analyze with AI for instant triage & duplicate check"
                 />
+
+                <AiVoiceTriageBar
+                  form={form}
+                  language={language}
+                  onLanguageChange={setLanguage}
+                  onVoiceTranscript={handleVoiceTranscript}
+                  onApplyAiSuggestions={handleApplyAiSuggestions}
+                />
+
                 <FormField
                   label="Complaint Title"
                   value={form.title}

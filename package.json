@@ -5,12 +5,13 @@
     "postinstall": "npm --prefix server install --omit=dev --no-audit --no-fund && npm --prefix client install --legacy-peer-deps --no-audit --no-fund",
     "build": "npm --prefix client run build",
     "start": "./node_modules/.bin/tsx server/server.js",
-    "dev": "if [ ! -f client/dist/index.html ]; then npm --prefix client run build; fi && ./node_modules/.bin/tsx server/server.js",
+    "dev": "if [ ! -s client/dist/index.html ] || [ ! -d client/dist/assets ]; then npm --prefix client run build; fi && ./node_modules/.bin/tsx server/server.js",
     "lint": "for f in server/*.js server/config/*.js server/constants/*.js server/controllers/*.js server/middlewares/*.js server/routes/*.js server/services/*.js server/utils/*.js; do node --check \"$f\" || exit 1; done",
     "server": "./node_modules/.bin/tsx server/server.js",
     "client": "cd client && npm run dev"
   },
   "dependencies": {
+    "@google/genai": "^3.6.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/pg": "^8.23.1",
     "bcryptjs": "^3.0.3",
@@ -19,6 +20,7 @@
     "drizzle-orm": "^0.45.4",
     "firebase": "^13.4.0",
     "firebase-admin": "^14.5.1",
+    "jsqr": "^1.4.0",
     "pg": "^8.23.1",
     "react-icons": "^5.6.0",
     "tsx": "^4.23.15"

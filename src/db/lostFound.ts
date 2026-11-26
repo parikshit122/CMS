@@ -59,7 +59,14 @@ const isReviewerForItem = (itemFinderId: number, viewer?: ViewerContext | null) 
 export function serializeLostFoundItem(
   row: typeof lostFoundItems.$inferSelect,
   options: {
-    finder?: { id: number; name: string; email?: string; role?: string; avatar?: string | null } | null;
+    finder?: {
+      id: number;
+      name: string;
+      email?: string;
+      phone?: string | null;
+      role?: string;
+      avatar?: string | null;
+    } | null;
     returnedTo?: { id: number; name: string } | null;
     viewer?: ViewerContext | null;
     pendingClaimsCount?: number;
@@ -72,6 +79,9 @@ export function serializeLostFoundItem(
 ) {
   const canReview = isReviewerForItem(row.finderId, options.viewer);
   const showHandoverCode = Boolean(options.myApprovedClaim && row.status === "approved");
+  const canViewFinderEmail = Boolean(canReview || options.myApprovedClaim);
+  const canViewContactPhone = Boolean(options.viewer);
+  const resolvedContactPhone = (row.contactPhone || options.finder?.phone || "").trim();
 
   const payload: Record<string, unknown> = {
     _id: String(row.id),
@@ -84,10 +94,17 @@ export function serializeLostFoundItem(
     foundAt: row.foundAt,
     custodyType: row.custodyType,
     custodyLocation: row.custodyLocation || "",
+    hasContactPhone: Boolean(resolvedContactPhone),
+    // Authenticated campus members can initiate a WhatsApp/phone chat from Item Details
+    ...(canViewContactPhone && resolvedContactPhone
+      ? { contactPhone: resolvedContactPhone }
+      : {}),
     imageUrl: row.imageUrl || "",
     blurImagePublicly: row.blurImagePublicly,
     verificationQuestion: row.verificationQuestion,
     status: row.status,
+    mapNodeId: row.mapNodeId ?? null,
+    isDemoRecord: Boolean(row.isDemoRecord),
     finderId: row.finderId,
     finder: options.finder
       ? {
@@ -96,8 +113,10 @@ export function serializeLostFoundItem(
           name: options.finder.name,
           role: options.finder.role || "user",
           avatar: options.finder.avatar || "",
-          // Only reveal finder email once claimant is approved OR to reviewers
-          ...(canReview || options.myApprovedClaim ? { email: options.finder.email } : {}),
+          ...(canViewFinderEmail ? { email: options.finder.email } : {}),
+          ...(canViewContactPhone && resolvedContactPhone
+            ? { phone: resolvedContactPhone }
+            : {}),
         }
       : { _id: String(row.finderId), id: row.finderId, name: "Campus Member" },
     approvedClaimId: row.approvedClaimId ?? null,
@@ -179,12 +198,14 @@ export async function createLostFoundItem(data: {
   foundAt?: Date;
   custodyType?: string;
   custodyLocation?: string;
+  contactPhone?: string;
   imageUrl?: string;
   imagePublicId?: string;
   blurImagePublicly?: boolean;
   verificationQuestion: string;
   verificationAnswerSecret: string;
   privateNotes?: string;
+  mapNodeId?: unknown;
   finderId: unknown;
 }) {
   const numFinder = toNumericId(data.finderId);
@@ -202,12 +223,14 @@ export async function createLostFoundItem(data: {
         foundAt: data.foundAt || new Date(),
         custodyType: data.custodyType || "finder",
         custodyLocation: (data.custodyLocation || "").trim(),
+        contactPhone: (data.contactPhone || "").trim(),
         imageUrl: data.imageUrl || "",
         imagePublicId: data.imagePublicId || "",
         blurImagePublicly: data.blurImagePublicly !== false,
         verificationQuestion: data.verificationQuestion.trim(),
         verificationAnswerSecret: data.verificationAnswerSecret.trim(),
         privateNotes: (data.privateNotes || "").trim(),
+        mapNodeId: toNumericId(data.mapNodeId),
         status: "open",
         finderId: numFinder,
       })
@@ -218,6 +241,7 @@ export async function createLostFoundItem(data: {
         id: users.id,
         name: users.name,
         email: users.email,
+        phone: users.phone,
         role: users.role,
         avatar: users.avatar,
       })
@@ -279,6 +303,7 @@ export async function listLostFoundItems(params: {
           id: finderAlias.id,
           name: finderAlias.name,
           email: finderAlias.email,
+          phone: finderAlias.phone,
           role: finderAlias.role,
           avatar: finderAlias.avatar,
         },
@@ -382,6 +407,7 @@ export async function getLostFoundItemById(id: unknown, viewer?: ViewerContext |
           id: finderAlias.id,
           name: finderAlias.name,
           email: finderAlias.email,
+          phone: finderAlias.phone,
           role: finderAlias.role,
           avatar: finderAlias.avatar,
         },
@@ -449,6 +475,7 @@ export async function createLostFoundClaim(params: {
   verificationAnswer: string;
   identifyingDetails: string;
   lostLocation?: string;
+  claimantPhone?: string;
   proofImageUrl?: string;
   proofImagePublicId?: string;
   honestyPledgeAccepted: boolean;
@@ -520,6 +547,7 @@ export async function createLostFoundClaim(params: {
         verificationAnswer: params.verificationAnswer.trim(),
         identifyingDetails: params.identifyingDetails.trim(),
         lostLocation: (params.lostLocation || "").trim(),
+        claimantPhone: (params.claimantPhone || "").trim(),
         proofImageUrl: params.proofImageUrl || "",
         proofImagePublicId: params.proofImagePublicId || "",
         honestyPledgeAccepted: Boolean(params.honestyPledgeAccepted),
@@ -631,6 +659,7 @@ export async function getClaimsForItem(itemId: unknown, viewer: ViewerContext) {
         verificationAnswer: claim.verificationAnswer,
         identifyingDetails: claim.identifyingDetails,
         lostLocation: claim.lostLocation || "",
+        claimantPhone: (claim.claimantPhone || claimant?.phone || "").trim(),
         proofImageUrl: claim.proofImageUrl || "",
         honestyPledgeAccepted: claim.honestyPledgeAccepted,
         // Match score is a private anti-fraud signal visible ONLY to reviewers
@@ -652,7 +681,7 @@ export async function getClaimsForItem(itemId: unknown, viewer: ViewerContext) {
               id: claimant.id,
               name: claimant.name,
               email: claimant.email,
-              phone: claimant.phone || "",
+              phone: (claim.claimantPhone || claimant.phone || "").trim(),
               course: claimant.course || "",
               year: claimant.year || "",
               role: claimant.role,
