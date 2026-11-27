@@ -8,6 +8,7 @@ import {
   campusMapEdges,
   campusMapNodes,
   campusQrSpots,
+  campusSensitiveZones,
   complaints,
   complaintCounters,
   lostFoundItems,
@@ -20,6 +21,8 @@ import {
   computeEuclideanMeters,
   maskInstitutionText,
   normalizeAccessTier,
+  normalizeSensitiveZoneCategory,
+  normalizeZoneBounds,
   resolveInstitutionBranding,
   resolveViewerAccessTier,
 } from "../lib/campus-navigation.ts";
@@ -203,6 +206,7 @@ export async function seedOrResetCampusNavigationAndAcademics(
   }
 
   if (forceReset) {
+    await db.delete(campusSensitiveZones).where(eq(campusSensitiveZones.isDemoRecord, true));
     await db.delete(campusMapEdges).where(eq(campusMapEdges.isDemoRecord, true));
     await db.delete(campusMapNodes).where(eq(campusMapNodes.isDemoRecord, true));
     await db.delete(campusFloors).where(eq(campusFloors.isDemoRecord, true));
@@ -795,6 +799,101 @@ async function ensureSampleSensitiveZonesSeeded() {
   await sensitiveSeedPromise;
 }
 
+let spatialZoneSeedPromise: Promise<void> | null = null;
+
+async function ensureSpatialSensitiveZonesSeeded() {
+  const existing = await db
+    .select({ c: sql<number>`count(*)::int` })
+    .from(campusSensitiveZones);
+  if (Number(existing[0]?.c || 0) > 0) return;
+
+  if (!spatialZoneSeedPromise) {
+    spatialZoneSeedPromise = (async () => {
+      const floors = await db.select().from(campusFloors);
+      const groundFloor = floors.find((f) => !f.isOutdoor && f.floorNumber === 0);
+      const secondFloor = floors.find((f) => !f.isOutdoor && f.floorNumber === 2);
+
+      const zoneSpecs: Array<typeof campusSensitiveZones.$inferInsert> = [];
+
+      if (groundFloor) {
+        zoneSpecs.push({
+          floorId: groundFloor.id,
+          buildingId: groundFloor.buildingId,
+          code: "ZONE-EXAM-G",
+          name: "Examination & Governance Security Wing",
+          zoneCategory: "exam",
+          accessLevel: "staff",
+          shapeType: "rect",
+          boundsX: 73,
+          boundsY: 13,
+          boundsWidth: 21,
+          boundsHeight: 45,
+          polygonPoints: [],
+          blockRouting: true,
+          restrictedNotice:
+            "Restricted Examination & Governance Perimeter — Authorized Staff Clearance Required.",
+          isActive: true,
+          isDemoRecord: true,
+        });
+      }
+
+      if (secondFloor) {
+        zoneSpecs.push(
+          {
+            floorId: secondFloor.id,
+            buildingId: secondFloor.buildingId,
+            code: "ZONE-SRV-2",
+            name: "Core Network & Server Security Perimeter",
+            zoneCategory: "infrastructure",
+            accessLevel: "admin",
+            shapeType: "rect",
+            boundsX: 76,
+            boundsY: 39,
+            boundsWidth: 18,
+            boundsHeight: 20,
+            polygonPoints: [],
+            blockRouting: true,
+            restrictedNotice:
+              "High-Security Infrastructure Perimeter — Campus Admin Clearance Required.",
+            isActive: true,
+            isDemoRecord: true,
+          },
+          {
+            floorId: secondFloor.id,
+            buildingId: secondFloor.buildingId,
+            code: "ZONE-RD-2",
+            name: "Controlled Innovation & R&D Lab Zone",
+            zoneCategory: "laboratory",
+            accessLevel: "student",
+            shapeType: "rect",
+            boundsX: 67,
+            boundsY: 63,
+            boundsWidth: 24,
+            boundsHeight: 24,
+            polygonPoints: [],
+            blockRouting: true,
+            restrictedNotice:
+              "Verified Student ID Required — Controlled Research & Prototyping Zone.",
+            isActive: true,
+            isDemoRecord: true,
+          }
+        );
+      }
+
+      for (const spec of zoneSpecs) {
+        await db
+          .insert(campusSensitiveZones)
+          .values(spec)
+          .onConflictDoNothing({ target: campusSensitiveZones.code });
+      }
+    })().finally(() => {
+      spatialZoneSeedPromise = null;
+    });
+  }
+
+  await spatialZoneSeedPromise;
+}
+
 // ── Public & Role-Aware Campus Navigation Bundle ──────────
 
 export async function getCampusNavigationBundle(
@@ -803,6 +902,7 @@ export async function getCampusNavigationBundle(
       role?: string | null;
       isVerified?: boolean | null;
       emailVerified?: boolean | null;
+      isEmailVerified?: boolean | null;
       isActive?: boolean | null;
     } | null;
     includeUnredacted?: boolean;
@@ -819,17 +919,33 @@ export async function getCampusNavigationBundle(
   ) {
     await seedOrResetCampusNavigationAndAcademics(undefined, false);
   }
-  await Promise.all([ensureDefaultQrSpotsSeeded(), ensureSampleSensitiveZonesSeeded()]);
+  await Promise.all([
+    ensureDefaultQrSpotsSeeded(),
+    ensureSampleSensitiveZonesSeeded(),
+    ensureSpatialSensitiveZonesSeeded(),
+  ]);
 
-  const [branding, buildings, floors, nodes, edges, departments, courses, openComplaints, qrSpots, lfItems] =
-    await Promise.all([
-      getInstitutionBranding(),
-      db.select().from(campusBuildings).orderBy(asc(campusBuildings.name)),
-      db.select().from(campusFloors).orderBy(asc(campusFloors.floorNumber), asc(campusFloors.id)),
-      db.select().from(campusMapNodes).orderBy(asc(campusMapNodes.id)),
-      db.select().from(campusMapEdges).orderBy(asc(campusMapEdges.id)),
-      db.select().from(academicDepartments).where(eq(academicDepartments.isActive, true)).orderBy(asc(academicDepartments.name)),
-      db.select().from(academicCourses).where(eq(academicCourses.isActive, true)).orderBy(asc(academicCourses.name)),
+  const [
+    branding,
+    buildings,
+    floors,
+    nodes,
+    edges,
+    sensitiveZones,
+    departments,
+    courses,
+    openComplaints,
+    qrSpots,
+    lfItems,
+  ] = await Promise.all([
+    getInstitutionBranding(),
+    db.select().from(campusBuildings).orderBy(asc(campusBuildings.name)),
+    db.select().from(campusFloors).orderBy(asc(campusFloors.floorNumber), asc(campusFloors.id)),
+    db.select().from(campusMapNodes).orderBy(asc(campusMapNodes.id)),
+    db.select().from(campusMapEdges).orderBy(asc(campusMapEdges.id)),
+    db.select().from(campusSensitiveZones).orderBy(asc(campusSensitiveZones.id)),
+    db.select().from(academicDepartments).where(eq(academicDepartments.isActive, true)).orderBy(asc(academicDepartments.name)),
+    db.select().from(academicCourses).where(eq(academicCourses.isActive, true)).orderBy(asc(academicCourses.name)),
       db
         .select({
           id: complaints.id,
@@ -938,6 +1054,7 @@ export async function getCampusNavigationBundle(
       displayQrSpotCode: n.qrSpotCode ? maskInstitutionText(n.qrSpotCode, blind) : null,
     })),
     edges,
+    sensitiveZones,
     departments: deptWithCourses,
     livePins: {
       complaints: mappedComplaints,
@@ -1372,6 +1489,171 @@ export async function deleteCampusEdge(id: unknown) {
   const [deleted] = await db
     .delete(campusMapEdges)
     .where(eq(campusMapEdges.id, numId))
+    .returning();
+  return deleted || null;
+}
+
+// ── Admin CRUD: Spatial Sensitive Zones ───────────────────
+
+export async function listCampusSensitiveZones() {
+  await ensureSpatialSensitiveZonesSeeded();
+  return db.select().from(campusSensitiveZones).orderBy(asc(campusSensitiveZones.id));
+}
+
+export async function createCampusSensitiveZone(input: {
+  floorId: unknown;
+  buildingId?: unknown;
+  code?: string;
+  name: string;
+  zoneCategory?: string;
+  accessLevel?: string;
+  shapeType?: string;
+  boundsX?: number;
+  boundsY?: number;
+  boundsWidth?: number;
+  boundsHeight?: number;
+  polygonPoints?: Array<{ x: number; y: number }>;
+  blockRouting?: boolean;
+  restrictedNotice?: string;
+  isActive?: boolean;
+}) {
+  const floorId = toNumericId(input.floorId);
+  if (!floorId) throw new Error("Valid floorId is required.");
+  if (!input.name?.trim()) throw new Error("Sensitive zone name is required.");
+
+  const floorRows = await db
+    .select()
+    .from(campusFloors)
+    .where(eq(campusFloors.id, floorId))
+    .limit(1);
+  if (!floorRows[0]) throw new Error("Target floor not found.");
+
+  const code =
+    String(input.code || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9-]/g, "-")
+      .slice(0, 24) || `ZONE-${floorId}-${Math.floor(100 + Math.random() * 899)}`;
+
+  const geometry = normalizeZoneBounds({
+    shapeType: input.shapeType,
+    boundsX: input.boundsX,
+    boundsY: input.boundsY,
+    boundsWidth: input.boundsWidth,
+    boundsHeight: input.boundsHeight,
+    polygonPoints: input.polygonPoints,
+  });
+
+  const [row] = await db
+    .insert(campusSensitiveZones)
+    .values({
+      floorId,
+      buildingId: toNumericId(input.buildingId) ?? floorRows[0].buildingId ?? null,
+      code,
+      name: input.name.trim().slice(0, 120),
+      zoneCategory: normalizeSensitiveZoneCategory(input.zoneCategory),
+      accessLevel: normalizeAccessTier(input.accessLevel || "staff"),
+      shapeType: geometry.shapeType,
+      boundsX: geometry.boundsX,
+      boundsY: geometry.boundsY,
+      boundsWidth: geometry.boundsWidth,
+      boundsHeight: geometry.boundsHeight,
+      polygonPoints: geometry.polygonPoints,
+      blockRouting: input.blockRouting !== false,
+      restrictedNotice: String(input.restrictedNotice || "").trim().slice(0, 260),
+      isActive: input.isActive !== false,
+      isDemoRecord: false,
+    })
+    .returning();
+
+  return row;
+}
+
+export async function updateCampusSensitiveZone(
+  id: unknown,
+  updates: {
+    name?: string;
+    zoneCategory?: string;
+    accessLevel?: string;
+    shapeType?: string;
+    boundsX?: number;
+    boundsY?: number;
+    boundsWidth?: number;
+    boundsHeight?: number;
+    polygonPoints?: Array<{ x: number; y: number }>;
+    blockRouting?: boolean;
+    restrictedNotice?: string;
+    isActive?: boolean;
+  }
+) {
+  const numId = toNumericId(id);
+  if (!numId) return null;
+
+  const existing = await db
+    .select()
+    .from(campusSensitiveZones)
+    .where(eq(campusSensitiveZones.id, numId))
+    .limit(1);
+  if (!existing[0]) return null;
+
+  const patch: Record<string, unknown> = { updatedAt: new Date() };
+  if (typeof updates.name === "string" && updates.name.trim()) {
+    patch.name = updates.name.trim().slice(0, 120);
+  }
+  if (updates.zoneCategory !== undefined) {
+    patch.zoneCategory = normalizeSensitiveZoneCategory(updates.zoneCategory);
+  }
+  if (updates.accessLevel !== undefined) {
+    patch.accessLevel = normalizeAccessTier(updates.accessLevel);
+  }
+  if (typeof updates.blockRouting === "boolean") {
+    patch.blockRouting = updates.blockRouting;
+  }
+  if (typeof updates.restrictedNotice === "string") {
+    patch.restrictedNotice = updates.restrictedNotice.trim().slice(0, 260);
+  }
+  if (typeof updates.isActive === "boolean") {
+    patch.isActive = updates.isActive;
+  }
+
+  if (
+    updates.shapeType !== undefined ||
+    updates.boundsX !== undefined ||
+    updates.boundsY !== undefined ||
+    updates.boundsWidth !== undefined ||
+    updates.boundsHeight !== undefined ||
+    updates.polygonPoints !== undefined
+  ) {
+    const geometry = normalizeZoneBounds({
+      shapeType: updates.shapeType ?? existing[0].shapeType,
+      boundsX: updates.boundsX ?? existing[0].boundsX,
+      boundsY: updates.boundsY ?? existing[0].boundsY,
+      boundsWidth: updates.boundsWidth ?? existing[0].boundsWidth,
+      boundsHeight: updates.boundsHeight ?? existing[0].boundsHeight,
+      polygonPoints: updates.polygonPoints ?? existing[0].polygonPoints,
+    });
+    patch.shapeType = geometry.shapeType;
+    patch.boundsX = geometry.boundsX;
+    patch.boundsY = geometry.boundsY;
+    patch.boundsWidth = geometry.boundsWidth;
+    patch.boundsHeight = geometry.boundsHeight;
+    patch.polygonPoints = geometry.polygonPoints;
+  }
+
+  const [updated] = await db
+    .update(campusSensitiveZones)
+    .set(patch)
+    .where(eq(campusSensitiveZones.id, numId))
+    .returning();
+  return updated || null;
+}
+
+export async function deleteCampusSensitiveZone(id: unknown) {
+  const numId = toNumericId(id);
+  if (!numId) return null;
+  const [deleted] = await db
+    .delete(campusSensitiveZones)
+    .where(eq(campusSensitiveZones.id, numId))
     .returning();
   return deleted || null;
 }

@@ -7,36 +7,36 @@ const STAT_CONFIG = [
     key: "totalAssigned",
     label: "Total Assigned",
     icon: "bx bx-list-ul",
-    color: "#f59e0b",
-    bg: "rgba(245,158,11,0.10)",
+    color: "#f97316",
+    bg: "rgba(249,115,22,0.12)",
   },
   {
     key: "pending",
     label: "Pending",
     icon: "bx bx-time-five",
-    color: "#f43f5e",
-    bg: "rgba(244,63,94,0.10)",
+    color: "#f59e0b",
+    bg: "rgba(245,158,11,0.12)",
   },
   {
     key: "inProgress",
     label: "In Progress",
     icon: "bx bx-loader-alt",
-    color: "#fbbf24",
-    bg: "rgba(251,191,36,0.10)",
+    color: "#3b82f6",
+    bg: "rgba(59,130,246,0.12)",
   },
   {
     key: "resolved",
     label: "Resolved",
     icon: "bx bx-check-circle",
-    color: "#f59e0b",
-    bg: "rgba(245,158,11,0.10)",
+    color: "#10b981",
+    bg: "rgba(16,185,129,0.12)",
   },
   {
     key: "rejected",
     label: "Rejected",
     icon: "bx bx-x-circle",
-    color: "#f43f5e",
-    bg: "rgba(244,63,94,0.10)",
+    color: "#ef4444",
+    bg: "rgba(239,68,68,0.12)",
   },
 ];
 
@@ -85,6 +85,7 @@ const StaffStatCards = ({ stats = {}, loading = false }) => {
         return (
           <SpatialCard
             className="ssd-stat-card spatial-stat-card"
+            style={{ "--bar-color": cfg.color }}
             key={cfg.key}
             role="listitem"
             aria-label={`${cfg.label}: ${stats[cfg.key] ?? 0}. ${trendLabel}`}

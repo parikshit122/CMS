@@ -8,6 +8,8 @@ import ProtectedZonesTable from "../../components/campus/ProtectedZonesTable";
 import {
   ACCESS_TIER_META,
   CAMPUS_ACCESS_TIERS,
+  SENSITIVE_ZONE_CATEGORIES,
+  SENSITIVE_ZONE_CATEGORY_META,
   applyCampusAccessPreview,
 } from "../../utils/campusPathfinder";
 import "../../styles/CampusNavigation.css";
@@ -51,9 +53,10 @@ export default function CampusStudio() {
 
   // Map Editor & Policy State
   const [activeFloorId, setActiveFloorId] = useState(null);
-  const [tool, setTool] = useState("select"); // "select" | "add-node" | "connect-edge"
+  const [tool, setTool] = useState("select"); // "select" | "add-node" | "connect-edge" | "add-zone"
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState(null);
+  const [selectedZoneId, setSelectedZoneId] = useState(null);
   const [edgeStartId, setEdgeStartId] = useState(null);
   const [edgeType, setEdgeType] = useState("corridor");
   const [edgeAccessLevel, setEdgeAccessLevel] = useState("public");
@@ -72,11 +75,36 @@ export default function CampusStudio() {
     restrictedNotice: "",
   });
 
+  // Pending new spatial sensitive zone settings
+  const [newZoneForm, setNewZoneForm] = useState({
+    name: "",
+    code: "",
+    zoneCategory: "restricted",
+    accessLevel: "staff",
+    boundsWidth: "20",
+    boundsHeight: "20",
+    blockRouting: true,
+    restrictedNotice: "",
+  });
+
   // Active selected node policy edit form
   const [nodePolicyForm, setNodePolicyForm] = useState({
     label: "",
     accessLevel: "public",
     isSensitive: false,
+    restrictedNotice: "",
+  });
+
+  // Active selected spatial sensitive zone edit form
+  const [zonePolicyForm, setZonePolicyForm] = useState({
+    name: "",
+    zoneCategory: "restricted",
+    accessLevel: "staff",
+    boundsX: "40",
+    boundsY: "40",
+    boundsWidth: "20",
+    boundsHeight: "20",
+    blockRouting: true,
     restrictedNotice: "",
   });
 
@@ -160,6 +188,7 @@ export default function CampusStudio() {
   const buildings = useMemo(() => bundle?.buildings || [], [bundle]);
   const rawNodes = useMemo(() => bundle?.nodes || [], [bundle]);
   const rawEdges = useMemo(() => bundle?.edges || [], [bundle]);
+  const rawSensitiveZones = useMemo(() => bundle?.sensitiveZones || [], [bundle]);
   const departments = useMemo(() => bundle?.departments || [], [bundle]);
 
   // Apply selected preview tier so admin can visually verify locked zones in real time
@@ -171,13 +200,18 @@ export default function CampusStudio() {
   const floors = useMemo(() => previewBundle?.floors || rawFloors, [previewBundle, rawFloors]);
   const nodes = useMemo(() => previewBundle?.nodes || rawNodes, [previewBundle, rawNodes]);
   const edges = useMemo(() => previewBundle?.edges || rawEdges, [previewBundle, rawEdges]);
+  const sensitiveZones = useMemo(
+    () => previewBundle?.sensitiveZones || rawSensitiveZones,
+    [previewBundle, rawSensitiveZones]
+  );
 
   const protectedZonesCount = useMemo(() => {
+    const pz = rawSensitiveZones.filter((z) => z.isActive !== false).length;
     const pf = rawFloors.filter((f) => (f.accessLevel && f.accessLevel !== "public") || f.isSensitive).length;
     const pn = rawNodes.filter((n) => (n.accessLevel && n.accessLevel !== "public") || n.isSensitive).length;
     const pe = rawEdges.filter((e) => (e.accessLevel && e.accessLevel !== "public") || e.isSensitive).length;
-    return pf + pn + pe;
-  }, [rawFloors, rawNodes, rawEdges]);
+    return pz + pf + pn + pe;
+  }, [rawSensitiveZones, rawFloors, rawNodes, rawEdges]);
 
   const activeFloor = useMemo(
     () => floors.find((f) => Number(f.id) === Number(activeFloorId)) || floors[0] || null,
@@ -192,6 +226,11 @@ export default function CampusStudio() {
   const floorNodes = useMemo(
     () => nodes.filter((n) => Number(n.floorId) === Number(activeFloor?.id)),
     [nodes, activeFloor]
+  );
+
+  const floorSensitiveZones = useMemo(
+    () => sensitiveZones.filter((z) => Number(z.floorId) === Number(activeFloor?.id)),
+    [sensitiveZones, activeFloor]
   );
 
   const floorNodeIds = useMemo(
@@ -223,6 +262,9 @@ export default function CampusStudio() {
   const selectedEdge = selectedEdgeId
     ? rawEdges.find((e) => Number(e.id) === Number(selectedEdgeId)) || null
     : null;
+  const selectedZone = selectedZoneId
+    ? rawSensitiveZones.find((z) => Number(z.id) === Number(selectedZoneId)) || null
+    : null;
 
   useEffect(() => {
     if (!selectedNode) return;
@@ -235,6 +277,21 @@ export default function CampusStudio() {
       restrictedNotice: selectedNode.restrictedNotice || "",
     });
   }, [selectedNode]);
+
+  useEffect(() => {
+    if (!selectedZone) return;
+    setZonePolicyForm({
+      name: selectedZone.name || "",
+      zoneCategory: selectedZone.zoneCategory || "restricted",
+      accessLevel: selectedZone.accessLevel || "staff",
+      boundsX: String(selectedZone.boundsX ?? 40),
+      boundsY: String(selectedZone.boundsY ?? 40),
+      boundsWidth: String(selectedZone.boundsWidth ?? 20),
+      boundsHeight: String(selectedZone.boundsHeight ?? 20),
+      blockRouting: selectedZone.blockRouting !== false,
+      restrictedNotice: selectedZone.restrictedNotice || "",
+    });
+  }, [selectedZone]);
 
   // ── Handlers ────────────────────────────────────────────
 
@@ -263,10 +320,51 @@ export default function CampusStudio() {
   };
 
   const handleCanvasClick = async (e) => {
-    if (tool !== "add-node" || !activeFloor) return;
+    if (!activeFloor) return;
+    if (tool !== "add-node" && tool !== "add-zone") return;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = Math.round(((e.clientX - rect.left) / rect.width) * 1000) / 10;
     const y = Math.round(((e.clientY - rect.top) / rect.height) * 1000) / 10;
+
+    if (tool === "add-zone") {
+      const name = newZoneForm.name.trim();
+      if (!name) {
+        toast.error("Enter a sensitive zone name first, then click the blueprint to place it.");
+        return;
+      }
+      const w = Math.max(6, Math.min(80, Number(newZoneForm.boundsWidth) || 20));
+      const h = Math.max(6, Math.min(80, Number(newZoneForm.boundsHeight) || 20));
+      const bx = Math.max(0, Math.min(100 - w, Math.round((x - w / 2) * 10) / 10));
+      const by = Math.max(0, Math.min(100 - h, Math.round((y - h / 2) * 10) / 10));
+      try {
+        const res = await API.post("/campus/sensitive-zones", {
+          floorId: activeFloor.id,
+          buildingId: activeFloor.buildingId,
+          code: newZoneForm.code.trim() || undefined,
+          name,
+          zoneCategory: newZoneForm.zoneCategory,
+          accessLevel: newZoneForm.accessLevel,
+          shapeType: "rect",
+          boundsX: bx,
+          boundsY: by,
+          boundsWidth: w,
+          boundsHeight: h,
+          blockRouting: newZoneForm.blockRouting,
+          restrictedNotice: newZoneForm.restrictedNotice.trim(),
+        });
+        if (res.data?.success) {
+          toast.success(res.data.message);
+          setNewZoneForm((p) => ({ ...p, name: "", code: "", restrictedNotice: "" }));
+          setSelectedZoneId(res.data.data?.id || null);
+          setSelectedNodeId(null);
+          setTool("select");
+          await loadData(activeFloor.id);
+        }
+      } catch (err) {
+        toast.error(err?.response?.data?.message || "Failed to create sensitive zone.");
+      }
+      return;
+    }
 
     const label = newNodeForm.label.trim();
     if (!label) {
@@ -338,6 +436,7 @@ export default function CampusStudio() {
     }
 
     setSelectedEdgeId(null);
+    setSelectedZoneId(null);
     setSelectedNodeId(node.id);
   };
 
@@ -394,15 +493,57 @@ export default function CampusStudio() {
     }
   };
 
+  const handleSaveZonePolicy = async (e) => {
+    e.preventDefault();
+    if (!selectedZone) return;
+    try {
+      setSavingPolicy(true);
+      const res = await API.patch(`/campus/sensitive-zones/${selectedZone.id}`, {
+        name: zonePolicyForm.name.trim(),
+        zoneCategory: zonePolicyForm.zoneCategory,
+        accessLevel: zonePolicyForm.accessLevel,
+        boundsX: Number(zonePolicyForm.boundsX),
+        boundsY: Number(zonePolicyForm.boundsY),
+        boundsWidth: Number(zonePolicyForm.boundsWidth),
+        boundsHeight: Number(zonePolicyForm.boundsHeight),
+        blockRouting: Boolean(zonePolicyForm.blockRouting),
+        restrictedNotice: zonePolicyForm.restrictedNotice.trim(),
+      });
+      if (res.data?.success) {
+        toast.success(res.data.message);
+        await loadData(activeFloor?.id);
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to update sensitive zone.");
+    } finally {
+      setSavingPolicy(false);
+    }
+  };
+
+  const handleDeleteZone = async (zoneId) => {
+    try {
+      const res = await API.delete(`/campus/sensitive-zones/${zoneId}`);
+      if (res.data?.success) {
+        toast.success(res.data.message);
+        setSelectedZoneId(null);
+        await loadData(activeFloor?.id);
+      }
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to delete sensitive zone.");
+    }
+  };
+
   const handleQuickPolicyTierChange = async (kind, id, nextTier, rowKey) => {
     try {
       setBusyPolicyKey(rowKey);
       const endpoint =
-        kind === "floor"
-          ? `/campus/floors/${id}`
-          : kind === "edge"
-            ? `/campus/edges/${id}`
-            : `/campus/nodes/${id}`;
+        kind === "zone"
+          ? `/campus/sensitive-zones/${id}`
+          : kind === "floor"
+            ? `/campus/floors/${id}`
+            : kind === "edge"
+              ? `/campus/edges/${id}`
+              : `/campus/nodes/${id}`;
       const res = await API.patch(endpoint, {
         accessLevel: nextTier,
         isSensitive: nextTier !== "public",
@@ -661,11 +802,14 @@ export default function CampusStudio() {
                 <span>Interactive Pins &amp; Zone Policies</span>
               </div>
 
-              <div className="cn-seg" style={{ width: "100%", marginBottom: "14px" }}>
+              <div
+                className="cn-seg"
+                style={{ width: "100%", marginBottom: "14px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px" }}
+              >
                 <button
                   type="button"
                   className={`cn-seg__btn ${tool === "select" ? "is-active" : ""}`}
-                  style={{ flex: 1, justifyContent: "center" }}
+                  style={{ justifyContent: "center" }}
                   onClick={() => {
                     setTool("select");
                     setEdgeStartId(null);
@@ -675,8 +819,19 @@ export default function CampusStudio() {
                 </button>
                 <button
                   type="button"
+                  className={`cn-seg__btn ${tool === "add-zone" ? "is-active" : ""}`}
+                  style={{ justifyContent: "center" }}
+                  onClick={() => {
+                    setTool("add-zone");
+                    setEdgeStartId(null);
+                  }}
+                >
+                  + Sensitive Zone
+                </button>
+                <button
+                  type="button"
                   className={`cn-seg__btn ${tool === "add-node" ? "is-active" : ""}`}
-                  style={{ flex: 1, justifyContent: "center" }}
+                  style={{ justifyContent: "center" }}
                   onClick={() => {
                     setTool("add-node");
                     setEdgeStartId(null);
@@ -687,7 +842,7 @@ export default function CampusStudio() {
                 <button
                   type="button"
                   className={`cn-seg__btn ${tool === "connect-edge" ? "is-active" : ""}`}
-                  style={{ flex: 1, justifyContent: "center" }}
+                  style={{ justifyContent: "center" }}
                   onClick={() => {
                     setTool("connect-edge");
                     setEdgeStartId(null);
@@ -696,6 +851,100 @@ export default function CampusStudio() {
                   Connect Path
                 </button>
               </div>
+
+              {tool === "add-zone" && (
+                <div>
+                  <div className="cn-field">
+                    <label htmlFor="st-zone-name">Sensitive Zone Name</label>
+                    <input
+                      id="st-zone-name"
+                      className="cn-input"
+                      placeholder="e.g., Examination Vault Perimeter"
+                      value={newZoneForm.name}
+                      onChange={(e) => setNewZoneForm((p) => ({ ...p, name: e.target.value }))}
+                    />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                    <div className="cn-field">
+                      <label htmlFor="st-zone-cat">Category</label>
+                      <select
+                        id="st-zone-cat"
+                        className="cn-select"
+                        value={newZoneForm.zoneCategory}
+                        onChange={(e) => setNewZoneForm((p) => ({ ...p, zoneCategory: e.target.value }))}
+                      >
+                        {SENSITIVE_ZONE_CATEGORIES.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {SENSITIVE_ZONE_CATEGORY_META[cat].label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="cn-field">
+                      <label htmlFor="st-zone-tier">Access Tier</label>
+                      <select
+                        id="st-zone-tier"
+                        className="cn-select"
+                        value={newZoneForm.accessLevel}
+                        onChange={(e) => setNewZoneForm((p) => ({ ...p, accessLevel: e.target.value }))}
+                      >
+                        {CAMPUS_ACCESS_TIERS.map((tier) => (
+                          <option key={tier} value={tier}>
+                            {ACCESS_TIER_META[tier].label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                    <div className="cn-field">
+                      <label htmlFor="st-zone-w">Width (%)</label>
+                      <input
+                        id="st-zone-w"
+                        type="number"
+                        min="6"
+                        max="80"
+                        className="cn-input av-mono"
+                        value={newZoneForm.boundsWidth}
+                        onChange={(e) => setNewZoneForm((p) => ({ ...p, boundsWidth: e.target.value }))}
+                      />
+                    </div>
+                    <div className="cn-field">
+                      <label htmlFor="st-zone-h">Height (%)</label>
+                      <input
+                        id="st-zone-h"
+                        type="number"
+                        min="6"
+                        max="80"
+                        className="cn-input av-mono"
+                        value={newZoneForm.boundsHeight}
+                        onChange={(e) => setNewZoneForm((p) => ({ ...p, boundsHeight: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                  <div className="cn-field">
+                    <label htmlFor="st-zone-notice">Restricted Notice</label>
+                    <input
+                      id="st-zone-notice"
+                      className="cn-input"
+                      placeholder="e.g., Authorized Staff Clearance Required"
+                      value={newZoneForm.restrictedNotice}
+                      onChange={(e) => setNewZoneForm((p) => ({ ...p, restrictedNotice: e.target.value }))}
+                    />
+                  </div>
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.78rem", marginBottom: "8px", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={newZoneForm.blockRouting}
+                      onChange={(e) => setNewZoneForm((p) => ({ ...p, blockRouting: e.target.checked }))}
+                    />
+                    Block unauthorized pass-through routing
+                  </label>
+                  <p style={{ fontSize: "0.78rem", color: "var(--av-primary)", margin: 0 }}>
+                    Click anywhere on the blueprint to place this sensitive zone centered at your click.
+                  </p>
+                </div>
+              )}
 
               {tool === "add-node" && (
                 <div>
@@ -905,9 +1154,135 @@ export default function CampusStudio() {
                 </form>
               )}
 
-              {tool === "select" && !selectedNode && (
+              {tool === "select" && selectedZone && !selectedNode && (
+                <form onSubmit={handleSaveZonePolicy} style={{ paddingTop: "4px" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "8px",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    <span className="av-mono" style={{ fontSize: "0.75rem", color: "var(--av-ink-muted)" }}>
+                      ZONE · {selectedZone.code}
+                    </span>
+                    <span className={`cn-tier-badge cn-tier-badge--${zonePolicyForm.accessLevel}`}>
+                      <i className="bx bx-shield-quarter" aria-hidden="true" />
+                      {ACCESS_TIER_META[zonePolicyForm.accessLevel]?.shortLabel}
+                    </span>
+                  </div>
+
+                  <div className="cn-field">
+                    <label htmlFor="st-sel-zone-name">Sensitive Zone Name</label>
+                    <input
+                      id="st-sel-zone-name"
+                      className="cn-input"
+                      value={zonePolicyForm.name}
+                      onChange={(e) => setZonePolicyForm((p) => ({ ...p, name: e.target.value }))}
+                    />
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                    <div className="cn-field">
+                      <label htmlFor="st-sel-zone-cat">Category</label>
+                      <select
+                        id="st-sel-zone-cat"
+                        className="cn-select"
+                        value={zonePolicyForm.zoneCategory}
+                        onChange={(e) => setZonePolicyForm((p) => ({ ...p, zoneCategory: e.target.value }))}
+                      >
+                        {SENSITIVE_ZONE_CATEGORIES.map((cat) => (
+                          <option key={cat} value={cat}>
+                            {SENSITIVE_ZONE_CATEGORY_META[cat].label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="cn-field">
+                      <label htmlFor="st-sel-zone-tier">Access Tier</label>
+                      <select
+                        id="st-sel-zone-tier"
+                        className="cn-select"
+                        value={zonePolicyForm.accessLevel}
+                        onChange={(e) => setZonePolicyForm((p) => ({ ...p, accessLevel: e.target.value }))}
+                      >
+                        {CAMPUS_ACCESS_TIERS.map((tier) => (
+                          <option key={tier} value={tier}>
+                            {tier === "public"
+                              ? "Public — Open Access"
+                              : `${ACCESS_TIER_META[tier].label} (${ACCESS_TIER_META[tier].shortLabel})`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "6px" }}>
+                    <div className="cn-field">
+                      <label htmlFor="st-sel-zx">X%</label>
+                      <input id="st-sel-zx" type="number" min="0" max="96" className="cn-input av-mono" value={zonePolicyForm.boundsX} onChange={(e) => setZonePolicyForm((p) => ({ ...p, boundsX: e.target.value }))} />
+                    </div>
+                    <div className="cn-field">
+                      <label htmlFor="st-sel-zy">Y%</label>
+                      <input id="st-sel-zy" type="number" min="0" max="96" className="cn-input av-mono" value={zonePolicyForm.boundsY} onChange={(e) => setZonePolicyForm((p) => ({ ...p, boundsY: e.target.value }))} />
+                    </div>
+                    <div className="cn-field">
+                      <label htmlFor="st-sel-zw">W%</label>
+                      <input id="st-sel-zw" type="number" min="4" max="100" className="cn-input av-mono" value={zonePolicyForm.boundsWidth} onChange={(e) => setZonePolicyForm((p) => ({ ...p, boundsWidth: e.target.value }))} />
+                    </div>
+                    <div className="cn-field">
+                      <label htmlFor="st-sel-zh">H%</label>
+                      <input id="st-sel-zh" type="number" min="4" max="100" className="cn-input av-mono" value={zonePolicyForm.boundsHeight} onChange={(e) => setZonePolicyForm((p) => ({ ...p, boundsHeight: e.target.value }))} />
+                    </div>
+                  </div>
+
+                  <div className="cn-field">
+                    <label htmlFor="st-sel-zone-notice">Restricted Notice</label>
+                    <input
+                      id="st-sel-zone-notice"
+                      className="cn-input"
+                      value={zonePolicyForm.restrictedNotice}
+                      onChange={(e) => setZonePolicyForm((p) => ({ ...p, restrictedNotice: e.target.value }))}
+                    />
+                  </div>
+
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.78rem", marginBottom: "10px", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={zonePolicyForm.blockRouting}
+                      onChange={(e) => setZonePolicyForm((p) => ({ ...p, blockRouting: e.target.checked }))}
+                    />
+                    Block unauthorized routing across this zone
+                  </label>
+
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <button
+                      type="submit"
+                      disabled={savingPolicy}
+                      className="av-btn av-btn--primary av-btn--compact"
+                      style={{ flex: 1, justifyContent: "center" }}
+                    >
+                      <i className="bx bx-shield-alt-2" aria-hidden="true" />
+                      {savingPolicy ? "Saving..." : "Save Zone"}
+                    </button>
+                    <button
+                      type="button"
+                      className="av-btn av-btn--ghost av-btn--compact"
+                      style={{ color: "#f87171" }}
+                      onClick={() => handleDeleteZone(selectedZone.id)}
+                    >
+                      <i className="bx bx-trash" aria-hidden="true" />
+                      Delete
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {tool === "select" && !selectedNode && !selectedZone && (
                 <div style={{ fontSize: "0.79rem", color: "var(--av-ink-muted)" }}>
-                  Click any pin on the blueprint to configure its access tier and restriction notice, or select a walkway below to protect a corridor.
+                  Click any spatial sensitive zone or pin on the blueprint to configure its access tier and restriction notice, or select a walkway below to protect a corridor.
                 </div>
               )}
 
@@ -1078,7 +1453,7 @@ export default function CampusStudio() {
 
             <div className="cn-canvas-viewport">
               <div
-                className={`cn-canvas-stage ${tool === "add-node" ? "is-crosshair" : ""}`}
+                className={`cn-canvas-stage ${tool === "add-node" || tool === "add-zone" ? "is-crosshair" : ""}`}
                 onClick={handleCanvasClick}
               >
                 {activeFloor?.isLocked && previewTier !== "admin" ? (
@@ -1117,6 +1492,72 @@ export default function CampusStudio() {
                       preserveAspectRatio="none"
                       aria-hidden="true"
                     >
+                      <defs>
+                        <pattern
+                          id="studio-zone-hatch"
+                          width="12"
+                          height="12"
+                          patternUnits="userSpaceOnUse"
+                          patternTransform="rotate(45)"
+                        >
+                          <line x1="0" y1="0" x2="0" y2="12" stroke="rgba(239, 68, 68, 0.34)" strokeWidth="4" />
+                        </pattern>
+                      </defs>
+
+                      {/* Spatial Sensitive Zone Overlays */}
+                      {floorSensitiveZones.map((zone) => {
+                        const isSelectedZ = Number(selectedZoneId) === Number(zone.id);
+                        const isLockedZ = Boolean(zone.isLocked);
+                        const tierColor =
+                          zone.effectiveAccessLevel === "admin"
+                            ? "#ef4444"
+                            : zone.effectiveAccessLevel === "staff"
+                              ? "#f59e0b"
+                              : zone.effectiveAccessLevel === "student"
+                                ? "#3b82f6"
+                                : "#22c55e";
+                        const zx = (Number(zone.boundsX) || 0) * 10;
+                        const zy = (Number(zone.boundsY) || 0) * 7;
+                        const zw = (Number(zone.boundsWidth) || 20) * 10;
+                        const zh = (Number(zone.boundsHeight) || 20) * 7;
+                        return (
+                          <g
+                            key={`zone-${zone.id}`}
+                            style={{ pointerEvents: "auto", cursor: "pointer" }}
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              setTool("select");
+                              setSelectedNodeId(null);
+                              setSelectedZoneId(zone.id);
+                            }}
+                          >
+                            <rect
+                              x={zx}
+                              y={zy}
+                              width={zw}
+                              height={zh}
+                              rx="10"
+                              fill={isLockedZ ? "url(#studio-zone-hatch)" : `${tierColor}18`}
+                              stroke={isLockedZ ? "#ef4444" : tierColor}
+                              strokeWidth={isSelectedZ ? 3.5 : 2}
+                              strokeDasharray={isLockedZ ? "8 5" : "6 4"}
+                            />
+                            <text
+                              x={zx + 10}
+                              y={zy + 18}
+                              fill={isLockedZ ? "#fca5a5" : tierColor}
+                              fontSize="12"
+                              fontWeight="700"
+                              fontFamily="ui-monospace, SFMono-Regular, monospace"
+                            >
+                              {isLockedZ
+                                ? `LOCKED ZONE · ${ACCESS_TIER_META[zone.effectiveAccessLevel]?.shortLabel}`
+                                : `${zone.code} · ${ACCESS_TIER_META[zone.effectiveAccessLevel]?.shortLabel}`}
+                            </text>
+                          </g>
+                        );
+                      })}
+
                       {floorEdges.map((edge) => {
                         const a = nodeById.get(Number(edge.fromNodeId));
                         const b = nodeById.get(Number(edge.toNodeId));
@@ -1238,17 +1679,27 @@ export default function CampusStudio() {
           floors={rawFloors}
           nodes={rawNodes}
           edges={rawEdges}
+          sensitiveZones={rawSensitiveZones}
           busyKey={busyPolicyKey}
           onQuickTierChange={handleQuickPolicyTierChange}
           onSelectFloor={(floorId) => {
             setActiveFloorId(floorId);
             setSelectedNodeId(null);
+            setSelectedZoneId(null);
             setActiveTab("maps");
           }}
           onSelectNode={(nodeId, floorId) => {
             if (floorId) setActiveFloorId(floorId);
             setTool("select");
+            setSelectedZoneId(null);
             setSelectedNodeId(nodeId);
+            setActiveTab("maps");
+          }}
+          onSelectZone={(zoneId, floorId) => {
+            if (floorId) setActiveFloorId(floorId);
+            setTool("select");
+            setSelectedNodeId(null);
+            setSelectedZoneId(zoneId);
             setActiveTab("maps");
           }}
         />

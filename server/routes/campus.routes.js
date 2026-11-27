@@ -16,6 +16,10 @@ const {
   postCampusEdge,
   patchCampusEdge,
   removeCampusEdge,
+  getAdminSensitiveZones,
+  postCampusSensitiveZone,
+  patchCampusSensitiveZone,
+  removeCampusSensitiveZone,
   postAcademicDepartment,
   removeAcademicDepartment,
   postAcademicCourse,
@@ -45,6 +49,11 @@ router.delete("/nodes/:id", authorizeRoles("admin"), removeCampusNode);
 router.post("/edges", authorizeRoles("admin"), postCampusEdge);
 router.patch("/edges/:id", authorizeRoles("admin"), patchCampusEdge);
 router.delete("/edges/:id", authorizeRoles("admin"), removeCampusEdge);
+
+router.get("/sensitive-zones", authorizeRoles("admin"), getAdminSensitiveZones);
+router.post("/sensitive-zones", authorizeRoles("admin"), postCampusSensitiveZone);
+router.patch("/sensitive-zones/:id", authorizeRoles("admin"), patchCampusSensitiveZone);
+router.delete("/sensitive-zones/:id", authorizeRoles("admin"), removeCampusSensitiveZone);
 
 router.post("/departments", authorizeRoles("admin"), postAcademicDepartment);
 router.delete("/departments/:id", authorizeRoles("admin"), removeAcademicDepartment);

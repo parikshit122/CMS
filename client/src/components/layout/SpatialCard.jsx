@@ -2,13 +2,15 @@ import React, { useRef, useState, useEffect } from "react";
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 import "../../styles/SpatialCard.css";
 
-const SpatialCard = ({ children, className = "", style = {}, glare = false }) => {
+const SpatialCard = ({ children, className = "", style = {}, glare = false, ...rest }) => {
   const ref = useRef(null);
   const [isHovered, setIsHovered] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
 
   // Check prefers-reduced-motion
-  const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const prefersReducedMotion =
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   // Motion values
   const x = useMotionValue(0);
@@ -18,9 +20,9 @@ const SpatialCard = ({ children, className = "", style = {}, glare = false }) =>
   const mouseXSpring = useSpring(x, { stiffness: 250, damping: 25 });
   const mouseYSpring = useSpring(y, { stiffness: 250, damping: 25 });
 
-  // Cap tilt to max 8-10 degrees
-  const rotateX = useTransform(mouseYSpring, [-0.5, 0.5], ["9deg", "-9deg"]);
-  const rotateY = useTransform(mouseXSpring, [-0.5, 0.5], ["-9deg", "9deg"]);
+  // Cap tilt to subtle 5 degrees to keep edges crisp
+  const rotateX = useTransform(mouseYSpring, [-0.5, 0.5], ["5deg", "-5deg"]);
+  const rotateY = useTransform(mouseXSpring, [-0.5, 0.5], ["-5deg", "5deg"]);
 
   // Glare position
   const glareX = useTransform(mouseXSpring, [-0.5, 0.5], ["100%", "0%"]);
@@ -77,12 +79,13 @@ const SpatialCard = ({ children, className = "", style = {}, glare = false }) =>
   return (
     <motion.div
       ref={ref}
+      {...rest}
       onMouseMove={handleMouseMove}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      initial={{ opacity: 0, scale: 0.95 }}
+      initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.4, ease: "easeOut" }}
+      transition={{ duration: 0.28, ease: "easeOut" }}
       style={{
         rotateX: prefersReducedMotion ? 0 : rotateX,
         rotateY: prefersReducedMotion ? 0 : rotateY,
@@ -103,7 +106,7 @@ const SpatialCard = ({ children, className = "", style = {}, glare = false }) =>
         />
       )}
 
-      <div className="spatial-card-content" style={{ transform: "translateZ(30px)" }}>
+      <div className="spatial-card-content">
         {children}
       </div>
     </motion.div>

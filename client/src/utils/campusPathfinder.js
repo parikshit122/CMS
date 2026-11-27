@@ -71,6 +71,111 @@ export function canAccessTier(viewerTier, requiredTier) {
   );
 }
 
+export const SENSITIVE_ZONE_CATEGORIES = [
+  "restricted",
+  "security",
+  "exam",
+  "infrastructure",
+  "laboratory",
+  "executive",
+];
+
+export const SENSITIVE_ZONE_CATEGORY_META = {
+  restricted: { label: "Restricted Wing", icon: "bx-lock-alt" },
+  security: { label: "Security Perimeter", icon: "bx-shield-quarter" },
+  exam: { label: "Examination Vault", icon: "bx-file-blank" },
+  infrastructure: { label: "Server & Core Infra", icon: "bx-server" },
+  laboratory: { label: "Controlled Research Lab", icon: "bx-test-tube" },
+  executive: { label: "Executive & Records", icon: "bx-briefcase-alt-2" },
+};
+
+export function getZonePolygonVertices(zone) {
+  if (
+    String(zone?.shapeType || "rect").toLowerCase() === "polygon" &&
+    Array.isArray(zone?.polygonPoints) &&
+    zone.polygonPoints.length >= 3
+  ) {
+    return zone.polygonPoints;
+  }
+  const x1 = Number(zone?.boundsX) || 0;
+  const y1 = Number(zone?.boundsY) || 0;
+  const x2 = x1 + (Number(zone?.boundsWidth) || 0);
+  const y2 = y1 + (Number(zone?.boundsHeight) || 0);
+  return [
+    { x: x1, y: y1 },
+    { x: x2, y: y1 },
+    { x: x2, y: y2 },
+    { x: x1, y: y2 },
+  ];
+}
+
+export function isPointInSensitiveZone(point, zone) {
+  const px = Number(point?.x);
+  const py = Number(point?.y);
+  if (!Number.isFinite(px) || !Number.isFinite(py)) return false;
+  if (
+    String(zone?.shapeType || "rect").toLowerCase() !== "polygon" ||
+    !Array.isArray(zone?.polygonPoints) ||
+    zone.polygonPoints.length < 3
+  ) {
+    const x1 = Number(zone?.boundsX) || 0;
+    const y1 = Number(zone?.boundsY) || 0;
+    const x2 = x1 + (Number(zone?.boundsWidth) || 0);
+    const y2 = y1 + (Number(zone?.boundsHeight) || 0);
+    return px >= x1 && px <= x2 && py >= y1 && py <= y2;
+  }
+  const pts = zone.polygonPoints;
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const xi = pts[i].x;
+    const yi = pts[i].y;
+    const xj = pts[j].x;
+    const yj = pts[j].y;
+    const intersects =
+      yi > py !== yj > py &&
+      px < ((xj - xi) * (py - yi)) / (yj - yi || 1e-12) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function segOrient(p, q, r) {
+  const val = (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
+  if (Math.abs(val) < 1e-9) return 0;
+  return val > 0 ? 1 : 2;
+}
+
+function segOn(p, q, r) {
+  return (
+    q.x <= Math.max(p.x, r.x) + 1e-9 &&
+    q.x >= Math.min(p.x, r.x) - 1e-9 &&
+    q.y <= Math.max(p.y, r.y) + 1e-9 &&
+    q.y >= Math.min(p.y, r.y) - 1e-9
+  );
+}
+
+function segsCross(p1, q1, p2, q2) {
+  const o1 = segOrient(p1, q1, p2);
+  const o2 = segOrient(p1, q1, q2);
+  const o3 = segOrient(p2, q2, p1);
+  const o4 = segOrient(p2, q2, q1);
+  if (o1 !== o2 && o3 !== o4) return true;
+  if (o1 === 0 && segOn(p1, p2, q1)) return true;
+  if (o2 === 0 && segOn(p1, q2, q1)) return true;
+  if (o3 === 0 && segOn(p2, p1, q2)) return true;
+  if (o4 === 0 && segOn(p2, q1, q2)) return true;
+  return false;
+}
+
+export function doesSegmentIntersectZone(a, b, zone) {
+  if (isPointInSensitiveZone(a, zone) || isPointInSensitiveZone(b, zone)) return true;
+  const verts = getZonePolygonVertices(zone);
+  for (let i = 0; i < verts.length; i++) {
+    if (segsCross(a, b, verts[i], verts[(i + 1) % verts.length])) return true;
+  }
+  return false;
+}
+
 export function applyCampusAccessPreview(bundle, viewerTierInput = "public") {
   if (!bundle) return null;
   const viewerTier = normalizeAccessTier(viewerTierInput);
@@ -89,10 +194,37 @@ export function applyCampusAccessPreview(bundle, viewerTierInput = "public") {
     };
   });
 
+  const sensitiveZones = (bundle.sensitiveZones || [])
+    .filter((z) => z && z.isActive !== false)
+    .map((z) => {
+      const floorTier = floorTierMap.get(Number(z.floorId)) || "public";
+      const ownTier = normalizeAccessTier(z.accessLevel);
+      const effectiveTier = getEffectiveAccessLevel(ownTier, floorTier);
+      const isLocked = !canAccessTier(viewerTier, effectiveTier);
+      return {
+        ...z,
+        accessLevel: ownTier,
+        effectiveAccessLevel: effectiveTier,
+        isLocked,
+      };
+    });
+
+  const zonesByFloor = new Map();
+  for (const z of sensitiveZones) {
+    const fid = Number(z.floorId);
+    if (!zonesByFloor.has(fid)) zonesByFloor.set(fid, []);
+    zonesByFloor.get(fid).push(z);
+  }
+
   const nodes = (bundle.nodes || []).map((n) => {
     const floorTier = floorTierMap.get(Number(n.floorId)) || "public";
     const ownTier = normalizeAccessTier(n.accessLevel);
-    const effectiveTier = getEffectiveAccessLevel(ownTier, floorTier);
+    let effectiveTier = getEffectiveAccessLevel(ownTier, floorTier);
+    for (const z of zonesByFloor.get(Number(n.floorId)) || []) {
+      if (isPointInSensitiveZone({ x: n.x, y: n.y }, z)) {
+        effectiveTier = getEffectiveAccessLevel(effectiveTier, z.effectiveAccessLevel);
+      }
+    }
     const isLocked = !canAccessTier(viewerTier, effectiveTier);
     if (isLocked) lockedNodeIds.add(Number(n.id));
     return {
@@ -103,18 +235,38 @@ export function applyCampusAccessPreview(bundle, viewerTierInput = "public") {
     };
   });
 
+  const nodeById = new Map(nodes.map((n) => [Number(n.id), n]));
   const nodeTierMap = new Map(
     nodes.map((n) => [Number(n.id), n.effectiveAccessLevel || "public"])
   );
 
   const edges = (bundle.edges || []).map((e) => {
     const ownTier = normalizeAccessTier(e.accessLevel);
+    const fromNode = nodeById.get(Number(e.fromNodeId));
+    const toNode = nodeById.get(Number(e.toNodeId));
     const inherited = getEffectiveAccessLevel(
       nodeTierMap.get(Number(e.fromNodeId)) || "public",
       nodeTierMap.get(Number(e.toNodeId)) || "public"
     );
-    const effectiveTier = getEffectiveAccessLevel(ownTier, inherited);
+    let effectiveTier = getEffectiveAccessLevel(ownTier, inherited);
+    let crossesLockedZone = false;
+    if (fromNode && toNode && Number(fromNode.floorId) === Number(toNode.floorId)) {
+      for (const z of zonesByFloor.get(Number(fromNode.floorId)) || []) {
+        if (
+          z.blockRouting !== false &&
+          doesSegmentIntersectZone(
+            { x: fromNode.x, y: fromNode.y },
+            { x: toNode.x, y: toNode.y },
+            z
+          )
+        ) {
+          effectiveTier = getEffectiveAccessLevel(effectiveTier, z.effectiveAccessLevel);
+          if (z.isLocked) crossesLockedZone = true;
+        }
+      }
+    }
     const isLocked =
+      crossesLockedZone ||
       !canAccessTier(viewerTier, effectiveTier) ||
       lockedNodeIds.has(Number(e.fromNodeId)) ||
       lockedNodeIds.has(Number(e.toNodeId));
@@ -131,6 +283,7 @@ export function applyCampusAccessPreview(bundle, viewerTierInput = "public") {
     floors,
     nodes,
     edges,
+    sensitiveZones,
     viewerAccessTier: viewerTier,
   };
 }

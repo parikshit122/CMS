@@ -84,10 +84,10 @@ const StaffChartsRow = ({ stats = {}, loading = false }) => {
         {loading ? (
           <div className="ssd-skeleton ssd-skeleton--chart" />
         ) : (
-          <ResponsiveContainer width="100%" height={240}>
+          <ResponsiveContainer width="100%" height={250}>
             <LineChart
               data={weeklyData}
-              margin={{ top: 8, right: 16, left: -10, bottom: 0 }}
+              margin={{ top: 10, right: 20, left: -12, bottom: 4 }}
             >
               <CartesianGrid
                 strokeDasharray="3 3"
@@ -99,6 +99,7 @@ const StaffChartsRow = ({ stats = {}, loading = false }) => {
                 tick={{ fontSize: 12, fill: "var(--muted-text)" }}
                 axisLine={false}
                 tickLine={false}
+                padding={{ left: 10, right: 10 }}
               />
               <YAxis
                 tick={{ fontSize: 12, fill: "var(--muted-text)" }}
@@ -116,18 +117,18 @@ const StaffChartsRow = ({ stats = {}, loading = false }) => {
                 type="monotone"
                 dataKey="assigned"
                 name="Assigned"
-                stroke="#f59e0b"
+                stroke="#f97316"
                 strokeWidth={2.5}
-                dot={{ r: 3, fill: "#f59e0b" }}
+                dot={{ r: 3.5, fill: "#f97316" }}
                 activeDot={{ r: 5 }}
               />
               <Line
                 type="monotone"
                 dataKey="resolved"
                 name="Resolved"
-                stroke="#f43f5e"
+                stroke="#10b981"
                 strokeWidth={2.5}
-                dot={{ r: 3, fill: "#f43f5e" }}
+                dot={{ r: 3.5, fill: "#10b981" }}
                 activeDot={{ r: 5 }}
               />
             </LineChart>
@@ -149,10 +150,10 @@ const StaffChartsRow = ({ stats = {}, loading = false }) => {
         {loading ? (
           <div className="ssd-skeleton ssd-skeleton--chart" />
         ) : (
-          <ResponsiveContainer width="100%" height={240}>
+          <ResponsiveContainer width="100%" height={250}>
             <BarChart
               data={statusData}
-              margin={{ top: 8, right: 16, left: -10, bottom: 0 }}
+              margin={{ top: 10, right: 20, left: -12, bottom: 4 }}
               barSize={36}
             >
               <CartesianGrid

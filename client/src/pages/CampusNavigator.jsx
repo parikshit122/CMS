@@ -172,14 +172,19 @@ export default function CampusNavigator() {
     [bundle]
   );
 
+  const sensitiveZones = useMemo(() => bundle?.sensitiveZones || [], [bundle]);
+
   const viewerTier = useMemo(
     () => bundle?.viewerAccessTier || resolveViewerAccessTier(user),
     [bundle, user]
   );
 
   const lockedZoneCount = useMemo(
-    () => nodes.filter((n) => n.isLocked).length + floors.filter((f) => f.isLocked).length,
-    [nodes, floors]
+    () =>
+      nodes.filter((n) => n.isLocked).length +
+      floors.filter((f) => f.isLocked).length +
+      sensitiveZones.filter((z) => z.isLocked).length,
+    [nodes, floors, sensitiveZones]
   );
 
   const activeFloor = useMemo(
@@ -218,6 +223,11 @@ export default function CampusNavigator() {
   const floorNodes = useMemo(
     () => nodes.filter((n) => Number(n.floorId) === Number(activeFloor?.id)),
     [nodes, activeFloor]
+  );
+
+  const floorSensitiveZones = useMemo(
+    () => sensitiveZones.filter((z) => Number(z.floorId) === Number(activeFloor?.id)),
+    [sensitiveZones, activeFloor]
   );
 
   const floorNodeIds = useMemo(
@@ -1069,6 +1079,62 @@ export default function CampusNavigator() {
                     preserveAspectRatio="none"
                     aria-hidden="true"
                   >
+                    <defs>
+                      <pattern
+                        id="nav-zone-hatch"
+                        width="12"
+                        height="12"
+                        patternUnits="userSpaceOnUse"
+                        patternTransform="rotate(45)"
+                      >
+                        <line x1="0" y1="0" x2="0" y2="12" stroke="rgba(239, 68, 68, 0.34)" strokeWidth="4" />
+                      </pattern>
+                    </defs>
+
+                    {/* Spatial Sensitive Zone Perimeters */}
+                    {floorSensitiveZones.map((zone) => {
+                      const isLockedZ = Boolean(zone.isLocked);
+                      const tierColor =
+                        zone.effectiveAccessLevel === "admin"
+                          ? "#ef4444"
+                          : zone.effectiveAccessLevel === "staff"
+                            ? "#f59e0b"
+                            : zone.effectiveAccessLevel === "student"
+                              ? "#3b82f6"
+                              : "#22c55e";
+                      const zx = (Number(zone.boundsX) || 0) * 10;
+                      const zy = (Number(zone.boundsY) || 0) * 7;
+                      const zw = (Number(zone.boundsWidth) || 20) * 10;
+                      const zh = (Number(zone.boundsHeight) || 20) * 7;
+                      return (
+                        <g key={`nav-zone-${zone.id}`} className="cn-sensitive-zone-overlay">
+                          <rect
+                            x={zx}
+                            y={zy}
+                            width={zw}
+                            height={zh}
+                            rx="10"
+                            fill={isLockedZ ? "url(#nav-zone-hatch)" : `${tierColor}14`}
+                            stroke={isLockedZ ? "#ef4444" : tierColor}
+                            strokeWidth={isLockedZ ? 2.5 : 1.75}
+                            strokeDasharray={isLockedZ ? "8 5" : "6 4"}
+                          />
+                          <text
+                            x={zx + 10}
+                            y={zy + 17}
+                            fill={isLockedZ ? "#fca5a5" : tierColor}
+                            fontSize="11.5"
+                            fontWeight="700"
+                            fontFamily="ui-monospace, SFMono-Regular, monospace"
+                          >
+                            {isLockedZ
+                              ? `RESTRICTED · ${ACCESS_TIER_META[zone.effectiveAccessLevel]?.shortLabel}`
+                              : `${zone.code} · ${ACCESS_TIER_META[zone.effectiveAccessLevel]?.shortLabel}`}
+                          </text>
+                        </g>
+                      );
+                    })}
+
                     {/* Base walkable corridor edges */}
                     {floorEdges.map((edge) => {
                       const a = nodeById.get(Number(edge.fromNodeId));

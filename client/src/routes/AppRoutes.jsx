@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import { Suspense } from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import PageTransition from "../components/common/PageTransition";
@@ -8,36 +8,37 @@ import Footer from "../components/layout/Footer";
 import Home from "../pages/Home";
 import ProtectedRoute from "./ProtectedRoute";
 import { useAuth } from "../context/AuthContext";
+import DashboardLayout from "../layouts/DashboardLayout";
+import lazyWithRetry from "../utils/lazyWithRetry";
 
-// Lazy-load secondary & authenticated routes so the homepage loads fast without pulling Firebase/Recharts/jsPDF upfront
-const Login = lazy(() => import("../pages/auth/LoginRegistration"));
-const ForgotPassword = lazy(() => import("../pages/auth/ForgotPassword"));
-const VerifyOtp = lazy(() => import("../pages/auth/VerifyOtp"));
-const VerifyEmail = lazy(() => import("../pages/auth/VerifyEmail"));
-const ResetPassword = lazy(() => import("../pages/auth/ResetPassword"));
-const NotFound = lazy(() => import("../pages/NotFound"));
-const Maintenance = lazy(() => import("../pages/Maintenance"));
+// Lazy-load secondary & authenticated routes with automatic stale-chunk reload recovery
+const Login = lazyWithRetry(() => import("../pages/auth/LoginRegistration"));
+const ForgotPassword = lazyWithRetry(() => import("../pages/auth/ForgotPassword"));
+const VerifyOtp = lazyWithRetry(() => import("../pages/auth/VerifyOtp"));
+const VerifyEmail = lazyWithRetry(() => import("../pages/auth/VerifyEmail"));
+const ResetPassword = lazyWithRetry(() => import("../pages/auth/ResetPassword"));
+const NotFound = lazyWithRetry(() => import("../pages/NotFound"));
+const Maintenance = lazyWithRetry(() => import("../pages/Maintenance"));
 
-const DashboardLayout = lazy(() => import("../layouts/DashboardLayout"));
-const StudentDash = lazy(() => import("../pages/student/StudentDash"));
-const SubmitComplaint = lazy(() => import("../pages/student/SubmitComplaint"));
-const MyComplaints = lazy(() => import("../pages/student/MyComplaints"));
-const Profile = lazy(() => import("../pages/Profilepage"));
+const StudentDash = lazyWithRetry(() => import("../pages/student/StudentDash"));
+const SubmitComplaint = lazyWithRetry(() => import("../pages/student/SubmitComplaint"));
+const MyComplaints = lazyWithRetry(() => import("../pages/student/MyComplaints"));
+const Profile = lazyWithRetry(() => import("../pages/Profilepage"));
 
-const AdminDashboard = lazy(() => import("../pages/admin/AdminDashboard"));
-const ManageUsers = lazy(() => import("../pages/admin/ManageUsers"));
-const AdminReports = lazy(() => import("../pages/admin/AdminReports"));
-const AdminSettings = lazy(() => import("../pages/admin/AdminSettings"));
+const AdminDashboard = lazyWithRetry(() => import("../pages/admin/AdminDashboard"));
+const ManageUsers = lazyWithRetry(() => import("../pages/admin/ManageUsers"));
+const AdminReports = lazyWithRetry(() => import("../pages/admin/AdminReports"));
+const AdminSettings = lazyWithRetry(() => import("../pages/admin/AdminSettings"));
 
-const StaffDashboard = lazy(() => import("../pages/staff/StaffDashboard"));
-const StaffComplaints = lazy(() => import("../pages/staff/StaffComplaints"));
-const Notifications = lazy(() => import("../pages/Notifications"));
-const LostFound = lazy(() => import("../pages/LostFound"));
-const PublicTransparency = lazy(() => import("../pages/PublicTransparency"));
-const QrReportEntry = lazy(() => import("../pages/QrReportEntry"));
-const QrSpotStudio = lazy(() => import("../pages/admin/QrSpotStudio"));
-const CampusNavigator = lazy(() => import("../pages/CampusNavigator"));
-const CampusStudio = lazy(() => import("../pages/admin/CampusStudio"));
+const StaffDashboard = lazyWithRetry(() => import("../pages/staff/StaffDashboard"));
+const StaffComplaints = lazyWithRetry(() => import("../pages/staff/StaffComplaints"));
+const Notifications = lazyWithRetry(() => import("../pages/Notifications"));
+const LostFound = lazyWithRetry(() => import("../pages/LostFound"));
+const PublicTransparency = lazyWithRetry(() => import("../pages/PublicTransparency"));
+const QrReportEntry = lazyWithRetry(() => import("../pages/QrReportEntry"));
+const QrSpotStudio = lazyWithRetry(() => import("../pages/admin/QrSpotStudio"));
+const CampusNavigator = lazyWithRetry(() => import("../pages/CampusNavigator"));
+const CampusStudio = lazyWithRetry(() => import("../pages/admin/CampusStudio"));
 
 const studentMenuItems = [
   { label: "Dashboard", path: "/dashboard", icon: "bx bx-grid-alt" },

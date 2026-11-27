@@ -5,8 +5,10 @@ export default function ProtectedZonesTable({
   floors = [],
   nodes = [],
   edges = [],
+  sensitiveZones = [],
   onSelectFloor,
   onSelectNode,
+  onSelectZone,
   onQuickTierChange,
   busyKey = "",
 }) {
@@ -24,6 +26,23 @@ export default function ProtectedZonesTable({
 
   const rows = useMemo(() => {
     const list = [];
+
+    for (const z of sensitiveZones) {
+      if (z.isActive === false) continue;
+      const tier = z.accessLevel || "staff";
+      const fl = floorMap.get(Number(z.floorId));
+      list.push({
+        key: `zone-${z.id}`,
+        kind: "zone",
+        id: z.id,
+        floorId: z.floorId,
+        code: z.code,
+        name: z.name,
+        location: `${fl?.floorLabel || "Floor"} (${Math.round(z.boundsX)}%, ${Math.round(z.boundsY)}% · ${Math.round(z.boundsWidth)}×${Math.round(z.boundsHeight)}%)`,
+        tier,
+        notice: z.restrictedNotice || "",
+      });
+    }
 
     for (const fl of floors) {
       const tier = fl.accessLevel || "public";
@@ -91,7 +110,7 @@ export default function ProtectedZonesTable({
         row.notice.toLowerCase().includes(q)
       );
     });
-  }, [floors, nodes, edges, floorMap, nodeMap, tierFilter, query]);
+  }, [sensitiveZones, floors, nodes, edges, floorMap, nodeMap, tierFilter, query]);
 
   return (
     <section className="cn-panel" aria-label="Protected Zones and Access Policies">
@@ -183,7 +202,9 @@ export default function ProtectedZonesTable({
                       type="button"
                       className="av-btn av-btn--ghost av-btn--compact"
                       onClick={() => {
-                        if (row.kind === "node") {
+                        if (row.kind === "zone") {
+                          onSelectZone?.(row.id, row.floorId);
+                        } else if (row.kind === "node") {
                           onSelectNode?.(row.id, row.floorId);
                         } else if (row.floorId) {
                           onSelectFloor?.(row.floorId);

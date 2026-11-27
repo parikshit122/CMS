@@ -1,8 +1,34 @@
 /**
  * Pure Multi-Floor Campus Wayfinding Engine, Per-Zone Access Policy Enforcement,
- * & Avishkar Blind-Evaluation Logic.
+ * First-Class Spatial Sensitive Zones, & Avishkar Blind-Evaluation Logic.
  * Shared across Server (Node/Express) and Client (React/Vite) — zero external dependencies.
  */
+import {
+  doesSegmentIntersectZone,
+  isPointInSensitiveZone,
+  projectSensitiveZone,
+  type CampusSensitiveZone,
+  type ProjectedSensitiveZone,
+} from "./sensitive-zones.ts";
+
+export {
+  SENSITIVE_ZONE_CATEGORIES,
+  SENSITIVE_ZONE_CATEGORY_META,
+  SENSITIVE_ZONE_SHAPES,
+  doesSegmentIntersectZone,
+  getZonePolygonVertices,
+  isPointInSensitiveZone,
+  normalizeSensitiveZoneCategory,
+  normalizeSensitiveZoneShape,
+  normalizeZoneBounds,
+  projectSensitiveZone,
+  type CampusSensitiveZone,
+  type ProjectedSensitiveZone,
+  type SensitiveZoneBounds,
+  type SensitiveZoneCategory,
+  type SensitiveZoneShape,
+  type ZonePoint,
+} from "./sensitive-zones.ts";
 
 export type CampusNodeType =
   | "room"
@@ -225,6 +251,7 @@ export function applyCampusAccessPolicies<
     floors: NavFloor[];
     nodes: NavNode[];
     edges: NavEdge[];
+    sensitiveZones?: CampusSensitiveZone[];
     livePins?: {
       complaints?: Array<{ mapNodeId?: number | null; [key: string]: unknown }>;
       qrSpots?: Array<{ mapNodeId?: number | null; [key: string]: unknown }>;
@@ -269,10 +296,41 @@ export function applyCampusAccessPolicies<
     };
   });
 
+  // Project spatial sensitive zones per floor
+  const sensitiveZones: ProjectedSensitiveZone[] = (bundle.sensitiveZones || [])
+    .filter((z) => z && z.isActive !== false)
+    .map((z) => {
+      const floorTier = floorTierMap.get(Number(z.floorId)) || "public";
+      return projectSensitiveZone(z, viewerTier, floorTier);
+    });
+
+  const zonesByFloor = new Map<number, ProjectedSensitiveZone[]>();
+  let lockedSensitiveZoneCount = 0;
+  for (const z of sensitiveZones) {
+    if (z.isLocked) lockedSensitiveZoneCount += 1;
+    const fid = Number(z.floorId);
+    if (!zonesByFloor.has(fid)) zonesByFloor.set(fid, []);
+    zonesByFloor.get(fid)!.push(z);
+  }
+
   const nodes = (bundle.nodes || []).map((n) => {
     const floorTier = floorTierMap.get(Number(n.floorId)) || "public";
     const ownTier = normalizeAccessTier(n.accessLevel);
-    const effectiveTier = getEffectiveAccessLevel(ownTier, floorTier);
+    let effectiveTier = getEffectiveAccessLevel(ownTier, floorTier);
+    let enclosingZoneNotice = "";
+
+    // Inherit stricter clearance from any enclosing spatial sensitive zone on this floor
+    const floorZones = zonesByFloor.get(Number(n.floorId)) || [];
+    for (const z of floorZones) {
+      if (isPointInSensitiveZone({ x: n.x, y: n.y }, z)) {
+        const nextTier = getEffectiveAccessLevel(effectiveTier, z.effectiveAccessLevel);
+        if (nextTier !== effectiveTier || !enclosingZoneNotice) {
+          effectiveTier = nextTier;
+          if (z.restrictedNotice) enclosingZoneNotice = z.restrictedNotice;
+        }
+      }
+    }
+
     const isProtected = effectiveTier !== "public" || Boolean(n.isSensitive);
     if (ownTier !== "public" || Boolean(n.isSensitive)) totalProtectedNodes += 1;
 
@@ -284,6 +342,7 @@ export function applyCampusAccessPolicies<
 
     const notice =
       n.restrictedNotice?.trim() ||
+      enclosingZoneNotice ||
       (isProtected
         ? `Entry restricted — ${ACCESS_TIER_META[effectiveTier].label} clearance required.`
         : "");
@@ -313,19 +372,43 @@ export function applyCampusAccessPolicies<
     };
   });
 
+  const nodeById = new Map<number, NavNode>(nodes.map((n) => [Number(n.id), n]));
   const nodeTierMap = new Map<number, CampusAccessTier>(
     nodes.map((n) => [Number(n.id), n.effectiveAccessLevel || "public"])
   );
 
   const edges = (bundle.edges || []).map((e) => {
     const ownTier = normalizeAccessTier(e.accessLevel);
+    const fromNode = nodeById.get(Number(e.fromNodeId));
+    const toNode = nodeById.get(Number(e.toNodeId));
     const fromTier = nodeTierMap.get(Number(e.fromNodeId)) || "public";
     const toTier = nodeTierMap.get(Number(e.toNodeId)) || "public";
     const inherited = getEffectiveAccessLevel(fromTier, toTier);
-    const effectiveTier = getEffectiveAccessLevel(ownTier, inherited);
+    let effectiveTier = getEffectiveAccessLevel(ownTier, inherited);
+    let crossesLockedZone = false;
+
+    // Block same-floor walkways intersecting a locked spatial sensitive zone with blockRouting enabled
+    if (fromNode && toNode && Number(fromNode.floorId) === Number(toNode.floorId)) {
+      const floorZones = zonesByFloor.get(Number(fromNode.floorId)) || [];
+      for (const z of floorZones) {
+        if (
+          z.blockRouting !== false &&
+          doesSegmentIntersectZone(
+            { x: fromNode.x, y: fromNode.y },
+            { x: toNode.x, y: toNode.y },
+            z
+          )
+        ) {
+          effectiveTier = getEffectiveAccessLevel(effectiveTier, z.effectiveAccessLevel);
+          if (z.isLocked) crossesLockedZone = true;
+        }
+      }
+    }
+
     if (ownTier !== "public" || Boolean(e.isSensitive)) totalProtectedEdges += 1;
 
     const isLocked =
+      crossesLockedZone ||
       !canAccessTier(viewerTier, effectiveTier) ||
       lockedNodeIds.has(Number(e.fromNodeId)) ||
       lockedNodeIds.has(Number(e.toNodeId));
@@ -359,6 +442,7 @@ export function applyCampusAccessPolicies<
     floors,
     nodes,
     edges,
+    sensitiveZones,
     ...(livePins ? { livePins } : {}),
     viewerAccessTier: viewerTier,
     policySummary: {
@@ -366,6 +450,8 @@ export function applyCampusAccessPolicies<
       totalProtectedFloors,
       totalProtectedNodes,
       totalProtectedEdges,
+      totalSensitiveZones: sensitiveZones.length,
+      lockedSensitiveZoneCount,
       lockedCountForViewer,
       lockedFloorCount: lockedFloorIds.size,
       lockedNodeCount: lockedNodeIds.size,

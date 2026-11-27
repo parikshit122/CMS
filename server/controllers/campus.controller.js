@@ -14,6 +14,10 @@ const {
   createCampusEdge,
   updateCampusEdge,
   deleteCampusEdge,
+  listCampusSensitiveZones,
+  createCampusSensitiveZone,
+  updateCampusSensitiveZone,
+  deleteCampusSensitiveZone,
   createAcademicDepartment,
   deleteAcademicDepartment,
   createAcademicCourse,
@@ -339,6 +343,65 @@ const removeCampusEdge = async (req, res) => {
   }
 };
 
+// ── Admin Spatial Sensitive Zones ─────────────────────────
+
+const getAdminSensitiveZones = async (req, res) => {
+  try {
+    const data = await listCampusSensitiveZones();
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+const postCampusSensitiveZone = async (req, res) => {
+  try {
+    const created = await createCampusSensitiveZone(req.body || {});
+    res.status(201).json({
+      success: true,
+      message: `Sensitive zone "${created.name}" created (${created.accessLevel} tier).`,
+      data: created,
+    });
+  } catch (err) {
+    const msg = String(err.message || "");
+    if (msg.includes("unique") || msg.includes("duplicate")) {
+      return res.status(409).json({
+        success: false,
+        message: "A sensitive zone with that code already exists.",
+      });
+    }
+    res.status(400).json({ success: false, message: msg });
+  }
+};
+
+const patchCampusSensitiveZone = async (req, res) => {
+  try {
+    const updated = await updateCampusSensitiveZone(req.params.id, req.body || {});
+    if (!updated) {
+      return res.status(404).json({ success: false, message: "Sensitive zone not found." });
+    }
+    res.json({
+      success: true,
+      message: `Updated sensitive zone "${updated.name}".`,
+      data: updated,
+    });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+};
+
+const removeCampusSensitiveZone = async (req, res) => {
+  try {
+    const deleted = await deleteCampusSensitiveZone(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ success: false, message: "Sensitive zone not found." });
+    }
+    res.json({ success: true, message: `Deleted sensitive zone "${deleted.name}".` });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 // ── Admin Academic Departments & Courses ──────────────────
 
 const postAcademicDepartment = async (req, res) => {
@@ -422,6 +485,10 @@ module.exports = {
   postCampusEdge,
   patchCampusEdge,
   removeCampusEdge,
+  getAdminSensitiveZones,
+  postCampusSensitiveZone,
+  patchCampusSensitiveZone,
+  removeCampusSensitiveZone,
   postAcademicDepartment,
   removeAcademicDepartment,
   postAcademicCourse,

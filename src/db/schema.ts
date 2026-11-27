@@ -566,6 +566,42 @@ export const campusMapEdges = pgTable(
   ]
 );
 
+export const campusSensitiveZones = pgTable(
+  "campus_sensitive_zones",
+  {
+    id: serial("id").primaryKey(),
+    floorId: integer("floor_id")
+      .notNull()
+      .references(() => campusFloors.id, { onDelete: "cascade" }),
+    buildingId: integer("building_id").references(() => campusBuildings.id, {
+      onDelete: "set null",
+    }),
+    code: text("code").notNull().unique(), // e.g., ZONE-EXAM-G, ZONE-SRV-2
+    name: text("name").notNull(),
+    zoneCategory: text("zone_category").notNull().default("restricted"), // restricted | security | exam | infrastructure | laboratory | executive
+    accessLevel: text("access_level").notNull().default("staff"), // public | student | staff | admin
+    shapeType: text("shape_type").notNull().default("rect"), // rect | polygon
+    boundsX: real("bounds_x").notNull().default(40), // 0..100 normalized left
+    boundsY: real("bounds_y").notNull().default(40), // 0..100 normalized top
+    boundsWidth: real("bounds_width").notNull().default(20), // 0..100 normalized width
+    boundsHeight: real("bounds_height").notNull().default(20), // 0..100 normalized height
+    polygonPoints: jsonb("polygon_points")
+      .$type<Array<{ x: number; y: number }>>()
+      .notNull()
+      .default([]),
+    blockRouting: boolean("block_routing").notNull().default(true),
+    restrictedNotice: text("restricted_notice").default(""),
+    isActive: boolean("is_active").notNull().default(true),
+    isDemoRecord: boolean("is_demo_record").notNull().default(false),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("campus_sensitive_zones_floor_idx").on(table.floorId),
+    index("campus_sensitive_zones_tier_idx").on(table.accessLevel, table.isActive),
+  ]
+);
+
 // ── University / College Academic & Course Hierarchy ──────
 
 export const academicDepartments = pgTable(
